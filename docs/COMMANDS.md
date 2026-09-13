@@ -7,19 +7,19 @@ reads it, **the gate never does.**
 ## Wire — once per project
 
 ```bash
-vibeship init                    # probe → write a vibeship.config.mjs draft
-vibeship init --confirm-proof    # the one step a human must look at
+vibeubi init                    # probe → write a vibeubi.config.mjs draft
+vibeubi init --confirm-proof    # the one step a human must look at
 ```
 
 ## Adopt — every time features are added
 
 ```bash
-vibeship orphans                 # discovered, nobody claimed
-vibeship adopt                   # write declarations for all of them
-vibeship adopt --only area=auth
-vibeship intent <id> "…"         # attach intent; next adopt re-derives probes
+vibeubi orphans                 # discovered, nobody claimed
+vibeubi adopt                   # write declarations for all of them
+vibeubi adopt --only area=auth
+vibeubi intent <id> "…"         # attach intent; next adopt re-derives probes
 
-vibeship add page /settings/billing \
+vibeubi add page /settings/billing \
   --intent "org admins only; with no subscription the save button is disabled, not hidden"
 ```
 
@@ -29,29 +29,29 @@ intent, a journey if it writes, and the new test file wired into a suite.
 ## Ask
 
 ```bash
-vibeship why <id>      # declared by whom, last verdict, exemptions
-vibeship orphans       # features and exposed ports with no owner
-vibeship roster        # the agent/MCP tool surface: pins, drift, poison
-vibeship plan          # what a run would do; touches nothing
+vibeubi why <id>      # declared by whom, last verdict, exemptions
+vibeubi orphans       # features and exposed ports with no owner
+vibeubi roster        # the agent/MCP tool surface: pins, drift, poison
+vibeubi plan          # what a run would do; touches nothing
 ```
 
 ## Run
 
 ```bash
-vibeship verify                  # offline layers only; nothing built or swapped
-vibeship scan --base <url>       # S0–S7 on their own
-vibeship ship                    # the whole pipeline, automatic rollback
-vibeship rollback                # previous build back — and proved
-vibeship viz --format archify    # diagram IR
+vibeubi verify                  # offline layers only; nothing built or swapped
+vibeubi scan --base <url>       # S0–S7 on their own
+vibeubi ship                    # the whole pipeline, automatic rollback
+vibeubi rollback                # previous build back — and proved
+vibeubi viz --format archify    # diagram IR
 ```
 
 ## Needs a human — the agent may prepare, not perform
 
 ```bash
-vibeship exempt <id> --reason "…"        # → ignored
-vibeship public <route> --reason "…"     # → publicApi
-vibeship accept-debt --reason "…"        # → security baseline
-vibeship guard --action <a>              # exits 1 if <a> narrows the check
+vibeubi exempt <id> --reason "…"        # → ignored
+vibeubi public <route> --reason "…"     # → publicApi
+vibeubi accept-debt --reason "…"        # → security baseline
+vibeubi guard --action <a>              # exits 1 if <a> narrows the check
 ```
 
 ## Flags that change what a run means

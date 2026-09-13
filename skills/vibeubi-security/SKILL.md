@@ -1,6 +1,6 @@
 ---
-name: vibeship-security
-description: Run and interpret the VibeShip security layers S0-S7, including the agent and MCP attack surface. Use when the user asks about security scanning, secrets in git history, exposed ports, attack surface, SAST/DAST, MCP tool poisoning, prompt injection defences, agent permissions, OWASP LLM or Agentic (ASI) risks, or asks "is this safe to expose".
+name: vibeubi-security
+description: Run and interpret the VibeUbi security layers S0-S7, including the agent and MCP attack surface. Use when the user asks about security scanning, secrets in git history, exposed ports, attack surface, SAST/DAST, MCP tool poisoning, prompt injection defences, agent permissions, OWASP LLM or Agentic (ASI) risks, or asks "is this safe to expose".
 ---
 
 # Security — the same three axioms, a second coordinate system
@@ -12,9 +12,9 @@ So security uses the identical structure: **discover the surface → declare
 what is deliberate → get evidence from outside.**
 
 ```bash
-npx vibeship scan                       # offline: S0 S1 S2 S5 S6 S7
-npx vibeship scan --base https://host   # adds S3 (DAST) and S4 (exposure)
-npx vibeship scan --layer S5            # the agent surface on its own
+npx vibeubi scan                       # offline: S0 S1 S2 S5 S6 S7
+npx vibeubi scan --base https://host   # adds S3 (DAST) and S4 (exposure)
+npx vibeubi scan --layer S5            # the agent surface on its own
 ```
 
 ## The layers

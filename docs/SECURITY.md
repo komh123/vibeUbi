@@ -102,12 +102,12 @@ compromised coding assistant with 950k+ installs; an agent deleting production
 data during a code freeze; the first in-the-wild malicious MCP server on npm;
 and an MCP rug-pull demonstrated end to end.
 
-Three of VibeShip's poison patterns (`md_image`, `silence`, `exfil_url`) exist
+Three of VibeUbi's poison patterns (`md_image`, `silence`, `exfil_url`) exist
 specifically because of the EchoLeak chain.
 
 ## ASI mapping
 
-| id | risk | where VibeShip looks |
+| id | risk | where VibeUbi looks |
 |---|---|---|
 | ASI01 | Agent goal hijack | `S5.mcp.poison.*`, untrusted-content fencing |
 | ASI02 | Tool misuse & exploitation | `S5.mcp.*`, parameter-schema drift |

@@ -18,15 +18,15 @@ const HERE = join(fileURLToPath(import.meta.url), "..", "..")
 const checks = []
 const check = (name, fn) => checks.push([name, fn])
 
-const dir = await mkdtemp(join(tmpdir(), "vibeship-smoke-"))
+const dir = await mkdtemp(join(tmpdir(), "vibeubi-smoke-"))
 await mkdir(join(dir, "app", "secret"), { recursive: true })
 await writeFile(join(dir, "app", "page.tsx"), "export default function P(){return null}")
 await writeFile(join(dir, "app", "secret", "page.tsx"), "export default function P(){return null}")
-await writeFile(join(dir, "vibeship.config.mjs"), `
+await writeFile(join(dir, "vibeubi.config.mjs"), `
 import * as nextjs from ${JSON.stringify(join(HERE, "packages/adapters/src/nextjs.plugin.mjs"))}
 export default {
   name: "smoke", plugins: [nextjs],
-  pluginConfig: { "vibeship-nextjs": { root: ${JSON.stringify(dir)} } },
+  pluginConfig: { "vibeubi-nextjs": { root: ${JSON.stringify(dir)} } },
   declared: [{ id: "page:/", area: "home", priority: "P1" }],
   tools: [{ server: "s", name: "t", description: "clean", inputSchema: {} }],
   toolPins: [{ key: "s/t", fingerprint: "STALE" }],
@@ -34,7 +34,7 @@ export default {
 }
 `)
 
-const cli = (...args) => run("node", [join(HERE, "bin/vibeship.mjs"), ...args, "--root", dir])
+const cli = (...args) => run("node", [join(HERE, "bin/vibeubi.mjs"), ...args, "--root", dir])
   .then((r) => ({ code: 0, ...r }))
   .catch((e) => ({ code: e.code ?? 1, stdout: e.stdout ?? "", stderr: e.stderr ?? "" }))
 

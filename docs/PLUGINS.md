@@ -4,7 +4,7 @@ Modelled on DSH/cordis plugins, because that is the smallest shape that works
 in every host: **anything that can `import()` a file can load one.**
 
 ```js
-export const name = "vibeship-fastapi"
+export const name = "vibeubi-fastapi"
 
 export function apply(ctx, config = {}) {
   if (!config.root) return          // not configured → silent no-op, never a throw

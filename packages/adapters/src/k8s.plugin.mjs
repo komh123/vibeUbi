@@ -1,5 +1,5 @@
 /**
- * vibeship-k8s — proof for a Kubernetes deployment.
+ * vibeubi-k8s — proof for a Kubernetes deployment.
  *
  * WHY THIS EXISTS SEPARATELY. On k8s the tempting proof is `kubectl rollout
  * status` returning 0. That is the exit code of the thing that did the
@@ -13,7 +13,7 @@ import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 const run = promisify(execFile)
 
-export const name = "vibeship-k8s"
+export const name = "vibeubi-k8s"
 
 export function apply(ctx, config = {}) {
   const { namespace, selector, container, marker } = config

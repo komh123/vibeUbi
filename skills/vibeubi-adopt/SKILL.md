@@ -1,6 +1,6 @@
 ---
-name: vibeship-adopt
-description: Wire a project into VibeShip, or claim orphan features after adding new code. Use when a VibeShip run reports orphans, when the user adds a page/route/view/command/tool, when setting up VibeShip on a new repo, or when the user says "adopt", "claim", "declare", or "wire up". Runs the two AI-executed steps of the three-step flow.
+name: vibeubi-adopt
+description: Wire a project into VibeUbi, or claim orphan features after adding new code. Use when a VibeUbi run reports orphans, when the user adds a page/route/view/command/tool, when setting up VibeUbi on a new repo, or when the user says "adopt", "claim", "declare", or "wire up". Runs the two AI-executed steps of the three-step flow.
 ---
 
 # Adopt — the two steps an agent does for itself
@@ -16,7 +16,7 @@ Three steps get a project gated. You do steps 1 and 2. Step 3 is machinery.
 ## Step 1 · WIRE (once per project)
 
 ```bash
-npx vibeship init          # probes and writes a vibeship.config.mjs draft
+npx vibeubi init          # probes and writes a vibeubi.config.mjs draft
 ```
 
 Work out and fill in: framework, where routes live, what roles exist, how to
@@ -41,16 +41,16 @@ rules, neither negotiable:
 Every entry in the right column is the exit code of the thing that did the
 deploying. That is the class of evidence this gate exists to refuse.
 
-Write your proposal, run `npx vibeship init --confirm-proof`, and **let the
+Write your proposal, run `npx vibeubi init --confirm-proof`, and **let the
 human confirm it.** It is the only field where a wrong answer produces no error
 anywhere — the gate simply stops meaning anything.
 
 ## Step 2 · ADOPT (every time features are added)
 
 ```bash
-npx vibeship orphans       # discovered but nobody claimed them
-npx vibeship adopt         # write declarations for all of them
-npx vibeship adopt --only area=billing
+npx vibeubi orphans       # discovered but nobody claimed them
+npx vibeubi adopt         # write declarations for all of them
+npx vibeubi adopt --only area=billing
 ```
 
 For each orphan, fill in:
@@ -106,11 +106,11 @@ without fixing anything. They require a human and a written reason.
 ## Adding a feature end to end
 
 ```bash
-npx vibeship add page /settings/billing \
+npx vibeubi add page /settings/billing \
   --intent "org admins only; with no subscription the save button is disabled, not hidden"
 ```
 
 That single command should leave behind: the file, the declaration, probes
 derived from the intent, a journey if it writes, and the new test file wired
-into a suite (an unwired test file is a test that does not exist — `vibeship
+into a suite (an unwired test file is a test that does not exist — `vibeubi
 verify` will say so by name).

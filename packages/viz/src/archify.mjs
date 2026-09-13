@@ -1,5 +1,5 @@
 /**
- * archify.mjs — turn a VibeShip run into a diagram IR.
+ * archify.mjs — turn a VibeUbi run into a diagram IR.
  *
  * WHY THIS IS DIFFERENT FROM EVERY OTHER "AI ARCHITECTURE DIAGRAM":
  *
@@ -44,7 +44,7 @@ export function toIR(run) {
   }
 
   return {
-    kind: "vibeship.coverage",
+    kind: "vibeubi.coverage",
     version: 1,
     title: run.title ?? "Coverage",
     legend: [

@@ -44,7 +44,7 @@ Every row above is an instance of one of three, and they are layered:
 - **C · evidence replaces memory** → governs **outcome**
 
 C is the one other tools do not have. Progressive-delivery gates watch
-*metrics*; VibeShip watches a feature matrix and an exposure map, and for "did
+*metrics*; VibeUbi watches a feature matrix and an exposure map, and for "did
 this deploy happen" demands a fact observed from outside the deployed process.
 
 ## Rings

@@ -115,7 +115,7 @@ async function dast(base, discovered, config) {
 
   const probes = []
   for (const r of discovered.filter((d) => d.kind === "api").slice(0, Number(config.dastMax ?? 60))) {
-    const path = r.path.replace(/:(\w+)/g, "vibeship-nonexistent")
+    const path = r.path.replace(/:(\w+)/g, "vibeubi-nonexistent")
     try {
       const res = await fetch(url + path, { redirect: "manual", signal: AbortSignal.timeout(8000) })
       probes.push({ method: "GET", path: r.path, status: res.status })

@@ -1,5 +1,5 @@
 /**
- * vibeship-express — discovery and proof for an Express + Vite/React app.
+ * vibeubi-express — discovery and proof for an Express + Vite/React app.
  *
  * Written against a real project (a system monitor: Express API, React client,
  * k8s). Two things here are not obvious and are where a naive scan gets it
@@ -18,7 +18,7 @@ import { readdir, readFile } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { join, relative, sep, basename } from "node:path"
 
-export const name = "vibeship-express"
+export const name = "vibeubi-express"
 
 const METHOD = "(get|post|put|patch|delete|all)"
 const APP_ROUTE = new RegExp(`\\bapp\\.${METHOD}\\(\\s*['"\`]([^'"\`]+)['"\`]`, "g")
@@ -118,7 +118,7 @@ export function apply(ctx, config = {}) {
      *
      * The first version returned `{external: true, carriesArtifactId: true}`
      * unconditionally and put "NOT WIRED" in the human-readable `source`. So
-     * `proofContract` passed and `vibeship plan` printed a green tick next to
+     * `proofContract` passed and `vibeubi plan` printed a green tick next to
      * the words "NOT WIRED" — the adapter lied about its own ability to prove
      * anything, in the one field where a wrong answer produces no error
      * anywhere else. Caught on the first real project this was pointed at.

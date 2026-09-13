@@ -3,20 +3,20 @@
 Diagram skills normally ask an agent to read a codebase and emit an IR. The
 agent guesses, and the picture is exactly as right as the guess.
 
-**VibeShip does not guess.** Its registry was discovered mechanically and
+**VibeUbi does not guess.** Its registry was discovered mechanically and
 declared explicitly, and every node carries a verdict from a real run. So each
 box traces back to the file it was found in and the cell that judged it.
 
 ```bash
-vibeship viz --format ir       > coverage.ir.json       # neutral
-vibeship viz --format archify  > coverage.archify.json  # archify's schema
-vibeship viz --format mermaid  > coverage.mmd           # zero-dependency
+vibeubi viz --format ir       > coverage.ir.json       # neutral
+vibeubi viz --format archify  > coverage.archify.json  # archify's schema
+vibeubi viz --format mermaid  > coverage.mmd           # zero-dependency
 ```
 
 ## With archify (or any other diagram skill)
 
 ```
-1. vibeship viz --format archify > coverage.archify.json
+1. vibeubi viz --format archify > coverage.archify.json
 2. hand that file to the archify skill as the IR — it compiles, you do not
 3. put the provenance sentence in the caption
 ```
@@ -31,7 +31,7 @@ lines), not an integration.
 {
   "id": "page:/settings/billing",
   "tone": "danger",
-  "provenance": { "discoveredIn": "app/settings/billing/page.tsx", "declaredIn": "vibeship.config.mjs" },
+  "provenance": { "discoveredIn": "app/settings/billing/page.tsx", "declaredIn": "vibeubi.config.mjs" },
   "coverage": [{ "layer": "L2", "status": "pass" }, { "layer": "L3", "status": "fail", "reason": "…" }]
 }
 ```

@@ -1,8 +1,8 @@
-# VibeShip — agent instructions
+# VibeUbi — agent instructions
 
 This file is read by agent harnesses that do not load Claude Code skills
 (Codex, Cursor, opencode, Zed, and others). It is the short version of
-`skills/vibeship/SKILL.md`; that file is the long one.
+`skills/vibeubi/SKILL.md`; that file is the long one.
 
 ## What this repository is
 
@@ -36,8 +36,8 @@ never edit the function that produced it.
 ## Commands
 
 ```bash
-npx vibeship plan | verify | scan | ship | rollback
-npx vibeship init | adopt | orphans | why <id> | viz
+npx vibeubi plan | verify | scan | ship | rollback
+npx vibeubi init | adopt | orphans | why <id> | viz
 ```
 
 ## Rules for reporting

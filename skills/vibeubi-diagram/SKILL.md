@@ -1,6 +1,6 @@
 ---
-name: vibeship-diagram
-description: Turn a VibeShip run into a verifiable architecture diagram, using archify or any other diagram skill. Use when the user asks to visualise a project's coverage, draw the architecture, see the attack surface as a picture, or asks "what does this project look like from the gate's point of view".
+name: vibeubi-diagram
+description: Turn a VibeUbi run into a verifiable architecture diagram, using archify or any other diagram skill. Use when the user asks to visualise a project's coverage, draw the architecture, see the attack surface as a picture, or asks "what does this project look like from the gate's point of view".
 ---
 
 # Diagram — a picture that can be checked
@@ -8,7 +8,7 @@ description: Turn a VibeShip run into a verifiable architecture diagram, using a
 Diagram skills normally work by asking an agent to read a codebase and emit an
 IR. The agent guesses, and the picture is exactly as right as the guess.
 
-**VibeShip does not guess.** Its registry was discovered mechanically and
+**VibeUbi does not guess.** Its registry was discovered mechanically and
 declared explicitly, and every node already carries a verdict from a real run.
 So every box traces back to the file it was found in and the cell that judged
 it. The picture is *evidence*, not an illustration.
@@ -16,15 +16,15 @@ it. The picture is *evidence*, not an illustration.
 ## Producing the IR
 
 ```bash
-npx vibeship viz --format ir       > coverage.ir.json      # neutral
-npx vibeship viz --format archify  > coverage.archify.json # archify's schema
-npx vibeship viz --format mermaid  > coverage.mmd          # zero-dependency
+npx vibeubi viz --format ir       > coverage.ir.json      # neutral
+npx vibeubi viz --format archify  > coverage.archify.json # archify's schema
+npx vibeubi viz --format mermaid  > coverage.mmd          # zero-dependency
 ```
 
 ## Handing it to archify (or anything else)
 
 ```
-1. npx vibeship viz --format archify > coverage.archify.json
+1. npx vibeubi viz --format archify > coverage.archify.json
 2. invoke the archify skill with that file as the IR — it compiles, you do not
 3. state in the caption that nodes are discovered, not inferred
 ```

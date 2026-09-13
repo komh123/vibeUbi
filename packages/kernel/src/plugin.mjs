@@ -1,9 +1,9 @@
 /**
  * plugin.mjs — the extension contract, shaped like a DSH/cordis plugin.
  *
- * A VibeShip plugin is a plain ESM module:
+ * A VibeUbi plugin is a plain ESM module:
  *
- *     export const name = "vibeship-nextjs"
+ *     export const name = "vibeubi-nextjs"
  *     export function apply(ctx, config = {}) { ... }
  *
  * Loaded by path. No build step, no framework, no registry to publish to.
@@ -52,7 +52,7 @@ export function createContext() {
       // Deliberately NOT rethrown: the run reports a dead capability, which the
       // kernel turns into an `error` cell. A crashed plugin must not be able to
       // silently remove a check — but it must also not be able to abort a run.
-      return { __vibeship_capability_failed: true, owner, what, why }
+      return { __vibeubi_capability_failed: true, owner, what, why }
     }
   }
 

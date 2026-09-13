@@ -1,13 +1,13 @@
 {
-  "name": "vibeship",
+  "name": "vibeubi",
   "owner": { "name": "komh123", "url": "https://github.com/komh123" },
   "metadata": {
-    "description": "VibeShip — the gate that remembers so you do not have to.",
+    "description": "VibeUbi — the gate that remembers so you do not have to.",
     "version": "0.1.0"
   },
   "plugins": [
     {
-      "name": "vibeship",
+      "name": "vibeubi",
       "source": "./",
       "description": "Discover every feature and exposed port, refuse anything undeclared, prove the deploy from outside, and roll back on a P0 red.",
       "version": "0.1.0",

@@ -213,9 +213,9 @@
 
 <header class="masthead">
   <div class="eyebrow">
-    <span><b>VIBESHIP</b> — 產品原理 · 最終版</span>
+    <span><b>VIBEUBI</b> — 產品原理 · 最終版</span>
     <span>2026-09-13</span>
-    <span>github.com/komh123/VibeShip · private</span>
+    <span>github.com/komh123/VibeUbi · private</span>
   </div>
 
   <h1>消除靠記得</h1>
@@ -614,40 +614,40 @@
   <code>--intent</code> 是人可以附加的自然語言，AI 會參考它來填宣告。</p>
 
 <pre><b>─── ① 佈線（一次性，AI 跑）────────────────────────────────</b>
-vibeship init                    <i>探查專案 → 寫出 vibeship.config.mjs 草稿 + 列出所有 orphan</i>
-vibeship init --confirm-proof    <i>人唯一必須看的一步：「怎麼證明部署生效」</i>
+vibeubi init                    <i>探查專案 → 寫出 vibeubi.config.mjs 草稿 + 列出所有 orphan</i>
+vibeubi init --confirm-proof    <i>人唯一必須看的一步：「怎麼證明部署生效」</i>
 
 <b>─── ② 認領（每次加功能，AI 主要走這條）──────────────────────</b>
-vibeship add page /settings/billing \
+vibeubi add page /settings/billing \
      <u>--intent "企業管理員才看得到；沒有訂閱時儲存鈕要是停用的，不是消失"</u>
      <i>→ 建檔 + 補宣告（area / role / P0-P2 / testId）</i>
      <i>→ 從 intent 推出 probes：expectDisabled 而不是 expectHidden</i>
      <i>→ 判斷要不要 journey（會寫入 → 要）</i>
      <i>→ 把新測試檔掛進某個套件（否則 verify 會點名它）</i>
 
-vibeship orphans                 <i>現在有哪些東西沒人認領（功能 + 曝露面 + 工具）</i>
-vibeship adopt                   <i>把每個 orphan 都補齊</i>
-vibeship adopt --only area=auth
-vibeship intent &lt;id&gt; "…"         <i>事後補意圖；下次 adopt 會重擬 probes</i>
+vibeubi orphans                 <i>現在有哪些東西沒人認領（功能 + 曝露面 + 工具）</i>
+vibeubi adopt                   <i>把每個 orphan 都補齊</i>
+vibeubi adopt --only area=auth
+vibeubi intent &lt;id&gt; "…"         <i>事後補意圖；下次 adopt 會重擬 probes</i>
 
 <b>─── 查 ───────────────────────────────────────────────────</b>
-vibeship plan                    <i>印出要做什麼，什麼都不碰</i>
-vibeship why &lt;id&gt;                <i>誰宣告的、上次判決、被誰豁免</i>
-vibeship roster                  <i>agent 的工具面：pin、drift、poison</i>
+vibeubi plan                    <i>印出要做什麼，什麼都不碰</i>
+vibeubi why &lt;id&gt;                <i>誰宣告的、上次判決、被誰豁免</i>
+vibeubi roster                  <i>agent 的工具面：pin、drift、poison</i>
 
 <b>─── ③ 跑 ─────────────────────────────────────────────────</b>
-vibeship verify                  <i>只跑離線層（含 S0–S2）—— 不建置、不換版</i>
-vibeship scan --base &lt;url&gt;       <i>資安 S0–S7</i>
-vibeship ship                    <i>全流程，含自動回滾</i>
-vibeship rollback                <i>放回上一版，並且證明它</i>
-vibeship viz --format archify    <i>把這次 run 匯出成圖的 IR</i>
+vibeubi verify                  <i>只跑離線層（含 S0–S2）—— 不建置、不換版</i>
+vibeubi scan --base &lt;url&gt;       <i>資安 S0–S7</i>
+vibeubi ship                    <i>全流程，含自動回滾</i>
+vibeubi rollback                <i>放回上一版，並且證明它</i>
+vibeubi viz --format archify    <i>把這次 run 匯出成圖的 IR</i>
 
 <b>─── 需要人（AI 只能提案，執行會停下來）──────────────────────</b>
-vibeship exempt &lt;id&gt; --reason "…"        <i>→ ignored</i>
-vibeship public &lt;route&gt; --reason "…"     <i>→ publicApi</i>
-vibeship accept-debt --reason "…"        <i>→ 資安 baseline</i>
+vibeubi exempt &lt;id&gt; --reason "…"        <i>→ ignored</i>
+vibeubi public &lt;route&gt; --reason "…"     <i>→ publicApi</i>
+vibeubi accept-debt --reason "…"        <i>→ 資安 baseline</i>
 
-vibeship guard --action &lt;a&gt;      <i>把上面那條線變成可執行的：</i>
+vibeubi guard --action &lt;a&gt;      <i>把上面那條線變成可執行的：</i>
                                  <i>  declare / probe / journey / pin → exit 0</i>
                                  <i>  ignore / public / without / accept-debt</i>
                                  <i>  / unpin / lower-priority          → exit 1</i></pre>
@@ -660,17 +660,17 @@ vibeship guard --action &lt;a&gt;      <i>把上面那條線變成可執行的�
   把自由文字接進判決路徑，就是把不確定性接回閘門裡。</p>
   <h3>把這次 run 交給任何一個畫圖的 skill</h3>
   <p class="wide">畫圖的 skill 通常是「請 agent 讀 codebase，吐一份 IR」—— agent 用猜的，
-  而圖正確到跟那個猜測一樣的程度。<strong>VibeShip 不用猜：registry 本身就是 IR。</strong>
+  而圖正確到跟那個猜測一樣的程度。<strong>VibeUbi 不用猜：registry 本身就是 IR。</strong>
   它是機械發現、明確宣告出來的，而且每個節點已經帶著一次真實 run 的判決。</p>
 
-<pre>vibeship viz --format archify &gt; coverage.archify.json   <i># 交給 archify，它負責編譯</i>
-vibeship viz --format ir      &gt; coverage.ir.json        <i># 中性 IR，給任何別的畫圖工具</i>
-vibeship viz --format mermaid &gt; coverage.mmd            <i># 零相依備援</i>
+<pre>vibeubi viz --format archify &gt; coverage.archify.json   <i># 交給 archify，它負責編譯</i>
+vibeubi viz --format ir      &gt; coverage.ir.json        <i># 中性 IR，給任何別的畫圖工具</i>
+vibeubi viz --format mermaid &gt; coverage.mmd            <i># 零相依備援</i>
 
 <i>// 每個節點都帶來源，所以這張圖可以被查核，不是被相信：</i>
 { "id": "page:/settings/billing", "tone": "danger",
   <b>"provenance"</b>: { "discoveredIn": "app/settings/billing/page.tsx",
-                    "declaredIn": "vibeship.config.mjs" },
+                    "declaredIn": "vibeubi.config.mjs" },
   "coverage": [{ "layer": "L2", "status": "pass" },
                { "layer": "L3", "status": "fail", "reason": "…" }] }</pre>
 
@@ -687,8 +687,8 @@ vibeship viz --format mermaid &gt; coverage.mmd            <i># 零相依備援<
   <div class="sec-head"><div class="sec-mark">VI</div><h2>裝在任何 harness 上：plugin、skill，還是一支 CLI</h2></div>
 
   <p class="wide">「可移植」有兩個方向，兩個都要做到：
-  <strong>①</strong> VibeShip 要能裝進任何 agent harness；
-  <strong>②</strong> 任何專案要能被 VibeShip 接上。</p>
+  <strong>①</strong> VibeUbi 要能裝進任何 agent harness；
+  <strong>②</strong> 任何專案要能被 VibeUbi 接上。</p>
 
   <h3>① 裝進 harness —— 三層遞降，沒有一層是必須的</h3>
 
@@ -697,12 +697,12 @@ vibeship viz --format mermaid &gt; coverage.mmd            <i># 零相依備援<
       <thead><tr><th>層</th><th>檔案</th><th>誰讀得懂</th></tr></thead>
       <tbody>
         <tr><td><strong>Plugin</strong></td><td class="mono2">.claude-plugin/plugin.json<br>.claude-plugin/marketplace.json</td>
-          <td>Claude Code、GitHub Copilot CLI<br><code>/plugin marketplace add komh123/VibeShip</code></td></tr>
-        <tr><td><strong>Skill</strong></td><td class="mono2">skills/vibeship/SKILL.md<br>skills/vibeship-adopt · -security · -diagram</td>
+          <td>Claude Code、GitHub Copilot CLI<br><code>/plugin marketplace add komh123/VibeUbi</code></td></tr>
+        <tr><td><strong>Skill</strong></td><td class="mono2">skills/vibeubi/SKILL.md<br>skills/vibeubi-adopt · -security · -diagram</td>
           <td>任何支援 Agent Skills 標準的 harness</td></tr>
         <tr><td><strong>AGENTS.md</strong></td><td class="mono2">AGENTS.md（根目錄）</td>
           <td>Codex、Cursor、opencode、Zed —— 不讀 skill 的那些</td></tr>
-        <tr><td><strong>CLI</strong></td><td class="mono2">bin/vibeship.mjs</td>
+        <tr><td><strong>CLI</strong></td><td class="mono2">bin/vibeubi.mjs</td>
           <td><strong>其他所有東西。</strong>純 node、零 build step、零框架 —— 只要能 spawn 一個行程就能用</td></tr>
       </tbody>
     </table>
@@ -716,7 +716,7 @@ vibeship viz --format mermaid &gt; coverage.mmd            <i># 零相依備援<
   <p class="wide">用的是 DSH／cordis 的形狀，因為那是<strong>在每一個宿主裡都成立的最小合約</strong>：
   只要能 <code>import()</code> 一個檔案，就能載入一個外掛。</p>
 
-<pre><b>export const name</b> = "vibeship-fastapi"
+<pre><b>export const name</b> = "vibeubi-fastapi"
 
 <b>export function apply</b>(ctx, config = {}) {
   <b>if</b> (!config.root) <b>return</b>              <i>// 沒設定 → 安靜 no-op，絕不丟例外</i>
@@ -750,7 +750,7 @@ vibeship viz --format mermaid &gt; coverage.mmd            <i># 零相依備援<
       <tbody>
         <tr><td class="mono2">packages/kernel</td><td><span class="ok">可用</span></td>
           <td>39 個 export、零 I/O、<strong>46 個單元測試全綠</strong>，含一個掃過每一組 status×priority 的性質測試</td></tr>
-        <tr><td class="mono2">bin/vibeship.mjs</td><td><span class="ok">可用</span></td>
+        <tr><td class="mono2">bin/vibeubi.mjs</td><td><span class="ok">可用</span></td>
           <td><code>plan · orphans · roster · viz · init · guard</code>，<strong>5 個端對端 smoke 對著真實檔案樹跑過</strong></td></tr>
         <tr><td class="mono2">packages/adapters</td><td><span class="ok">可用</span></td>
           <td>Next.js（走檔案樹 + BUILD_ID 證明）、k8s（pod 內雜湊 + pod 年齡）</td></tr>
@@ -876,25 +876,25 @@ vibeship viz --format mermaid &gt; coverage.mmd            <i># 零相依備援<
 <!-- ═══════════════════ VIII ═══════════════════ -->
 
 <section>
-  <div class="sec-head"><div class="sec-mark">VIII</div><h2>名字：VibeShip 已建好，但撞名很嚴重</h2></div>
+  <div class="sec-head"><div class="sec-mark">VIII</div><h2>名字：VibeUbi 已建好，但撞名很嚴重</h2></div>
 
-  <p class="wide">你指定的名字我照做了 —— <code>github.com/komh123/VibeShip</code> 已建立、private、
+  <p class="wide">你指定的名字我照做了 —— <code>github.com/komh123/VibeUbi</code> 已建立、private、
   43 個檔案、46+5 測試全綠。<strong>但我必須把查到的東西講清楚，因為你上一輪特別要求過要確認沒人用。</strong></p>
 
   <div class="callout danger">
-    <h4>VibeShip 名下已經有一整個生態系</h4>
-    <p><code>vibeforge1111</code> 這個帳號底下有 <strong>11 個以上 <code>vibeship-*</code> 的公開 repo</strong>，
-    包括 <code>vibeship-scanner</code>（「給 vibe coder 的免費漏洞與資安掃描器，2000+ 規則」）、
-    <code>vibeship-spawner</code>、<code>vibeship-plugin</code>、<code>vibeship-optimizer</code>
+    <h4>VibeUbi 名下已經有一整個生態系</h4>
+    <p><code>vibeforge1111</code> 這個帳號底下有 <strong>11 個以上 <code>vibeubi-*</code> 的公開 repo</strong>，
+    包括 <code>vibeubi-scanner</code>（「給 vibe coder 的免費漏洞與資安掃描器，2000+ 規則」）、
+    <code>vibeubi-spawner</code>、<code>vibeubi-plugin</code>、<code>vibeubi-optimizer</code>
     （「安全、好回滾的最佳化流程：快照、比對報告、多日監控」）。
     <strong>其中 scanner 跟 optimizer 兩個跟我們的定位直接重疊。</strong></p>
-    <p>另外 npm 的 <code>vibeship</code> 2025 年就被註冊了（「Ship daily. Document always. Test everything.」），
-    <code>vibeship.dev</code> 與 <code>vibeship.com</code> 也都有人解析。</p>
+    <p>另外 npm 的 <code>vibeubi</code> 2025 年就被註冊了（「Ship daily. Document always. Test everything.」），
+    <code>vibeubi.dev</code> 與 <code>vibeubi.com</code> 也都有人解析。</p>
   </div>
 
   <div class="tbl-scroll">
     <table>
-      <thead><tr><th>查了什麼</th><th>VibeShip</th><th>vibe-ship</th><th>Sederunt（上一輪推薦）</th></tr></thead>
+      <thead><tr><th>查了什麼</th><th>VibeUbi</th><th>vibe-ship</th><th>Sederunt（上一輪推薦）</th></tr></thead>
       <tbody>
         <tr><td>GitHub 同名／近名 repo</td><td><span class="no">11+ 個，含 scanner</span></td><td><span class="mid">同上，連字號不擋</span></td><td><span class="ok">0 個</span></td></tr>
         <tr><td>npm</td><td><span class="no">已註冊</span></td><td><span class="ok">404 可用</span></td><td><span class="ok">404 可用</span></td></tr>
@@ -907,9 +907,9 @@ vibeship viz --format mermaid &gt; coverage.mmd            <i># 零相依備援<
 
   <h3>我的建議（你決定）</h3>
   <ul class="plain wide">
-    <li><strong>先用 VibeShip 沒問題</strong> —— private repo、內部開發、npm 用 <code>vibe-ship</code>（可註冊）。
+    <li><strong>先用 VibeUbi 沒問題</strong> —— private repo、內部開發、npm 用 <code>vibe-ship</code>（可註冊）。
     撞名只在公開發佈那天才真的會痛。</li>
-    <li><strong>要商業化就得換</strong>，理由不是法律而是通路：搜尋「vibeship」第一頁全是別人的，
+    <li><strong>要商業化就得換</strong>，理由不是法律而是通路：搜尋「vibeubi」第一頁全是別人的，
     而其中一個還是資安掃描器 —— 那正是你要賣的東西之一。</li>
     <li>換的話 <strong>Sederunt</strong> 仍然全乾淨（唯一代價是 CLI 不能叫 <code>sed</code>）。
     <em>程式碼裡的名字改起來是一次 sed，通路上的名字改起來是一次重新開始。</em></li>
@@ -917,7 +917,7 @@ vibeship viz --format mermaid &gt; coverage.mmd            <i># 零相依備援<
 </section>
 
 <footer>
-  已建置並推送：github.com/komh123/VibeShip（private · 43 檔 · 46 單元測試 + 5 端對端 smoke 全綠）<br>
+  已建置並推送：github.com/komh123/VibeUbi（private · 43 檔 · 46 單元測試 + 5 端對端 smoke 全綠）<br>
   依據：lib/ship/plan.ts · lib/ship/{attribution,test-ran,tree-drift,env-parity,test-coverage}.ts<br>
   lib/sweep/{judge,run,probe-dsl}.ts · lib/sweep/journeys/{naming,plan,declared}.ts · lib/sweep/layers/security.ts<br>
   lib/security-scan/{run,grade,baseline}.ts + rules/s0…s6 · lib/feature-registry/**<br>

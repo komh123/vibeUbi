@@ -1,17 +1,17 @@
 ---
-name: vibeship
-description: Run, read, or repair the VibeShip deploy gate. Use when the user asks to ship, deploy, verify a deploy, run the gate, check coverage of features, find untested or unclaimed features (orphans), diagnose why a deploy was rolled back, or asks "is this safe to deploy". Also use before any deploy of a project that has a vibeship.config.mjs.
+name: vibeubi
+description: Run, read, or repair the VibeUbi deploy gate. Use when the user asks to ship, deploy, verify a deploy, run the gate, check coverage of features, find untested or unclaimed features (orphans), diagnose why a deploy was rolled back, or asks "is this safe to deploy". Also use before any deploy of a project that has a vibeubi.config.mjs.
 ---
 
-# VibeShip
+# VibeUbi
 
 A deploy gate built on one idea: **coverage decays because someone has to
 remember, and nobody — human or agent — remembers a codebase this size.**
 
 ## Before anything else
 
-Read `vibeship.config.mjs` at the project root. No config → the project is not
-wired yet; use the `vibeship-adopt` skill instead of guessing.
+Read `vibeubi.config.mjs` at the project root. No config → the project is not
+wired yet; use the `vibeubi-adopt` skill instead of guessing.
 
 ## The line you may not cross
 
@@ -39,11 +39,11 @@ wrong, report the verdict; do not edit the function that produced it.
 ## Running it
 
 ```bash
-npx vibeship plan                 # print what it would do; touch nothing
-npx vibeship verify               # offline layers only — nothing is built or swapped
-npx vibeship scan --base <url>    # the security layers on their own
-npx vibeship ship                 # the whole pipeline, with automatic rollback
-npx vibeship rollback             # put the previous build back AND prove it
+npx vibeubi plan                 # print what it would do; touch nothing
+npx vibeubi verify               # offline layers only — nothing is built or swapped
+npx vibeubi scan --base <url>    # the security layers on their own
+npx vibeubi ship                 # the whole pipeline, with automatic rollback
+npx vibeubi rollback             # put the previous build back AND prove it
 ```
 
 `plan` first, always, on a project you have not shipped before in this session.
@@ -74,7 +74,7 @@ Six statuses, and the two counter-intuitive ones matter most:
 
 ## When a run is red
 
-1. `npx vibeship why <feature-id>` — what was declared, who declared it, what
+1. `npx vibeubi why <feature-id>` — what was declared, who declared it, what
    the last verdict was, whether it is exempt.
 2. Decide whether it is *this change's* fault. The gate already re-checks P0
    cells once; a cell that passes on re-check is exonerated **and still
@@ -84,6 +84,6 @@ Six statuses, and the two counter-intuitive ones matter most:
 
 ## Related skills
 
-- `vibeship-adopt` — wire a new project, or claim orphans after adding features
-- `vibeship-security` — the S-layers, including the agent/MCP surface
-- `vibeship-diagram` — export a verifiable architecture picture from a run
+- `vibeubi-adopt` — wire a new project, or claim orphans after adding features
+- `vibeubi-security` — the S-layers, including the agent/MCP surface
+- `vibeubi-diagram` — export a verifiable architecture picture from a run

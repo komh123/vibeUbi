@@ -1,9 +1,9 @@
 {
-  "name": "vibeship",
+  "name": "vibeubi",
   "version": "0.1.0",
   "description": "A deploy gate that removes the need to remember. Discovers every feature and every exposed port, refuses anything undeclared, and proves the deploy from outside the process.",
-  "author": { "name": "VibeShip" },
-  "homepage": "https://github.com/komh123/VibeShip",
+  "author": { "name": "VibeUbi" },
+  "homepage": "https://github.com/komh123/VibeUbi",
   "license": "MIT",
   "keywords": ["testing", "deploy", "gate", "security", "agentic", "mcp", "coverage"],
   "skills": "./skills",

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * vibeship — the CLI every harness can fall back to.
+ * vibeubi — the CLI every harness can fall back to.
  *
  * Skills and AGENTS.md tell an agent what to think. This is what it runs, and
  * it is deliberately plain: node, no build step, no framework. A harness that
- * can spawn a process can use VibeShip.
+ * can spawn a process can use VibeUbi.
  */
 import { readFile, writeFile, mkdir } from "node:fs/promises"
 import { existsSync } from "node:fs"
@@ -33,7 +33,7 @@ async function loadConfig() {
   // `--config` lets a run point at a project WITHOUT writing a file into it —
   // which is what CI usually wants, and what you want the very first time you
   // scan somebody else's repo.
-  const p = val("config", "") ? resolve(val("config", "")) : join(ROOT, "vibeship.config.mjs")
+  const p = val("config", "") ? resolve(val("config", "")) : join(ROOT, "vibeubi.config.mjs")
   if (!existsSync(p)) return null
   return (await import(pathToFileURL(p).href)).default
 }
@@ -41,8 +41,8 @@ async function loadConfig() {
 async function boot() {
   const config = await loadConfig()
   if (!config) {
-    bad("no vibeship.config.mjs here.")
-    note("run `vibeship init` — or, in an agent, use the vibeship-adopt skill.")
+    bad("no vibeubi.config.mjs here.")
+    note("run `vibeubi init` — or, in an agent, use the vibeubi-adopt skill.")
     process.exit(2)
   }
   const ctx = createContext()
@@ -59,7 +59,7 @@ async function discoverAll(ctx) {
   const out = []
   for (const [kind, fn] of ctx.__registry.discoverers) {
     const r = await fn()
-    if (r && r.__vibeship_capability_failed) continue
+    if (r && r.__vibeubi_capability_failed) continue
     out.push(...(r ?? []))
   }
   return out
@@ -70,7 +70,7 @@ async function discoverAll(ctx) {
 const COMMANDS = {
   async plan() {
     const { config, ctx, loaded } = await boot()
-    say(`\n${C.bold}vibeship plan${C.off} ${C.dim}${ROOT}${C.off}\n`)
+    say(`\n${C.bold}vibeubi plan${C.off} ${C.dim}${ROOT}${C.off}\n`)
     say(`${C.bold}plugins${C.off}`)
     for (const n of loaded.loaded) ok(n)
     for (const d of loaded.disabled) bad(`${d.owner} — ${d.why}`)
@@ -104,13 +104,13 @@ const COMMANDS = {
     const { config, ctx } = await boot()
     const discovered = await discoverAll(ctx)
     const v = orphanVerdict(discovered, config.declared ?? [], config.ignored ?? [])
-    say(`\n${C.bold}vibeship orphans${C.off}\n`)
+    say(`\n${C.bold}vibeubi orphans${C.off}\n`)
     if (v.ok) { ok(v.reason); return }
     bad(v.reason)
     for (const o of v.orphans) say(`     ${C.yellow}orphan${C.off}  ${o.id}  ${C.dim}${o.source ?? ""}${C.off}`)
     for (const s of v.stale) say(`     ${C.yellow}stale ${C.off}  ${s.id}`)
     for (const u of v.unreasoned) say(`     ${C.red}no reason${C.off}  ${u.id}`)
-    say(`\n${C.dim}Claim them with \`vibeship adopt\`. Do NOT move them into \`ignored\` to`)
+    say(`\n${C.dim}Claim them with \`vibeubi adopt\`. Do NOT move them into \`ignored\` to`)
     say(`get a green light — that is a narrowing action and it needs a human.${C.off}\n`)
     process.exit(1)
   },
@@ -121,7 +121,7 @@ const COMMANDS = {
     const declaredById = new Map((config.declared ?? []).map((d) => [d.id, d]))
     const features = discovered.map((d) => ({ ...d, ...(declaredById.get(d.id) ?? {}) }))
     let cells = []
-    const last = join(ROOT, ".vibeship", "last-run.json")
+    const last = join(ROOT, ".vibeubi", "last-run.json")
     if (existsSync(last)) cells = JSON.parse(await readFile(last, "utf8")).cells ?? []
 
     const ir = toIR({
@@ -140,7 +140,7 @@ const COMMANDS = {
     const live = config.tools ?? []
     const pins = config.toolPins ?? []
     const { findings } = rosterVerdict({ live, pins, declared: (config.declaredTools ?? []) })
-    say(`\n${C.bold}vibeship roster${C.off}  ${C.dim}${live.length} tool(s)${C.off}\n`)
+    say(`\n${C.bold}vibeubi roster${C.off}  ${C.dim}${live.length} tool(s)${C.off}\n`)
     if (findings.length === 0) { ok("every tool is declared, pinned and clean"); return }
     for (const f of findings) {
       const col = f.severity === "critical" ? C.red : f.severity === "high" ? C.yellow : C.dim
@@ -156,7 +156,7 @@ const COMMANDS = {
     const { runScan } = await import("../packages/security/src/run.mjs")
     const base = val("base", config.base ?? "")
     const layers = val("layer", "S0,S1,S2,S4").split(",").map((x) => x.trim()).filter(Boolean)
-    say(`\n${C.bold}vibeship scan${C.off} ${C.dim}${ROOT} · ${layers.join(" ")}${base ? " · " + base : ""}${C.off}\n`)
+    say(`\n${C.bold}vibeubi scan${C.off} ${C.dim}${ROOT} · ${layers.join(" ")}${base ? " · " + base : ""}${C.off}\n`)
 
     const discovered = await discoverAll(ctx)
     const r = await runScan({ root: ROOT, config, layers, base, discovered, note: (m) => note(m) })
@@ -177,15 +177,15 @@ const COMMANDS = {
     for (const s of r.skipped) note(`skipped ${s}`)
     if (r.precision < 1) note(`rule precision ${(r.precision * 100).toFixed(0)}% (${r.falsePositives} lexically-excluded match(es) dropped before you saw them)`)
 
-    const out = join(ROOT, ".vibeship"); await mkdir(out, { recursive: true })
+    const out = join(ROOT, ".vibeubi"); await mkdir(out, { recursive: true })
     await writeFile(join(out, "scan.json"), JSON.stringify(r, null, 2))
     note(`written ${relativeish(join(out, "scan.json"))}`)
     process.exit(r.blocking.length > 0 ? 1 : 0)
   },
 
   async init() {
-    const p = join(ROOT, "vibeship.config.mjs")
-    if (existsSync(p) && !flag("force")) { bad("vibeship.config.mjs already exists (use --force)"); process.exit(2) }
+    const p = join(ROOT, "vibeubi.config.mjs")
+    if (existsSync(p) && !flag("force")) { bad("vibeubi.config.mjs already exists (use --force)"); process.exit(2) }
     await writeFile(p, TEMPLATE, "utf8")
     ok(`wrote ${p}`)
     say(`\n${C.yellow}One field needs a human before this means anything: \`proof\`.${C.off}`)
@@ -205,7 +205,7 @@ const COMMANDS = {
 
   help() {
     say(`
-${C.bold}vibeship${C.off} — the gate that remembers so you do not have to
+${C.bold}vibeubi${C.off} — the gate that remembers so you do not have to
 
   ${C.bold}plan${C.off}      print what a run would do; touch nothing
   ${C.bold}orphans${C.off}   list what was discovered and nobody claimed
@@ -213,28 +213,28 @@ ${C.bold}vibeship${C.off} — the gate that remembers so you do not have to
   ${C.bold}roster${C.off}    check the agent/MCP tool surface
   ${C.bold}viz${C.off}       export a diagram IR   --format ir|archify|mermaid
   ${C.bold}scan${C.off}      S0–S4 security layers  --layer S0,S1,S2,S4 [--base URL]
-  ${C.bold}init${C.off}      write a vibeship.config.mjs draft
+  ${C.bold}init${C.off}      write a vibeubi.config.mjs draft
   ${C.bold}guard${C.off}     --action <a>   refuse a narrowing action
 
 ${C.dim}--root DIR    where the project is
---config F    use this config instead of <root>/vibeship.config.mjs
+--config F    use this config instead of <root>/vibeubi.config.mjs
               (scan somebody else's repo without writing a file into it)${C.off}
 `)
   },
 }
 
 const TEMPLATE = `/**
- * vibeship.config.mjs
+ * vibeubi.config.mjs
  *
  * Plugins are DSH-shaped: a module exporting \`name\` and \`apply(ctx, config)\`.
  */
-import * as nextjs from "@vibeship/adapters/nextjs.plugin.mjs"
+import * as nextjs from "@vibeubi/adapters/nextjs.plugin.mjs"
 
 export default {
   name: "my-app",
   plugins: [nextjs],
   pluginConfig: {
-    "vibeship-nextjs": { root: process.cwd(), probePath: "/" },
+    "vibeubi-nextjs": { root: process.cwd(), probePath: "/" },
   },
 
   /** Roles the gate will exercise, weakest first. */

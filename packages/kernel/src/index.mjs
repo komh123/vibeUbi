@@ -1,5 +1,5 @@
 /**
- * @vibeship/kernel — every decision, and no I/O at all.
+ * @vibeubi/kernel — every decision, and no I/O at all.
  *
  * If a function in this package ever needs the network, the filesystem or a
  * clock it does not receive as an argument, it belongs in an adapter instead.

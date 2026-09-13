@@ -1,7 +1,7 @@
 /**
- * VibeShip config for the system-monitor project.
+ * VibeUbi config for the system-monitor project.
  *
- * Kept OUTSIDE that repository on purpose: `vibeship scan --config <this>`
+ * Kept OUTSIDE that repository on purpose: `vibeubi scan --config <this>`
  * points a run at a project without writing a single byte into it. That is
  * what you want the first time you scan somebody else's code, and what CI
  * usually wants forever.
@@ -14,7 +14,7 @@ export default {
   name: "system-monitor",
   plugins: [express],
   pluginConfig: {
-    "vibeship-express": {
+    "vibeubi-express": {
       root: ROOT,
       entry: "server/index.js",
       routesDir: "server/routes",

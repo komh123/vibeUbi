@@ -1,5 +1,5 @@
 /**
- * vibeship-nextjs — a deploy target and a discoverer for a Next.js app.
+ * vibeubi-nextjs — a deploy target and a discoverer for a Next.js app.
  *
  * Shaped like a DSH/cordis plugin: `name` + `apply(ctx, config)`, loaded by
  * path, never throws into the host loop. Not configured → returns silently.
@@ -7,7 +7,7 @@
 import { readdir, readFile } from "node:fs/promises"
 import { join, relative, sep } from "node:path"
 
-export const name = "vibeship-nextjs"
+export const name = "vibeubi-nextjs"
 
 const PAGE = /^page\.(tsx|ts|jsx|js)$/
 const ROUTE = /^route\.(ts|js)$/

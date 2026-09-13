@@ -1,4 +1,4 @@
-# VibeShip
+# VibeUbi
 
 **A deploy gate that removes the need to remember.**
 
@@ -7,9 +7,9 @@ nobody — no human, and certainly no agent — holds in their head, **coverage
 decays silently.** Features decay. So does the security surface.
 
 ```bash
-npx vibeship plan        # what a run would do; touches nothing
-npx vibeship orphans     # everything discovered that nobody claimed
-npx vibeship ship        # verify → build → swap → prove → sweep → gate → report
+npx vibeubi plan        # what a run would do; touches nothing
+npx vibeubi orphans     # everything discovered that nobody claimed
+npx vibeubi ship        # verify → build → swap → prove → sweep → gate → report
 ```
 
 ---
@@ -31,7 +31,7 @@ Three things make this worse the moment an agent is writing the code:
   last week. "Remembering" is not merely unreliable for an agent — it is
   structurally absent.
 - The model that wrote the code is the model that reviews it. The blind spots
-  are correlated, so the judge must not be a model. **VibeShip's kernel
+  are correlated, so the judge must not be a model. **VibeUbi's kernel
   contains zero lines of LLM.**
 
 ## Three axioms
@@ -43,7 +43,7 @@ Three things make this worse the moment an agent is writing the code:
 | **C** | **evidence** | *outcome* | never trust a report of success; observe a fact from outside |
 
 C is the part other tools do not have. Argo Rollouts, Flagger and Checkly watch
-*metrics*. VibeShip watches a **feature matrix and an exposure map**, and for
+*metrics*. VibeUbi watches a **feature matrix and an exposure map**, and for
 "did this deploy happen" it demands an independent fact.
 
 ## The one rule that will not bend
@@ -103,7 +103,7 @@ rule load-bearing:
 
 Everything in the right column makes a red light disappear **without fixing
 anything** — the cheapest move available to a model optimising for "the command
-succeeded". `vibeship guard --action <a>` enforces the split, and
+succeeded". `vibeubi guard --action <a>` enforces the split, and
 `packages/kernel/**` is read-only to agents.
 
 ## Install
@@ -111,17 +111,17 @@ succeeded". `vibeship guard --action <a>` enforces the split, and
 **Claude Code / Copilot CLI** — this repo is a plugin:
 
 ```
-/plugin marketplace add komh123/VibeShip
-/plugin install vibeship
+/plugin marketplace add komh123/VibeUbi
+/plugin install vibeubi
 ```
 
 **Anything else** — `AGENTS.md` at the root, plus the CLI:
 
 ```bash
-npm i -D vibeship && npx vibeship init
+npm i -D vibeubi && npx vibeubi init
 ```
 
-Skills: `vibeship` · `vibeship-adopt` · `vibeship-security` · `vibeship-diagram`.
+Skills: `vibeubi` · `vibeubi-adopt` · `vibeubi-security` · `vibeubi-diagram`.
 
 ## Extending it
 
@@ -129,7 +129,7 @@ Plugins are shaped like DSH/cordis plugins — the smallest contract that works
 in every host:
 
 ```js
-export const name = "vibeship-fastapi"
+export const name = "vibeubi-fastapi"
 export function apply(ctx, config = {}) {
   if (!config.root) return                 // not configured → silent no-op
   ctx.discover("route", async () => [...]) // A
@@ -150,7 +150,7 @@ packages/security    S0–S7 rule catalogue
 packages/adapters    per-stack plugins
 packages/viz         registry → diagram IR (archify · mermaid · neutral)
 apps/console         a browser UI that triggers a run and watches it
-bin/vibeship.mjs     the CLI every harness can fall back to
+bin/vibeubi.mjs     the CLI every harness can fall back to
 ```
 
 ```bash
@@ -176,11 +176,11 @@ MIT.
 
 ## A note on the name
 
-`vibeship` is **taken** on npm (2025) and there are 11+ public
-`vibeship-*` repositories under one owner — including `vibeship-scanner`, a
-security scanner, and `vibeship-optimizer`, a rollback-friendly optimisation
-workflow. Both overlap this project's positioning. `vibeship.dev` and
-`vibeship.com` both resolve.
+`vibeubi` is **taken** on npm (2025) and there are 11+ public
+`vibeubi-*` repositories under one owner — including `vibeubi-scanner`, a
+security scanner, and `vibeubi-optimizer`, a rollback-friendly optimisation
+workflow. Both overlap this project's positioning. `vibeubi.dev` and
+`vibeubi.com` both resolve.
 
 Fine for a private repo. Worth revisiting before any public release — not for
 legal reasons, but because the first page of results for the name belongs to
@@ -188,13 +188,13 @@ someone else.
 
 ## Proven on a project it had never seen
 
-`examples/system-monitor.config.mjs` points VibeShip at an **Express + React +
+`examples/system-monitor.config.mjs` points VibeUbi at an **Express + React +
 k8s** app — a completely different stack from the Next.js one it was extracted
 from. Zero files were written into that repository (`--config` keeps the config
 outside it).
 
 ```bash
-npx vibeship scan --root ../system-monitor --config examples/system-monitor.config.mjs --layer S0,S2,S4
+npx vibeubi scan --root ../system-monitor --config examples/system-monitor.config.mjs --layer S0,S2,S4
 ```
 
 First run, nothing declared by hand:
@@ -209,7 +209,7 @@ First run, nothing declared by hand:
 - A private key in the working tree **and in git history**.
 - Grade **F**.
 
-It also caught VibeShip lying about itself: the Express adapter returned
+It also caught VibeUbi lying about itself: the Express adapter returned
 `{external: true, carriesArtifactId: true}` unconditionally while putting
 "NOT WIRED" in the human-readable field, so `plan` printed a green tick next to
 the words NOT WIRED. Fixed — the claim now describes what the adapter can

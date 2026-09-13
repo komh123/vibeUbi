@@ -1,4 +1,4 @@
-# Porting VibeShip to another project
+# Porting VibeUbi to another project
 
 Three steps. The middle one is the one you cannot skip by automation.
 
@@ -10,7 +10,7 @@ Three steps. The middle one is the one you cannot skip by automation.
 
 ## 1 · Wire
 
-`vibeship init` writes a `vibeship.config.mjs` draft. Fill in the framework,
+`vibeubi init` writes a `vibeubi.config.mjs` draft. Fill in the framework,
 where routes live, what roles exist and how to mint a session for each, how the
 project builds and swaps, and what listens on a port.
 
@@ -18,7 +18,7 @@ Then stop at `proof`.
 
 **`proof` is the only field where a wrong answer produces no error anywhere.**
 Every other mistake surfaces as a red cell. A bad proof just quietly makes the
-gate meaningless. So `vibeship init --confirm-proof` exists to put it in front
+gate meaningless. So `vibeubi init --confirm-proof` exists to put it in front
 of a human once.
 
 ```js
@@ -52,11 +52,11 @@ Nothing to configure. The kernel decides; the adapter acts.
 
 ## Porting checklist
 
-- [ ] `vibeship plan` lists your plugins and prints a proof source
+- [ ] `vibeubi plan` lists your plugins and prints a proof source
 - [ ] `proofContract` passes — the evidence is external and carries the id
-- [ ] `vibeship orphans` finds real, nameable things
+- [ ] `vibeubi orphans` finds real, nameable things
 - [ ] a deliberately broken proof makes `ship` refuse (test it once, on purpose)
-- [ ] `vibeship guard --action ignore` exits 1
+- [ ] `vibeubi guard --action ignore` exits 1
 - [ ] a test file added outside every suite makes `verify` name it
 
 The fourth item is worth the ten minutes. A gate you have never seen refuse is

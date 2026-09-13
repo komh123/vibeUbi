@@ -1,7 +1,7 @@
 /**
  * roster.mjs — the agent's tool surface, held to the same three axioms.
  *
- * This is where VibeShip's security model stops being a port of ordinary
+ * This is where VibeUbi's security model stops being a port of ordinary
  * appsec and starts being about agents.
  *
  * THE INSIGHT: an agent's tool list is a REGISTRY. It has exactly the same
