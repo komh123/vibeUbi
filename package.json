@@ -1,0 +1,23 @@
+{
+  "name": "vibeship",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A deploy gate that removes the need to remember. Discovers every feature and every exposed port, refuses anything undeclared, proves the deploy from outside the process, and rolls back on a P0 red.",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=18.17" },
+  "bin": { "vibeship": "./bin/vibeship.mjs" },
+  "exports": {
+    ".": "./packages/kernel/src/index.mjs",
+    "./kernel": "./packages/kernel/src/index.mjs",
+    "./viz": "./packages/viz/src/archify.mjs",
+    "./adapters/*": "./packages/adapters/src/*"
+  },
+  "scripts": {
+    "test": "node --test packages/kernel/test/",
+    "smoke": "node scripts/smoke.mjs",
+    "verify": "npm run test && npm run smoke"
+  },
+  "keywords": ["deploy", "gate", "testing", "coverage", "security", "agentic", "mcp", "rollback", "claude-code", "agent-skill"],
+  "repository": { "type": "git", "url": "git+https://github.com/komh123/VibeShip.git" }
+}
