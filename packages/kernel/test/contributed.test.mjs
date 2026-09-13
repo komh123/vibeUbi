@@ -7,7 +7,7 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import {
   budgetVerdict, vacuousComparison, MIN_BUDGET_MS,
-  baselineAdmission, exemptionScope, checkAssertsOnBehaviour,
+  baselineAdmission, exemptionScope, checkAssertsOnBehaviour, sourceScanHit, textRuleFitness,
 } from "../src/index.mjs"
 
 const MIN = 60_000
@@ -120,4 +120,52 @@ test("a check that only reads source text goes red on a rename and green on a gu
   assert.equal(v.ok, false)
   assert.match(v.reason, /make the subject injectable and call it/)
   assert.equal(checkAssertsOnBehaviour({ reads: null, calls: true }).ok, true)
+})
+
+/* ── text rules that match the wrong thing ─────────────────────────────── */
+
+test("a regex that matched its own comment is a false positive, not a finding", () => {
+  // Hit three times in one day by the same session: a gate comparing source
+  // text, a regex matching its OWN comment, a regex matching parameter types.
+  const r = sourceScanHit({ pattern: "TODO", matchedIn: "comment" })
+  assert.equal(r.real, false)
+  assert.match(r.reason, /reading the explanation of the thing instead of the thing/)
+})
+
+test("a match in a type annotation is erased before anything runs", () => {
+  assert.equal(sourceScanHit({ matchedIn: "type-annotation" }).real, false)
+})
+
+test("a rule matching itself is the purest form of the bug", () => {
+  assert.match(sourceScanHit({ matchedIn: "own-source" }).reason, /matched ITSELF/)
+})
+
+test("a match in real code is real", () => {
+  assert.equal(sourceScanHit({ matchedIn: "call-expression" }).real, true)
+})
+
+test("the fix is a lexer — never an allow-list, never the baseline", () => {
+  const r = sourceScanHit({ matchedIn: "string-literal" })
+  assert.match(r.reason, /never with an allow-list/)
+  assert.match(r.reason, /never by baselining it/)
+  // and the two rules agree with each other:
+  assert.equal(baselineAdmission({ fingerprint: "x", severity: "high", verdict: "false-positive", reason: "regex hit a comment" }).admit, false)
+})
+
+test("a low-precision text rule may not gate anything", () => {
+  // Measured elsewhere: a hand-written dead-code scanner, 137 false out of 177.
+  const hits = [
+    ...Array(40).fill({ matchedIn: "comment" }),
+    ...Array(137 - 40).fill({ matchedIn: "string-literal" }),
+    ...Array(40).fill({ matchedIn: "call-expression" }),
+  ]
+  const v = textRuleFitness({ hits, name: "dead-code scan" })
+  assert.equal(v.ok, false)
+  assert.ok(v.precision < 0.3)
+  assert.match(v.reason, /Give it a lexer before it gates anything/)
+})
+
+test("a precise rule passes", () => {
+  const hits = [...Array(19).fill({ matchedIn: "call-expression" }), { matchedIn: "comment" }]
+  assert.equal(textRuleFitness({ hits }).ok, true)
 })

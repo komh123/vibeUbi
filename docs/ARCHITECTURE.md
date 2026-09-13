@@ -33,6 +33,7 @@ everything.
 | that a false positive is worse than a hole | `baselineAdmission` | a checker missed a third invocation shape and called two *running* test files unrun; the obvious fix would have declared, in writing, that nobody runs them |
 | to keep an exemption narrow | `exemptionScope` | a correct `404` went red three ships running; two retries were filed as flake, the third rolled back a good build |
 | that a check must call the thing | `checkAssertsOnBehaviour` | gate assertions compared a script's source text; upstream shrank it 187 → 29 lines and moved the capability, so the gate failed on spelling |
+| that a text rule matches prose too | `sourceScanHit` · `textRuleFitness` | same shape three times in one day — a source comparison, a regex matching its own comment, a regex matching parameter types. Measured elsewhere: a hand-written dead-code scan, 137 false out of 177 |
 
 ## Three axioms
 
@@ -125,3 +126,10 @@ generalised here into a pure function with a test.
 
 That is the intended shape of this project: **a rule earns its place by having
 cost someone a real afternoon**, and arrives with the incident attached.
+
+Two of those rules point at each other on purpose. `sourceScanHit` says a
+lexically-wrong match must be fixed with a lexer, *never* by baselining it;
+`baselineAdmission` refuses to baseline it. That is not redundancy — a noisy
+text rule is the main thing that generates pressure to sign for non-problems as
+real debt, so the rule that produces the noise and the rule that would absorb it
+have to agree.

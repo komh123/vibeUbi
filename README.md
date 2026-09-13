@@ -144,7 +144,7 @@ export function apply(ctx, config = {}) {
 ## Layout
 
 ```
-packages/kernel      every decision, zero I/O, 59 tests — the product
+packages/kernel      every decision, zero I/O, 66 tests — the product
 packages/registry    discovery + declaration + the orphan rule
 packages/security    S0–S7 rule catalogue
 packages/adapters    per-stack plugins
@@ -154,7 +154,7 @@ bin/vibeship.mjs     the CLI every harness can fall back to
 ```
 
 ```bash
-npm run verify    # 59 unit tests + 5 end-to-end smoke checks
+npm run verify    # 66 unit tests + 5 end-to-end smoke checks
 ```
 
 MIT.

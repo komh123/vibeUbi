@@ -106,3 +106,76 @@ export function checkAssertsOnBehaviour({ reads, calls }) {
       `make the subject injectable and call it.`,
   }
 }
+
+/**
+ * Where did this text-scanning rule's match actually land?
+ *
+ * `checkAssertsOnBehaviour` catches a check that never calls its subject. This
+ * catches the sibling: a check that DOES scan source text, and matches things
+ * that are not the thing it is looking for.
+ *
+ * Contributed after the same shape bit three times in one day — a gate
+ * comparing a script's source, a regex that matched its OWN comment, and a
+ * regex that matched a function's parameter types. Measured elsewhere: a
+ * hand-written dead-code scanner produced 137 false positives out of 177.
+ *
+ * WHY THIS ONE MATTERS MORE THAN IT LOOKS. A text rule with no lexical
+ * awareness does not merely waste time — it manufactures exactly the pressure
+ * `baselineAdmission` exists to refuse. Enough false positives and the obvious
+ * remedy becomes "baseline them", and now the record formally asserts that a
+ * pile of non-problems are real accepted debt.
+ *
+ * The fix for a match outside executable code is always a lexer, never an
+ * allow-list: an allow-list grows one entry per false positive forever and
+ * silently suppresses the true positive that happens to share a line.
+ */
+export const NON_CODE_REGIONS = Object.freeze(["comment", "string-literal", "type-annotation", "own-source", "test-fixture", "generated"])
+
+/**
+ * @param {{pattern?:string, matchedIn:string, sample?:string}} hit
+ *   `matchedIn` — where the match landed once the source is actually lexed.
+ */
+export function sourceScanHit(hit) {
+  const where = String(hit.matchedIn ?? "")
+  if (!NON_CODE_REGIONS.includes(where)) return { real: true, where }
+
+  const why = {
+    "comment": "matched prose, not code — the rule is reading the explanation of the thing instead of the thing",
+    "string-literal": "matched inside a string; the text exists, the behaviour does not",
+    "type-annotation": "matched a type, which is erased before anything runs",
+    "own-source": "the rule matched ITSELF — its own pattern or the line documenting it",
+    "test-fixture": "matched a deliberate example planted to prove the rule works",
+    "generated": "matched generated output nobody edits",
+  }[where]
+
+  return {
+    real: false,
+    where,
+    reason:
+      `${why}. This is a FALSE POSITIVE, so it must be fixed with a lexer — never with an allow-list ` +
+      `(one entry per false positive, forever, and it silently suppresses the true positive that shares a line) ` +
+      `and never by baselining it (see baselineAdmission: a baseline entry is a signature saying the finding is real).`,
+  }
+}
+
+/**
+ * Is a text-scanning rule fit to gate on at all?
+ *
+ * A rule whose matches are mostly not real does not become trustworthy by
+ * having its output accepted; it becomes trustworthy by being rewritten.
+ */
+export function textRuleFitness({ hits, name = "rule" }) {
+  const judged = hits.filter((h) => h.matchedIn)
+  if (judged.length === 0) return { ok: true, precision: 1, reason: "nothing to judge" }
+  const real = judged.filter((h) => sourceScanHit(h).real).length
+  const precision = real / judged.length
+  if (precision >= 0.9) return { ok: true, precision, reason: `${real}/${judged.length} real` }
+  return {
+    ok: false,
+    precision,
+    reason:
+      `${name} matched ${judged.length} times and only ${real} were real (${Math.round(precision * 100)}%). ` +
+      `A rule at this precision cannot gate: people will stop reading it, and the pressure to absorb its noise ` +
+      `into the baseline is how non-problems get signed for as real debt. Give it a lexer before it gates anything.`,
+  }
+}
