@@ -184,13 +184,61 @@ const COMMANDS = {
   },
 
   async init() {
-    const p = join(ROOT, "vibeubi.config.mjs")
-    if (existsSync(p) && !flag("force")) { bad("vibeubi.config.mjs already exists (use --force)"); process.exit(2) }
-    await writeFile(p, TEMPLATE, "utf8")
-    ok(`wrote ${p}`)
-    say(`\n${C.yellow}One field needs a human before this means anything: \`proof\`.${C.off}`)
-    say(`${C.dim}It must be fetched from OUTSIDE the deployed process and must carry the`)
-    say(`artifact id. An exit code from the thing that did the deploying is not a proof.${C.off}\n`)
+    const { probe, renderConfig } = await import("../packages/registry/src/probe.mjs")
+    say(`\n${C.bold}ubi init${C.off} ${C.dim}${ROOT}${C.off}\n`)
+
+    const p = await probe(ROOT)
+    const f = p.found, g = p.guessed
+
+    say(`${C.bold}found${C.off}`)
+    for (const [k, v] of [["framework", f.framework], ["entry", f.entry], ["port", f.port],
+                          ["build", f.buildCommand], ["tests", f.testCommand], ["deploy", f.deploy]]) {
+      if (v) ok(`${k.padEnd(10)} ${v}`)
+    }
+    if (!f.framework) bad("no framework recognised — you will need a discoverer, see docs/PLUGINS.md")
+
+    const guessedEntries = Object.entries(g).filter(([, v]) => v)
+    if (guessedEntries.length) {
+      say(`\n${C.bold}guessed${C.off} ${C.dim}(safe to be wrong — \`ubi orphans\` shows it immediately)${C.off}`)
+      for (const [k, v] of guessedEntries) note(`${k.padEnd(10)} ${v}`)
+    }
+
+    say(`\n${C.bold}auth helpers in your source${C.off}`)
+    if (f.gateTokens.length === 0) {
+      bad("none found — until you name yours, EVERY route will read as ungated")
+    } else {
+      for (const t of f.gateTokens.slice(0, 8)) {
+        // A helper defined once and called nowhere is the most interesting
+        // thing this probe can find, so it is not buried in a count.
+        if (t.declared && t.uses === 0) {
+          say(`  ${C.red}!${C.off} ${t.name} ${C.dim}— declared here and called by NOTHING. A control that was built and never wired.${C.off}`)
+        } else if (t.uses === 0) {
+          note(`${t.name} ${C.dim}— mentioned, never called${C.off}`)
+        } else ok(`${t.name} ${C.dim}×${t.uses} call site(s)${C.off}`)
+      }
+    }
+
+    say(`\n${C.bold}proof${C.off} ${C.red}${p.proof.status}${C.off}`)
+    note(p.proof.why)
+    note("init does not invent this field — it is the only one where a wrong answer produces no error anywhere else.")
+
+    for (const n of p.notes) note(n)
+
+    if (flag("dry-run")) { say(`\n${C.dim}--dry-run: nothing written.${C.off}\n`); return }
+
+    const out = join(ROOT, "vibeubi.config.mjs")
+    if (existsSync(out) && !flag("force")) {
+      bad(`vibeubi.config.mjs already exists (use --force, or --dry-run to just look)`)
+      process.exit(2)
+    }
+    const adapterPath = val("adapter", f.framework === "express"
+      ? "vibeubi/adapters/express.plugin.mjs"
+      : "vibeubi/adapters/nextjs.plugin.mjs")
+    await writeFile(out, renderConfig(p, { adapterPath }), "utf8")
+    say("")
+    ok(`wrote ${relativeish(out)}`)
+    say(`\n${C.dim}next:  ubi orphans   →  everything discovered that nobody has claimed`)
+    say(`       ubi scan      →  S0–S4 against what you just wired${C.off}\n`)
   },
 
   async guard() {
@@ -213,7 +261,7 @@ ${C.bold}vibeubi${C.off} — the gate that remembers so you do not have to
   ${C.bold}roster${C.off}    check the agent/MCP tool surface
   ${C.bold}viz${C.off}       export a diagram IR   --format ir|archify|mermaid
   ${C.bold}scan${C.off}      S0–S4 security layers  --layer S0,S1,S2,S4 [--base URL]
-  ${C.bold}init${C.off}      write a vibeubi.config.mjs draft
+  ${C.bold}init${C.off}      probe the project and write a config  [--dry-run] [--force]
   ${C.bold}guard${C.off}     --action <a>   refuse a narrowing action
 
 ${C.dim}--root DIR    where the project is

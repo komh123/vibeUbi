@@ -144,7 +144,7 @@ export function apply(ctx, config = {}) {
 ## Layout
 
 ```
-packages/kernel      every decision, zero I/O, 82 tests — the product
+packages/kernel      every decision, zero I/O, 91 tests — the product
 packages/registry    discovery + declaration + the orphan rule
 packages/security    S0–S7 rule catalogue
 packages/adapters    per-stack plugins
@@ -154,8 +154,18 @@ bin/vibeubi.mjs     the CLI every harness can fall back to
 ```
 
 ```bash
-npm run verify    # 82 unit tests + 5 end-to-end smoke checks
+npm run verify    # 91 unit tests + 5 end-to-end smoke checks
 ```
+
+### What is implemented today
+
+`init · orphans · scan · roster · viz · plan · guard`
+
+`adopt`, `add`, `intent`, `why`, `verify`, `ship` and `rollback` are the
+intended flow, described in the skills and in `docs/COMMANDS.md`, and the
+kernel decisions they need are built and tested — but those CLI subcommands
+are not written yet. Where a document describes them, it is describing the
+design, not the current binary.
 
 MIT.
 
@@ -170,6 +180,7 @@ MIT.
 | [`docs/SECURITY.md`](docs/SECURITY.md) | S0–S7, the agent surface, ASI mapping |
 | [`docs/COMMANDS.md`](docs/COMMANDS.md) | every command, and which ones need a human |
 | [`docs/PLUGINS.md`](docs/PLUGINS.md) | the DSH-shaped extension contract |
+| [`docs/INIT.md`](docs/INIT.md) | what `ubi init` works out on its own, and the one field it refuses to invent |
 | [`docs/PORTING.md`](docs/PORTING.md) | wiring a new project, and the porting checklist |
 | [`docs/DIAGRAMS.md`](docs/DIAGRAMS.md) | archify and any other diagram skill |
 | [`apps/console/index.html`](apps/console/index.html) | **the interactive console** — pan/zoom the architecture graph, click a node for its provenance, press **Run the gate** and watch each area get judged. `node apps/console/server.mjs` makes the button spawn the real CLI. |

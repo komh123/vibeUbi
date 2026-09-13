@@ -56,6 +56,24 @@ button.chip[aria-pressed="true"]{background:var(--teal-dim);border-color:var(--t
 .step .nm{font-family:"JetBrains Mono",monospace;font-size:.64rem;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);white-space:nowrap}
 .step[data-state="run"] .nm,.step[data-state="pass"] .nm{color:var(--ink)}
 .step[data-state="fail"] .nm{color:var(--bad)}
+.step[data-state="unreached"]{opacity:.42}
+.step[data-state="unreached"] .nm{color:var(--ink-3);text-decoration:line-through;text-decoration-color:var(--line-2)}
+.step[data-state="blocked"] .nm{color:var(--bad)}
+.step[data-state="blocked"]{background:linear-gradient(180deg,var(--bad-dim),var(--panel) 70%)}
+
+/* verdict banner */
+.verdict{margin-top:1rem;border:1px solid var(--line-2);border-top-width:3px;background:var(--panel);
+  padding:.95rem 1.1rem 1.05rem;display:none;gap:.9rem;align-items:flex-start}
+.verdict.on{display:flex}
+.verdict[data-v="refused"]{border-top-color:var(--bad)}
+.verdict[data-v="clean"]{border-top-color:var(--ok)}
+.verdict .vi{flex:none;margin-top:.15rem}
+.verdict h3{font-family:"Newsreader",Georgia,serif;font-size:1.2rem;font-weight:600;margin:0 0 .25rem}
+.verdict[data-v="refused"] h3{color:var(--bad)}
+.verdict[data-v="clean"] h3{color:var(--ok)}
+.verdict p{margin:0 0 .4rem;color:var(--ink-2);font-size:.84rem;max-width:70ch}
+.verdict p:last-child{margin:0}
+.verdict code{font-family:"JetBrains Mono",monospace;font-size:.84em;background:var(--panel-2);padding:.06em .3em;border-radius:2px}
 .step .mut{position:relative;font-family:"JetBrains Mono",monospace;font-size:.54rem;letter-spacing:.1em;color:var(--brass);margin-top:.15rem;opacity:0}
 .step[data-mutates="1"] .mut{opacity:.85}
 
@@ -164,6 +182,14 @@ button.chip[aria-pressed="true"]{background:var(--teal-dim);border-color:var(--t
     </aside>
   </div>
 
+  <div class="verdict" id="verdict" data-v="refused">
+    <div class="vi" id="vicon"></div>
+    <div>
+      <h3 id="vtitle"></h3>
+      <div id="vbody"></div>
+    </div>
+  </div>
+
   <div class="legend">
     <span><i style="background:var(--bad)"></i>no auth gate, not in the allow-list</span>
     <span><i style="background:var(--ok)"></i>gated</span>
@@ -213,8 +239,13 @@ const GLYPH = {
   pass:    [ 5,13,10,18,19, 6, 19, 6,19, 6,19, 6],
   fail:    [ 6, 6,12,12,18,18, 18, 6,12,12, 6,18],
   warn:    [12, 4,12, 4,12,14, 12,19,12,19,12,19],
+  /** Not reached. A step that never ran must not wear the same glyph as one
+   *  that passed — that conflation is the whole bug this console had. */
+  unreached:[9,12,12,12,15,12, 12,12,12,12,12,12],
+  blocked: [ 9, 6, 9,12, 9,18, 15, 6,15,12,15,18],
 }
-const TONE = { pass:"var(--ok)", fail:"var(--bad)", warn:"var(--warn)", run:"var(--teal)", pending:"var(--ink-3)", none:"var(--line-2)" }
+const TONE = { pass:"var(--ok)", fail:"var(--bad)", warn:"var(--warn)", run:"var(--teal)",
+  pending:"var(--ink-3)", none:"var(--line-2)", unreached:"var(--line-2)", blocked:"var(--bad)" }
 
 function makeIcon(size = 14, glyph = "none") {
   const svg = el("svg", { viewBox: "0 0 24 24", width: size, height: size })
@@ -275,8 +306,10 @@ function buildRail() {
 }
 function setStep(i, state, p) {
   const s = railUI[i]
-  s.el.dataset.state = ["pass","fail","run"].includes(state) ? state : "pending"
+  s.el.dataset.state = ["pass","fail","run","unreached","blocked"].includes(state) ? state : "pending"
   s.ico.set(state)
+  if (state === "unreached") s.el.title = "not reached — an earlier step refused"
+  if (state === "blocked") s.el.title = "cannot run on this project"
   if (p !== undefined) spring([s.p], [p], ([v]) => { s.p = v; s.fill.style.transform = `scaleX(${v})` }, { stiffness: 130, damping: 21 })
 }
 
@@ -496,55 +529,98 @@ function say(msg, cls = "") {
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, REDUCED ? Math.min(ms, 40) : ms))
 
+/**
+ * What this button does, stated exactly.
+ *
+ * The FINDINGS are real: they come from `ubi scan --layer S0,S2,S4` against
+ * the system-monitor checkout, and this page ships that run's output. What is
+ * replayed is the TIMING — so you can watch each area get judged as its verdict
+ * lands, which is what the pipeline actually does.
+ *
+ * The seven-step rail is NOT replayed as a success. `ship` cannot run on this
+ * project at all, because `prove` is unwired: there is no endpoint that echoes
+ * the running build. An earlier version of this console showed VERIFY, BUILD
+ * and SWAP with green ticks, failed PROVE, and then carried on sweeping — a
+ * green tick next to a step that never cleared, which is the exact defect this
+ * whole project exists to remove. Fixed: once PROVE refuses, everything after
+ * it is marked NOT REACHED, and it says so.
+ */
 async function run() {
   if (busy) return
   busy = true; t0 = performance.now(); $("#run").disabled = true
   checked = new Set(); expanded = null; selected = null; filter = "all"; setChips()
-  buildRail(); render(); log.innerHTML = ""; $("#lmeta").textContent = "live"
+  buildRail(); render(); log.innerHTML = ""; $("#lmeta").textContent = "replaying a real scan"
+  $("#verdict").classList.remove("on")
 
-  setStep(0, "run", .3); say("1/7  verify — nothing is built until this is green", "head")
-  for (const [n, s] of [["tsc", 3],["unit: kernel · 82 pass", 2],["L0 + registry", 1]]) { await sleep(200); say(`  ✓ ${n}  ${s}s`, "ok") }
-  await sleep(160); say("  ✓ all 4 layers can run", "ok"); setStep(0, "pass", 1)
+  say("ubi scan --root system-monitor --layer S0,S2,S4", "head")
+  say("findings below are from a real run; the pacing is replayed so you can watch each verdict land.")
 
-  setStep(1, "run", .4); await sleep(220); say("2/7  build", "head")
-  await sleep(260); say("  ✓ artifact 8c89c38", "ok"); setStep(1, "pass", 1)
+  // ── the two steps that CAN run offline ──
+  setStep(0, "run", .3); await sleep(220)
+  say("1/7  verify — nothing is built until this is green", "head")
+  for (const [n, t] of [["tsc", 3], ["vitest · system-monitor's own suite", 11], ["L0 + registry", 1]]) {
+    await sleep(170); say(`  ✓ ${n}  ${t}s`, "ok")
+  }
+  setStep(0, "pass", 1)
 
-  setStep(2, "run", .5); await sleep(200); say("3/7  swap", "head")
-  await sleep(200); say("  ✓ tree hash unchanged since verify", "ok"); setStep(2, "pass", 1)
+  setStep(1, "run", .4); await sleep(200); say("2/7  build", "head")
+  await sleep(240); say("  ✓ artifact 8c89c38", "ok"); setStep(1, "pass", 1)
 
-  setStep(3, "run", .5); await sleep(220)
-  say("4/7  prove — evidence from OUTSIDE the deployed process", "head")
+  // ── prove is checked BEFORE swap, because swap is the irreversible one ──
+  setStep(3, "run", .4); await sleep(220)
+  say("3/7  prove — can this deploy even be proved?", "head")
   await sleep(420)
-  say("  ✗ this project has no endpoint that echoes its own build", "bad")
-  say("      `ship` cannot tell a deploy that took from one that silently did not", "bad")
-  setStep(3, "fail", 1)
+  say("  ✗ proofContract refused BEFORE anything was swapped", "bad")
+  say("      this project has no endpoint that echoes its own build,", "bad")
+  say("      so nothing could tell a deploy that took from one that silently did not.", "bad")
+  setStep(3, "blocked", 1)
 
-  setStep(4, "run", .02); await sleep(200)
-  say("5/7  sweep — judged the moment each is known", "head")
+  // Everything downstream never happens. It must not wear a tick.
+  setStep(2, "unreached"); setStep(4, "unreached"); setStep(5, "unreached"); setStep(6, "unreached")
+  await sleep(260)
+  say("  · swap · sweep · gate · report — NOT REACHED. Nothing was deployed.", "warn")
+
+  verdict("refused", "ship refused, and production was never touched",
+    `<p><code>prove</code> is checked <strong>before</strong> <code>swap</code>, because swap is the
+     irreversible step. An adapter that cannot produce evidence from outside the running process is
+     stopped at wiring time — not discovered after production changed twice.</p>
+     <p>This is the honest state of <code>system-monitor</code> today: add an endpoint that returns the
+     commit, set <code>versionPath</code>, and the rail runs to the end.</p>`)
+
+  // ── what DID run: the scan. Real findings, replayed pacing. ──
+  await sleep(420)
+  say("", ""); say("ubi scan — this part really ran", "head")
+  setStep(4, "run", .02)
   let done = 0
   for (const a of D.areas) {
     checked.add(`area:${a.name}`); done++
     setStep(4, "run", done / D.areas.length); render()
     if (a.ungated) say(`  ✗ ${a.name} — ${a.ungated}/${a.n} route(s) with no auth gate`, "bad")
     else say(`  ✓ ${a.name} — ${a.n} gated`, "ok")
-    await sleep(120)
+    await sleep(110)
   }
   setStep(4, "fail", 1)
-  await sleep(200)
+  await sleep(180)
   say("  ✗ S0.secret.tree — a private key in k8s/configmap-ssh-keys.yaml", "bad")
-  say("  ✗ S0.secret.history — the same key is in git history; rotate it", "bad")
+  say("  ✗ S0.secret.history — the same key is in git history; deleting the file does not un-leak it", "bad")
+  say(`  grade ${D.meta.grade.grade} · ${D.meta.counts}`, "bad")
 
-  setStep(5, "run", .5); await sleep(320); say("6/7  gate", "head")
-  await sleep(360)
-  say("  ✗ 2 critical · 65 high — and `prove` could not answer at all", "bad")
-  say("  · a layer that could not answer has not cleared the deploy", "warn")
-  setStep(5, "fail", 1)
-  setStep(6, "pass", 1); await sleep(160); say("7/7  report written", "head")
-
-  $("#lmeta").textContent = `${((performance.now() - t0) / 1000).toFixed(1)}s · grade F`
+  $("#lmeta").textContent = `${((performance.now() - t0) / 1000).toFixed(1)}s · grade ${D.meta.grade.grade} · ship refused`
   $("#run").disabled = false; busy = false
   inspect(G.nodes.find((n) => n.id === "app"))
 }
+
+function verdict(kind, title, html) {
+  const v = $("#verdict")
+  v.dataset.v = kind; v.classList.add("on")
+  $("#vicon").innerHTML = ""
+  const ico = makeIcon(26, "pending"); $("#vicon").appendChild(ico.el)
+  setTimeout(() => ico.set(kind === "refused" ? "blocked" : "pass"), 80)
+  $("#vtitle").textContent = title
+  $("#vbody").innerHTML = html
+  arrive(v)
+}
+
 /* ── if a local server is serving this page, Run executes the real CLI ── */
 let LIVE = null
 fetch("/api/where").then((r) => r.ok ? r.json() : null).then((w) => {
