@@ -28,6 +28,11 @@ everything.
 | why that layer was skipped | `--without-reason` | in six months the row must say *why* nobody looked |
 | to clean up what the test created in production | `reapDecision` | fails closed on four conditions; a cleanup that could not run is a red cell naming the object |
 | whether this red is even yours | `attributedVerdict` | one release reverted by a cell that ran 124s / 7s / 28s on the restored build |
+| to give a new step a time budget | `budgetVerdict` | a step added to the runner with no budget entry silently took the 15-minute default; the ≥6×/≤40× rule never saw it. Same gap had already bitten once |
+| that a passing test can still prove nothing | `vacuousComparison` | `undefined` passed explicitly to a parameter whose default is `process.env.X` — the default fires, both sides read the same source, the assertion cannot fail |
+| that a false positive is worse than a hole | `baselineAdmission` | a checker missed a third invocation shape and called two *running* test files unrun; the obvious fix would have declared, in writing, that nobody runs them |
+| to keep an exemption narrow | `exemptionScope` | a correct `404` went red three ships running; two retries were filed as flake, the third rolled back a good build |
+| that a check must call the thing | `checkAssertsOnBehaviour` | gate assertions compared a script's source text; upstream shrank it 187 → 29 lines and moved the capability, so the gate failed on spelling |
 
 ## Three axioms
 
@@ -109,3 +114,14 @@ silencers, all of them human-only, enforced by `requiresHuman()`.
 `intent` is free text an agent reads and **the gate never does**. Vague intent
 can only produce worse probes — visible and fixable. Free text in the judging
 path would be unfixable.
+
+
+## Credits
+
+Ten of the fourteen rows above came out of one deployment pipeline over two
+weeks. The last five were contributed on 2026-09-13 by the session that runs
+that pipeline daily — each one a defect it hit, diagnosed, and fixed,
+generalised here into a pure function with a test.
+
+That is the intended shape of this project: **a rule earns its place by having
+cost someone a real afternoon**, and arrives with the incident attached.
