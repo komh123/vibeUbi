@@ -172,7 +172,8 @@ MIT.
 | [`docs/PLUGINS.md`](docs/PLUGINS.md) | the DSH-shaped extension contract |
 | [`docs/PORTING.md`](docs/PORTING.md) | wiring a new project, and the porting checklist |
 | [`docs/DIAGRAMS.md`](docs/DIAGRAMS.md) | archify and any other diagram skill |
-| [`apps/console/index.html`](apps/console/index.html) | a browser console — press **Run with a planted regression** to watch the gate refuse |
+| [`apps/console/index.html`](apps/console/index.html) | **the interactive console** — pan/zoom the architecture graph, click a node for its provenance, press **Run the gate** and watch each area get judged. `node apps/console/server.mjs` makes the button spawn the real CLI. |
+| [`apps/console/report.html`](apps/console/report.html) | the static scan report for the system-monitor run |
 
 ## A note on the name
 

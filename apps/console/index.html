@@ -2,471 +2,602 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Public+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap">
-
 <style>
 :root{
-  --void:#08100F; --panel:#0E1917; --panel-2:#142320; --line:#1E332E; --line-2:#2C4740;
-  --ink:#E8F0ED; --ink-2:#9FB3AD; --ink-3:#657A74;
-  --teal:#3FD6C0; --teal-dim:#0F2E2A; --brass:#E3A552;
-  --gates:#FF6B5B; --gates-dim:#331614;
-  --reports:#E3A552; --reports-dim:#2E2311;
-  --clear:#4FD48A; --clear-dim:#10301F;
-  --quiet:#5A6D68; --quiet-dim:#16211F;
-  --r:3px;
+  --void:#070E0D;--panel:#0D1817;--panel-2:#13201E;--line:#1C2F2B;--line-2:#2B443E;
+  --ink:#E9F1EE;--ink-2:#9CB1AB;--ink-3:#617672;
+  --teal:#3FD6C0;--teal-dim:#0D2B28;--brass:#E3A552;
+  --bad:#FF6B5B;--bad-dim:#2E1513;--ok:#4FD48A;--ok-dim:#0F2C1D;
+  --warn:#E3A552;--warn-dim:#2B2110;--quiet:#5A6D68;--quiet-dim:#14201E;
+  --r:3px;--ease:cubic-bezier(.2,.8,.2,1);
 }
 :root[data-theme="light"]{
-  --void:#EDF0EE; --panel:#F7F9F8; --panel-2:#E6ECEA; --line:#CBD6D2; --line-2:#AEBDB8;
-  --ink:#0D1917; --ink-2:#3E4E4A; --ink-3:#6B7C77;
-  --teal:#0B6157; --teal-dim:#D2E8E4; --brass:#8F5B14;
-  --gates:#A8342A; --gates-dim:#F4DDDA;
-  --reports:#8A6A22; --reports-dim:#F2E8D4;
-  --clear:#20694B; --clear-dim:#D9EBE1;
-  --quiet:#6B7C77; --quiet-dim:#DDE4E2;
+  --void:#ECEFED;--panel:#F8FAF9;--panel-2:#E4EBE8;--line:#C9D5D1;--line-2:#A9BAB4;
+  --ink:#0B1716;--ink-2:#3B4D48;--ink-3:#697A75;
+  --teal:#0A5D54;--teal-dim:#D0E7E3;--brass:#8A5712;
+  --bad:#A5322A;--bad-dim:#F5DDDA;--ok:#1E6749;--ok-dim:#D7EADF;
+  --warn:#87681F;--warn-dim:#F2E8D3;--quiet:#697A75;--quiet-dim:#DCE4E1;
 }
-@media (prefers-color-scheme: light){
-  :root:not([data-theme="dark"]){
-    --void:#EDF0EE; --panel:#F7F9F8; --panel-2:#E6ECEA; --line:#CBD6D2; --line-2:#AEBDB8;
-    --ink:#0D1917; --ink-2:#3E4E4A; --ink-3:#6B7C77;
-    --teal:#0B6157; --teal-dim:#D2E8E4; --brass:#8F5B14;
-    --gates:#A8342A; --gates-dim:#F4DDDA;
-    --reports:#8A6A22; --reports-dim:#F2E8D4;
-    --clear:#20694B; --clear-dim:#D9EBE1;
-    --quiet:#6B7C77; --quiet-dim:#DDE4E2;
-  }
-}
+@media(prefers-color-scheme:light){:root:not([data-theme="dark"]){
+  --void:#ECEFED;--panel:#F8FAF9;--panel-2:#E4EBE8;--line:#C9D5D1;--line-2:#A9BAB4;
+  --ink:#0B1716;--ink-2:#3B4D48;--ink-3:#697A75;
+  --teal:#0A5D54;--teal-dim:#D0E7E3;--brass:#8A5712;
+  --bad:#A5322A;--bad-dim:#F5DDDA;--ok:#1E6749;--ok-dim:#D7EADF;
+  --warn:#87681F;--warn-dim:#F2E8D3;--quiet:#697A75;--quiet-dim:#DCE4E1;}}
 *{box-sizing:border-box}
 body{background:var(--void);color:var(--ink);font-family:"Public Sans",system-ui,sans-serif;font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
-.app{max-width:1180px;margin:0 auto;padding:clamp(1rem,3vw,2.25rem)}
+.app{max-width:1280px;margin:0 auto;padding:clamp(.9rem,2.4vw,1.8rem)}
 
-/* ── masthead ── */
-.top{display:flex;flex-wrap:wrap;gap:1.25rem;align-items:flex-end;justify-content:space-between;
-  border-bottom:1px solid var(--line);padding-bottom:1.1rem;margin-bottom:1.5rem}
+/* masthead */
+.top{display:flex;flex-wrap:wrap;gap:1rem;align-items:flex-end;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:.9rem;margin-bottom:1rem}
 .brand{display:flex;align-items:center;gap:.7rem}
-.brand h1{font-family:"Newsreader",Georgia,serif;font-weight:600;font-size:1.7rem;margin:0;letter-spacing:-.01em}
-.brand .sub{font-family:"JetBrains Mono",monospace;font-size:.66rem;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-3);margin-top:.15rem}
-.controls{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
-
-button{font-family:"Public Sans",sans-serif;font-size:.82rem;font-weight:500;color:var(--ink);
-  background:var(--panel-2);border:1px solid var(--line-2);border-radius:var(--r);
-  padding:.5rem .9rem;cursor:pointer;display:inline-flex;align-items:center;gap:.45rem;
-  transition:background .16s cubic-bezier(.2,.8,.2,1),border-color .16s,transform .12s cubic-bezier(.2,.8,.2,1)}
+.brand h1{font-family:"Newsreader",Georgia,serif;font-weight:600;font-size:1.55rem;margin:0}
+.brand .sub{font-family:"JetBrains Mono",monospace;font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+.ctl{display:flex;gap:.45rem;flex-wrap:wrap;align-items:center}
+button{font-family:"Public Sans",sans-serif;font-size:.8rem;font-weight:500;color:var(--ink);background:var(--panel-2);
+  border:1px solid var(--line-2);border-radius:var(--r);padding:.45rem .8rem;cursor:pointer;display:inline-flex;align-items:center;gap:.4rem;
+  transition:background .16s var(--ease),border-color .16s var(--ease),transform .1s var(--ease),color .16s}
 button:hover:not(:disabled){background:var(--line);border-color:var(--teal)}
 button:active:not(:disabled){transform:translateY(1px) scale(.985)}
-button:disabled{opacity:.4;cursor:not-allowed}
+button:disabled{opacity:.38;cursor:not-allowed}
 button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
 button.go{background:var(--teal-dim);border-color:var(--teal);color:var(--teal);font-weight:700}
 button.go:hover:not(:disabled){background:var(--teal);color:var(--void)}
-button.danger{color:var(--gates);border-color:var(--gates-dim)}
-button.danger:hover:not(:disabled){border-color:var(--gates);background:var(--gates-dim)}
-button.ghost{background:transparent;border-color:var(--line)}
+button.ghost{background:transparent;border-color:var(--line);padding:.42rem .6rem}
+button.chip{font-family:"JetBrains Mono",monospace;font-size:.68rem;padding:.3rem .55rem}
+button.chip[aria-pressed="true"]{background:var(--teal-dim);border-color:var(--teal);color:var(--teal)}
 
-/* ── pipeline rail ── */
-.rail{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--line);
-  border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-bottom:1.25rem}
-@media(max-width:720px){.rail{grid-template-columns:repeat(4,1fr)}}
-.step{background:var(--panel);padding:.85rem .7rem .9rem;position:relative;overflow:hidden}
-.step .fill{position:absolute;inset:0;background:var(--teal-dim);transform-origin:left;transform:scaleX(0);opacity:.55}
-.step .row{position:relative;display:flex;align-items:center;gap:.5rem}
-.step .nm{font-family:"JetBrains Mono",monospace;font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+/* pipeline rail */
+.rail{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-bottom:1rem}
+@media(max-width:760px){.rail{grid-template-columns:repeat(4,1fr)}}
+.step{background:var(--panel);padding:.6rem .6rem .65rem;position:relative;overflow:hidden}
+.step .fill{position:absolute;inset:0;background:var(--teal-dim);transform-origin:left;transform:scaleX(0);opacity:.6}
+.step .row{position:relative;display:flex;align-items:center;gap:.45rem}
+.step .nm{font-family:"JetBrains Mono",monospace;font-size:.64rem;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);white-space:nowrap}
 .step[data-state="run"] .nm,.step[data-state="pass"] .nm{color:var(--ink)}
-.step[data-state="fail"] .nm{color:var(--gates)}
-.step .mut{position:relative;font-family:"JetBrains Mono",monospace;font-size:.58rem;letter-spacing:.1em;color:var(--brass);margin-top:.2rem;opacity:0}
+.step[data-state="fail"] .nm{color:var(--bad)}
+.step .mut{position:relative;font-family:"JetBrains Mono",monospace;font-size:.54rem;letter-spacing:.1em;color:var(--brass);margin-top:.15rem;opacity:0}
 .step[data-mutates="1"] .mut{opacity:.85}
 
-/* ── layout ── */
-.grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:1.25rem}
-@media(max-width:900px){.grid{grid-template-columns:1fr}}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r)}
-.panel > h2{font-family:"JetBrains Mono",monospace;font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;
-  color:var(--ink-3);margin:0;padding:.75rem 1rem;border-bottom:1px solid var(--line);
-  display:flex;justify-content:space-between;align-items:center;gap:1rem}
-.panel > h2 .meta{color:var(--ink-2);letter-spacing:.06em}
+/* layout */
+.main{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:1rem}
+@media(max-width:980px){.main{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);min-width:0}
+.ph{font-family:"JetBrains Mono",monospace;font-size:.62rem;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);
+  padding:.6rem .8rem;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:.8rem;align-items:center;flex-wrap:wrap}
+.ph .meta{color:var(--ink-2);letter-spacing:.05em}
 
-/* ── matrix ── */
-.matrix{padding:.35rem 0 .5rem;max-height:min(52vh,430px);overflow:auto}
-.mrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.75rem;align-items:center;
-  padding:.3rem 1rem;border-bottom:1px solid transparent}
-.mrow:hover{background:var(--panel-2)}
-.mname{font-family:"JetBrains Mono",monospace;font-size:.74rem;color:var(--ink-2);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:.5rem}
-.mname b{color:var(--ink-3);font-weight:400;font-size:.62rem;letter-spacing:.08em;
-  border:1px solid var(--line-2);padding:0 .25em;border-radius:2px}
-.mrow.p0 .mname b{color:var(--brass);border-color:var(--brass)}
-.cells{display:flex;gap:3px}
-.cell{width:19px;height:19px;display:grid;place-items:center;border-radius:2px;background:var(--quiet-dim)}
-.cell[data-s="none"]{background:transparent;border:1px dashed var(--line)}
-.cell[data-s="pass"]{background:var(--clear-dim)}
-.cell[data-s="fail"],.cell[data-s="error"]{background:var(--gates-dim)}
-.cell[data-s="blocked"]{background:var(--reports-dim)}
-.cell svg{display:block}
+/* graph */
+#stage{position:relative;height:min(60vh,520px);overflow:hidden;cursor:grab;touch-action:none}
+#stage.drag{cursor:grabbing}
+#stage svg{display:block;width:100%;height:100%}
+.nodeg{cursor:pointer}
+.nodeg .box{transition:opacity .2s var(--ease)}
+.nodeg:focus-visible .box{outline:none;stroke:var(--brass);stroke-width:2.4}
+.dim{opacity:.16}
+.zoom{position:absolute;right:.55rem;bottom:.55rem;display:flex;gap:.3rem}
+.zoom button{padding:.28rem .5rem;font-family:"JetBrains Mono",monospace;font-size:.72rem}
+.hint{position:absolute;left:.7rem;bottom:.6rem;font-family:"JetBrains Mono",monospace;font-size:.6rem;color:var(--ink-3);pointer-events:none}
 
-/* ── log: text arrives with weight ── */
-.log{padding:.6rem 0 .75rem;max-height:min(52vh,430px);overflow:auto;
-  font-family:"JetBrains Mono",monospace;font-size:.73rem;line-height:1.75}
-.line{padding:.06rem 1rem;display:flex;gap:.6rem;align-items:baseline;will-change:transform,opacity}
-.line .t{color:var(--ink-3);flex:none;font-size:.66rem}
+/* inspector */
+.insp{padding:.8rem .9rem 1rem;max-height:min(60vh,520px);overflow:auto}
+.insp .empty{color:var(--ink-3);font-size:.8rem}
+.insp h4{font-family:"JetBrains Mono",monospace;font-size:.82rem;margin:0 0 .15rem;color:var(--ink);word-break:break-all}
+.insp .sub{font-family:"JetBrains Mono",monospace;font-size:.66rem;color:var(--ink-3);margin-bottom:.7rem;word-break:break-all}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:.2rem .6rem;font-size:.74rem;font-family:"JetBrains Mono",monospace;margin-bottom:.8rem}
+.kv dt{color:var(--ink-3)}
+.kv dd{margin:0;color:var(--ink-2);word-break:break-all}
+.fnd{border-left:2px solid var(--bad);padding:.35rem 0 .35rem .6rem;margin-bottom:.5rem}
+.fnd .r{font-family:"JetBrains Mono",monospace;font-size:.66rem;color:var(--bad)}
+.fnd .t{font-size:.76rem;color:var(--ink-2)}
+.rlist{display:flex;flex-direction:column;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:2px;margin-top:.5rem}
+.rlist a{background:var(--panel-2);padding:.28rem .5rem;font-family:"JetBrains Mono",monospace;font-size:.7rem;color:var(--ink-2);
+  text-decoration:none;display:flex;justify-content:space-between;gap:.5rem;cursor:pointer}
+.rlist a:hover{background:var(--line);color:var(--ink)}
+.rlist a .s{font-size:.62rem}
+.rlist a .s.open{color:var(--bad)}
+.rlist a .s.gated{color:var(--ok)}
+
+/* log */
+.log{padding:.5rem 0 .6rem;max-height:190px;overflow:auto;font-family:"JetBrains Mono",monospace;font-size:.71rem;line-height:1.7}
+.line{padding:.03rem .8rem;display:flex;gap:.55rem;align-items:baseline;will-change:transform,opacity}
+.line .t{color:var(--ink-3);flex:none;font-size:.64rem}
 .line .m{color:var(--ink-2);min-width:0;word-break:break-word}
-.line.ok .m{color:var(--clear)}
-.line.bad .m{color:var(--gates);font-weight:700}
-.line.warn .m{color:var(--reports)}
-.line.head .m{color:var(--ink);font-weight:700}
+.line.ok .m{color:var(--ok)}.line.bad .m{color:var(--bad);font-weight:700}
+.line.warn .m{color:var(--warn)}.line.head .m{color:var(--ink);font-weight:700}
 
-/* ── verdict ── */
-.verdict{margin-top:1.25rem;border:1px solid var(--line-2);border-radius:var(--r);
-  background:var(--panel);padding:1.1rem 1.25rem 1.2rem;display:flex;gap:1.1rem;align-items:flex-start;
-  opacity:0;transform:translateY(10px);will-change:transform,opacity}
-.verdict.on{opacity:1;transform:none}
-.verdict[data-v="ship"]{border-color:var(--clear)}
-.verdict[data-v="rollback"]{border-color:var(--gates)}
-.verdict .vi{flex:none;margin-top:.1rem}
-.verdict h3{font-family:"Newsreader",Georgia,serif;font-size:1.35rem;font-weight:600;margin:0 0 .3rem}
-.verdict[data-v="rollback"] h3{color:var(--gates)}
-.verdict[data-v="ship"] h3{color:var(--clear)}
-.verdict p{margin:0 0 .5rem;color:var(--ink-2);font-size:.88rem;max-width:62ch}
-.verdict .ev{font-family:"JetBrains Mono",monospace;font-size:.7rem;color:var(--ink-3);
-  border-top:1px dashed var(--line-2);padding-top:.55rem;margin-top:.6rem}
-.verdict .ev b{color:var(--teal);font-weight:400}
-
-.legend{display:flex;flex-wrap:wrap;gap:.4rem .9rem;margin-top:.9rem;
-  font-family:"JetBrains Mono",monospace;font-size:.64rem;color:var(--ink-3)}
-.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:.35rem;vertical-align:-1px}
-.hint{color:var(--ink-3);font-size:.76rem;margin:.9rem 0 0}
-@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.legend{display:flex;flex-wrap:wrap;gap:.35rem .85rem;margin-top:.7rem;font-family:"JetBrains Mono",monospace;font-size:.62rem;color:var(--ink-3)}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:.3rem;vertical-align:-1px}
+.foot{margin-top:.9rem;color:var(--ink-3);font-size:.74rem;max-width:80ch}
+.foot b{color:var(--ink-2);font-weight:400}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 
 <div class="app">
   <div class="top">
     <div class="brand">
-      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
         <path d="M4 18 L12 21 L20 18"/><path d="M12 3 L12 15"/><path d="M6 9 L12 15 L18 9"/>
       </svg>
       <div>
-        <h1>VibeUbi Console</h1>
-        <div class="sub">the gate that remembers so you don't</div>
+        <h1>VibeUbi</h1>
+        <div class="sub" id="sub">loading…</div>
       </div>
     </div>
-    <div class="controls">
+    <div class="ctl">
       <button class="go" id="run">
-        <svg class="ico" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5 L19 12 L8 19 Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+        <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5 L19 12 L8 19 Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></svg>
         Run the gate
       </button>
-      <button class="danger" id="runbad">Run with a planted regression</button>
-      <button class="ghost" id="theme" title="Toggle theme" aria-label="Toggle theme">◐</button>
+      <button class="ghost" id="reset" title="Reset view">⤾</button>
+      <button class="ghost" id="theme" aria-label="Toggle theme">◐</button>
     </div>
   </div>
 
   <div class="rail" id="rail"></div>
 
-  <div class="grid">
+  <div class="main">
     <section class="panel">
-      <h2>Coverage <span class="meta" id="mstat">idle</span></h2>
-      <div class="matrix" id="matrix"></div>
-    </section>
-    <section class="panel">
-      <h2>Run log <span class="meta" id="lstat">—</span></h2>
+      <div class="ph">
+        <span>Architecture <span class="meta" id="gmeta"></span></span>
+        <span class="ctl">
+          <button class="chip" id="f-all"  aria-pressed="true">all</button>
+          <button class="chip" id="f-open" aria-pressed="false">ungated</button>
+          <button class="chip" id="f-fnd"  aria-pressed="false">has findings</button>
+        </span>
+      </div>
+      <div id="stage">
+        <svg id="svg" role="application" aria-label="interactive architecture graph"></svg>
+        <div class="hint">drag to pan · wheel to zoom · click a node</div>
+        <div class="zoom">
+          <button id="zin" aria-label="Zoom in">+</button>
+          <button id="zout" aria-label="Zoom out">−</button>
+        </div>
+      </div>
+      <div class="ph" style="border-top:1px solid var(--line);border-bottom:0"><span>Run log <span class="meta" id="lmeta">idle</span></span></div>
       <div class="log" id="log"></div>
     </section>
-  </div>
 
-  <div class="verdict" id="verdict" data-v="ship" hidden>
-    <div class="vi" id="vicon"></div>
-    <div>
-      <h3 id="vtitle"></h3>
-      <p id="vbody"></p>
-      <div class="ev" id="vev"></div>
-    </div>
+    <aside class="panel">
+      <div class="ph"><span>Inspector</span><span class="meta" id="imeta"></span></div>
+      <div class="insp" id="insp"><div class="empty">Click any node in the graph.<br><br>Or press <b>Run the gate</b> — every node is checked live, and the two that fail are marked as they are judged, not at the end.</div></div>
+    </aside>
   </div>
 
   <div class="legend">
-    <span><i style="background:var(--clear-dim);border:1px solid var(--clear)"></i>pass</span>
-    <span><i style="background:var(--gates-dim);border:1px solid var(--gates)"></i>fail@P0 / error — rolls back</span>
-    <span><i style="background:var(--reports-dim);border:1px solid var(--reports)"></i>blocked — reported, never blocks</span>
-    <span><i style="background:var(--quiet-dim);border:1px solid var(--line-2)"></i>skip — must carry a reason</span>
-    <span><i style="border:1px dashed var(--line)"></i>no such cell at this layer</span>
+    <span><i style="background:var(--bad)"></i>no auth gate, not in the allow-list</span>
+    <span><i style="background:var(--ok)"></i>gated</span>
+    <span><i style="background:var(--warn)"></i>other finding</span>
+    <span><i style="background:var(--line-2)"></i>not yet checked</span>
   </div>
-  <p class="hint">Colours group by <em>consequence</em>, not by how alarming the word sounds: <code>error</code> sits with <code>fail@P0</code> because a layer that could not answer has not cleared the deploy.</p>
+  <p class="foot"><b>Every node was discovered by walking the source tree</b> — 66 routes and 7 pages, nothing declared by hand.
+  Click a node and the inspector names the file it came from. Nothing here was inferred by a model.</p>
 </div>
 
+<script id="data" type="application/json">{"meta":{"project":"system-monitor","at":"2026-09-13T19:33:04.779Z","grade":{"grade":"F","score":0},"counts":"2 critical \u00b7 65 high \u00b7 2 medium","scanned":248,"historyLines":52286,"lexDropped":4023,"layers":["S0","S2","S4"],"routes":66,"pages":7},"chain":[{"id":"internet","label":"internet","sub":"anyone","tone":"bad"},{"id":"ingress","label":"traefik ingress","sub":"TLS \u00b7 monitor.ko.unieai.com","tone":"ok"},{"id":"svc","label":"Service :80","sub":"ClusterIP","tone":"ok"},{"id":"app","label":"express :3000","sub":"cors() \u00b7 json() \u00b7 no auth middleware","tone":"bad"}],"areas":[{"name":"chat","kind":"api","routes":[{"id":"api:/api/chat/models","label":"chat/models","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/models has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/commands","label":"chat/commands","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/commands has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/skills","label":"chat/skills","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/skills has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/mcp-tools","label":"chat/mcp-tools","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/mcp-tools has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/servers","label":"chat/servers","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/servers has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/sessions","label":"chat/sessions","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET/POST /api/chat/sessions has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/sessions/deep-clean","label":"chat/sessions/deep-clean","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/chat/sessions/deep-clean has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/projects","label":"chat/projects","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET/POST /api/chat/projects has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/projects/config","label":"chat/projects/config","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/projects/config has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/projects/:slug/open","label":"chat/projects/:slug/open","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/chat/projects/:slug/open has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/projects/:slug","label":"chat/projects/:slug","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"DELETE /api/chat/projects/:slug has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/sessions/:id","label":"chat/sessions/:id","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"PATCH/DELETE /api/chat/sessions/:id has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/sessions/:id/history","label":"chat/sessions/:id/history","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/sessions/:id/history has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/sessions/:id/context","label":"chat/sessions/:id/context","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/sessions/:id/context has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/sessions/:id/compact","label":"chat/sessions/:id/compact","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/chat/sessions/:id/compact has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/sessions/:id/message","label":"chat/sessions/:id/message","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/chat/sessions/:id/message has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/sessions/:id/blobs","label":"chat/sessions/:id/blobs","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/sessions/:id/blobs has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/sessions/:id/stream","label":"chat/sessions/:id/stream","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/sessions/:id/stream has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/sessions/:id/stop","label":"chat/sessions/:id/stop","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/chat/sessions/:id/stop has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/sessions/:id/health","label":"chat/sessions/:id/health","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/sessions/:id/health has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/push/key","label":"chat/push/key","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/push/key has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/push/subscribe","label":"chat/push/subscribe","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/chat/push/subscribe has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/push/unsubscribe","label":"chat/push/unsubscribe","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/chat/push/unsubscribe has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/rate-limit","label":"chat/rate-limit","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/rate-limit has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/token-stats","label":"chat/token-stats","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/token-stats has no auth gate and is not in the allow-list"}]}],"n":25,"ungated":25},{"name":"claude-remote","kind":"api","routes":[{"id":"api:/api/claude-remote/status","label":"claude-remote/status","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/claude-remote/status has no auth gate and is not in the allow-list"}]},{"id":"api:/api/claude-remote/logs","label":"claude-remote/logs","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/claude-remote/logs has no auth gate and is not in the allow-list"}]},{"id":"api:/api/claude-remote/recover/:ip","label":"claude-remote/recover/:ip","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/claude-remote/recover/:ip has no auth gate and is not in the allow-list"}]},{"id":"api:/api/claude-remote/start-session/:ip","label":"claude-remote/start-session/:ip","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/claude-remote/start-session/:ip has no auth gate and is not in the allow-list"}]},{"id":"api:/api/claude-remote/restart-session/:ip","label":"claude-remote/restart-session/:ip","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/claude-remote/restart-session/:ip has no auth gate and is not in the allow-list"}]},{"id":"api:/api/claude-remote/reconnect/:ip","label":"claude-remote/reconnect/:ip","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/claude-remote/reconnect/:ip has no auth gate and is not in the allow-list"}]},{"id":"api:/api/claude-remote/session-status/:ip/:sessionName","label":"claude-remote/session-status/:ip/:sessionName","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/claude-remote/session-status/:ip/:sessionName has no auth gate and is not in the allow-list"}]},{"id":"api:/api/claude-remote/health/:ip","label":"claude-remote/health/:ip","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/claude-remote/health/:ip has no auth gate and is not in the allow-list"}]},{"id":"api:/api/claude-remote/test-ssh/:ip","label":"claude-remote/test-ssh/:ip","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/claude-remote/test-ssh/:ip has no auth gate and is not in the allow-list"}]},{"id":"api:/api/claude-remote/config","label":"claude-remote/config","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/claude-remote/config has no auth gate and is not in the allow-list"}]}],"n":10,"ungated":10},{"name":"futures","kind":"api","routes":[{"id":"api:/api/futures/kline/daily","label":"futures/kline/daily","src":"server/routes/futuresRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/futures/kline/daily has no auth gate and is not in the allow-list"}]},{"id":"api:/api/futures/kline/hourly","label":"futures/kline/hourly","src":"server/routes/futuresRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/futures/kline/hourly has no auth gate and is not in the allow-list"}]},{"id":"api:/api/futures/kline/15min","label":"futures/kline/15min","src":"server/routes/futuresRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/futures/kline/15min has no auth gate and is not in the allow-list"}]},{"id":"api:/api/futures/chat/session","label":"futures/chat/session","src":"server/routes/futuresRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/futures/chat/session has no auth gate and is not in the allow-list"}]},{"id":"api:/api/futures/chat/message","label":"futures/chat/message","src":"server/routes/futuresRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/futures/chat/message has no auth gate and is not in the allow-list"}]},{"id":"api:/api/futures/chat/history","label":"futures/chat/history","src":"server/routes/futuresRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/futures/chat/history has no auth gate and is not in the allow-list"}]}],"n":6,"ungated":6},{"name":"processes","kind":"api","routes":[{"id":"api:/api/processes/:pid/kill","label":"processes/:pid/kill","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/processes/:pid/kill has no auth gate and is not in the allow-list"}]},{"id":"api:/api/processes/:pid/oom","label":"processes/:pid/oom","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/processes/:pid/oom has no auth gate and is not in the allow-list"}]},{"id":"api:/api/processes/claude-buddy/cleanup","label":"processes/claude-buddy/cleanup","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/processes/claude-buddy/cleanup has no auth gate and is not in the allow-list"}]},{"id":"api:/api/processes/claude-buddy/stats","label":"processes/claude-buddy/stats","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/processes/claude-buddy/stats has no auth gate and is not in the allow-list"}]}],"n":4,"ungated":4},{"name":"other","kind":"api","routes":[{"id":"api:/health","label":"api:/health","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /health has no auth gate and is not in the allow-list"}]},{"id":"api:/claude-remote/docs","label":"api:/claude-remote/docs","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /claude-remote/docs has no auth gate and is not in the allow-list"}]},{"id":"api:*","label":"api:*","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET * has no auth gate and is not in the allow-list"}]}],"n":3,"ungated":3},{"name":"host-protection","kind":"api","routes":[{"id":"api:/api/host-protection/events","label":"host-protection/events","src":"server/routes/hostProtectionRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/host-protection/events has no auth gate and is not in the allow-list"}]},{"id":"api:/api/host-protection/status","label":"host-protection/status","src":"server/routes/hostProtectionRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/host-protection/status has no auth gate and is not in the allow-list"}]}],"n":2,"ungated":2},{"name":"usage","kind":"api","routes":[{"id":"api:/api/usage","label":"usage","src":"server/routes/usageRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/usage has no auth gate and is not in the allow-list"}]},{"id":"api:/api/usage/history","label":"usage/history","src":"server/routes/usageRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/usage/history has no auth gate and is not in the allow-list"}]}],"n":2,"ungated":2},{"name":"metrics","kind":"api","routes":[{"id":"api:/api/metrics","label":"metrics","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/metrics has no auth gate and is not in the allow-list"}]}],"n":1,"ungated":1},{"name":"logs","kind":"api","routes":[{"id":"api:/api/logs","label":"logs","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/logs has no auth gate and is not in the allow-list"}]}],"n":1,"ungated":1},{"name":"oom","kind":"api","routes":[{"id":"api:/api/oom","label":"oom","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/oom has no auth gate and is not in the allow-list"}]}],"n":1,"ungated":1},{"name":"config","kind":"api","routes":[{"id":"api:/api/config","label":"config","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET/POST /api/config has no auth gate and is not in the allow-list"}]}],"n":1,"ungated":1},{"name":"refresh","kind":"api","routes":[{"id":"api:/api/refresh","label":"refresh","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/refresh has no auth gate and is not in the allow-list"}]}],"n":1,"ungated":1},{"name":"disk","kind":"api","routes":[{"id":"api:/api/disk/cleanup","label":"disk/cleanup","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/disk/cleanup has no auth gate and is not in the allow-list"}]}],"n":1,"ungated":1},{"name":"network-diagnostics","kind":"api","routes":[{"id":"api:/api/network-diagnostics/:ip","label":"network-diagnostics/:ip","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/network-diagnostics/:ip has no auth gate and is not in the allow-list"}]}],"n":1,"ungated":1},{"name":"debug","kind":"api","routes":[{"id":"api:/api/debug/exec/:ip","label":"debug/exec/:ip","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/debug/exec/:ip has no auth gate and is not in the allow-list"}]}],"n":1,"ungated":1},{"name":"docs","kind":"api","routes":[{"id":"api:/api/docs/claude-remote-monitoring","label":"docs/claude-remote-monitoring","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/docs/claude-remote-monitoring has no auth gate and is not in the allow-list"}]}],"n":1,"ungated":1},{"name":"client","kind":"page","routes":[{"id":"page:/chat-page","label":"chat-page","src":"client/src/pages/ChatPage.jsx","open":false,"findings":[]},{"id":"page:/claude-remote-monitor","label":"claude-remote-monitor","src":"client/src/pages/ClaudeRemoteMonitor.jsx","open":false,"findings":[]},{"id":"page:/cpu-monitor","label":"cpu-monitor","src":"client/src/pages/CpuMonitor.jsx","open":false,"findings":[]},{"id":"page:/host-protection","label":"host-protection","src":"client/src/pages/HostProtection.jsx","open":false,"findings":[]},{"id":"page:/login-page","label":"login-page","src":"client/src/pages/LoginPage.jsx","open":false,"findings":[]},{"id":"page:/recovery-logs","label":"recovery-logs","src":"client/src/pages/RecoveryLogs.jsx","open":false,"findings":[]},{"id":"page:/usage-page","label":"usage-page","src":"client/src/pages/UsagePage.jsx","open":false,"findings":[]}],"n":7,"ungated":0},{"name":"auth","kind":"api","routes":[{"id":"api:/api/auth/google/url","label":"auth/google/url","src":"server/routes/authRoutes.js","open":false,"findings":[]},{"id":"api:/api/auth/google/callback","label":"auth/google/callback","src":"server/routes/authRoutes.js","open":false,"findings":[]},{"id":"api:/api/auth/verify","label":"auth/verify","src":"server/routes/authRoutes.js","open":false,"findings":[]},{"id":"api:/api/auth/logout","label":"auth/logout","src":"server/routes/authRoutes.js","open":false,"findings":[]},{"id":"api:/api/auth/protected","label":"auth/protected","src":"server/routes/authRoutes.js","open":false,"findings":[]}],"n":5,"ungated":0}],"files":[{"where":"k8s/configmap-ssh-keys.yaml","rule":"S0.secret.tree","sev":"critical","title":"a credential is in the working tree","evidence":"privkey ----\u2026(35 chars)","why":"anything here ships in the image and in every clone"},{"where":"test_streaming_e2e_puppeteer.cjs","rule":"S0.secret.tree","sev":"high","title":"a credential is in the working tree","evidence":"pw_inline secr\u2026(55 chars)","why":"anything here ships in the image and in every clone"},{"where":"23378918 test_streaming_e2e_puppeteer.cjs","rule":"S0.secret.history","sev":"high","title":"a credential exists in git history","evidence":"pw_inline secr\u2026(55 chars)","why":"a key deleted in the next commit is still a key: anyone who can clone can read it. Rotate it \u2014 rewriting history does not un-leak it"},{"where":"5d3dd053 k8s/configmap-ssh-keys.yaml","rule":"S0.secret.history","sev":"critical","title":"a credential exists in git history","evidence":"privkey ----\u2026(35 chars)","why":"a key deleted in the next commit is still a key: anyone who can clone can read it. Rotate it \u2014 rewriting history does not un-leak it"},{"where":"Dockerfile","rule":"S0.dockerfile.no_user","sev":"medium","title":"the image runs as root","evidence":"no USER directive","why":"a container escape starts as root, and nothing in this file says that was a decision"},{"where":"Dockerfile","rule":"S0.dockerfile.copy_all","sev":"high","title":"`COPY . .` with no .dockerignore","evidence":"COPY . .","why":"the whole working tree goes into the image \u2014 including .env, .git, and whatever else is lying around"},{"where":"client/src/pwa-register.js:153","rule":"S2.sink.inner_html","sev":"high","title":"unsanitised HTML reaches the DOM from a non-literal value","evidence":"banner.innerHTML = `","why":"unsanitised HTML reaches the DOM from a non-literal value"},{"where":"k8s/system-monitor:80","rule":"S4.exposure.orphan","sev":"medium","title":"k8s/system-monitor listens on cluster:80 and nobody declared it","evidence":"cluster:80 ","why":"an undeclared listener is the network version of an orphan feature"}]}</script>
 <script>
-/* ───────────────────── spring: interruptible, critically damped-ish ───────── */
+"use strict"
+const D = JSON.parse(document.getElementById("data").textContent)
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches
-function spring(from, to, onFrame, {stiffness=170, damping=22, precision=0.002}={}) {
+const $ = (s) => document.querySelector(s)
+const NS = "http://www.w3.org/2000/svg"
+const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); return e }
+
+/* ─────────── spring: interruptible, one integrator for everything ─────────── */
+function spring(from, to, onFrame, { stiffness = 180, damping = 24, precision = 0.004 } = {}) {
   if (REDUCED) { onFrame(to, true); return () => {} }
   let v = from.map(() => 0), x = [...from], raf = 0, last = performance.now()
   const tick = (now) => {
-    const dt = Math.min((now - last) / 1000, 1/30); last = now
+    const dt = Math.min((now - last) / 1000, 1 / 30); last = now
     let rest = true
     for (let i = 0; i < x.length; i++) {
-      const f = -stiffness * (x[i] - to[i]) - damping * v[i]
-      v[i] += f * dt; x[i] += v[i] * dt
+      v[i] += (-stiffness * (x[i] - to[i]) - damping * v[i]) * dt
+      x[i] += v[i] * dt
       if (Math.abs(x[i] - to[i]) > precision || Math.abs(v[i]) > precision) rest = false
     }
     onFrame(x, rest)
-    if (!rest) raf = requestAnimationFrame(tick); else onFrame(to, true)
+    raf = rest ? (onFrame(to, true), 0) : requestAnimationFrame(tick)
   }
   raf = requestAnimationFrame(tick)
   return () => cancelAnimationFrame(raf)
 }
 
-/* ───────── morphing stroke icons: 2 polylines × 3 points on a 24 grid ─────── */
-/* Same point count everywhere, so any glyph morphs into any other. Corners stay
-   sharp at rest (miter) and soften only while in motion — morphicons' rule.   */
+/* ── morphing stroke icons: 2 polylines x 3 points on a 24 grid ──
+   Same point count everywhere, so any glyph morphs into any other.
+   Joins go round while moving and back to miter at rest — corners stay
+   sharp at rest, which is the whole trick.                          */
 const GLYPH = {
-  none:    [11,12, 12,12, 13,12,  12,12, 12,12, 12,12],
-  pending: [ 9,12, 12,12, 15,12,  12,12, 12,12, 12,12],
-  run:     [ 5,12, 12, 5, 19,12,  19,12, 12,19,  5,12],
-  pass:    [ 5,13, 10,18, 19, 6,  19, 6, 19, 6, 19, 6],
-  fail:    [ 6, 6, 12,12, 18,18,  18, 6, 12,12,  6,18],
-  error:   [ 6, 6, 12,12, 18,18,  18, 6, 12,12,  6,18],
-  blocked: [ 9, 6,  9,12,  9,18,  15, 6, 15,12, 15,18],
-  skip:    [ 6,12, 12,12, 18,12,  12,12, 12,12, 12,12],
+  none:    [11,12,12,12,13,12, 12,12,12,12,12,12],
+  pending: [ 9,12,12,12,15,12, 12,12,12,12,12,12],
+  run:     [ 5,12,12, 5,19,12, 19,12,12,19, 5,12],
+  pass:    [ 5,13,10,18,19, 6, 19, 6,19, 6,19, 6],
+  fail:    [ 6, 6,12,12,18,18, 18, 6,12,12, 6,18],
+  warn:    [12, 4,12, 4,12,14, 12,19,12,19,12,19],
 }
-const TONE = { pass:"var(--clear)", fail:"var(--gates)", error:"var(--gates)",
-               blocked:"var(--reports)", skip:"var(--quiet)", run:"var(--teal)",
-               pending:"var(--ink-3)", none:"var(--line-2)" }
+const TONE = { pass:"var(--ok)", fail:"var(--bad)", warn:"var(--warn)", run:"var(--teal)", pending:"var(--ink-3)", none:"var(--line-2)" }
 
 function makeIcon(size = 14, glyph = "none") {
-  const ns = "http://www.w3.org/2000/svg"
-  const svg = document.createElementNS(ns, "svg")
-  svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("width", size); svg.setAttribute("height", size)
-  const a = document.createElementNS(ns, "path"), b = document.createElementNS(ns, "path")
+  const svg = el("svg", { viewBox: "0 0 24 24", width: size, height: size })
+  const a = el("path"), b = el("path")
   for (const p of [a, b]) {
     p.setAttribute("fill", "none"); p.setAttribute("stroke-width", "2.2")
     p.setAttribute("stroke-linecap", "round"); p.setAttribute("stroke-linejoin", "miter")
-    svg.appendChild(p)
+    p.setAttribute("stroke", "currentColor"); svg.appendChild(p)
   }
-  let cur = [...GLYPH[glyph]], stop = null, spin = 0, spinRaf = 0
+  let cur = [...GLYPH[glyph]], stop = null, spin = 0, raf = 0
   const draw = (v) => {
     a.setAttribute("d", `M${v[0]} ${v[1]} L${v[2]} ${v[3]} L${v[4]} ${v[5]}`)
     b.setAttribute("d", `M${v[6]} ${v[7]} L${v[8]} ${v[9]} L${v[10]} ${v[11]}`)
   }
   draw(cur)
-  const api = {
-    el: svg,
-    set(next) {
-      const target = GLYPH[next] ?? GLYPH.none
-      svg.style.color = TONE[next] ?? "var(--ink-3)"
-      a.setAttribute("stroke", "currentColor"); b.setAttribute("stroke", "currentColor")
-      stop?.()
-      // rounded joins only while it is moving; sharp again once it settles
-      for (const p of [a, b]) p.setAttribute("stroke-linejoin", "round")
-      stop = spring(cur, target, (v, rest) => {
-        cur = v; draw(v)
-        if (rest) for (const p of [a, b]) p.setAttribute("stroke-linejoin", "miter")
-      })
-      cancelAnimationFrame(spinRaf)
-      if (next === "run" && !REDUCED) {
-        const rot = () => { spin = (spin + 3.2) % 360; svg.style.transform = `rotate(${spin}deg)`; spinRaf = requestAnimationFrame(rot) }
-        rot()
-      } else { svg.style.transform = "none" }
-    },
-  }
+  const api = { el: svg, set(next) {
+    const t = GLYPH[next] ?? GLYPH.none
+    svg.style.color = TONE[next] ?? "var(--ink-3)"
+    stop?.()
+    for (const p of [a, b]) p.setAttribute("stroke-linejoin", "round")
+    stop = spring(cur, t, (v, rest) => { cur = v; draw(v); if (rest) for (const p of [a, b]) p.setAttribute("stroke-linejoin", "miter") },
+      { stiffness: 210, damping: 19 })
+    cancelAnimationFrame(raf)
+    if (next === "run" && !REDUCED) {
+      const rot = () => { spin = (spin + 3.4) % 360; svg.style.transform = `rotate(${spin}deg)`; raf = requestAnimationFrame(rot) }
+      rot()
+    } else svg.style.transform = "none"
+  } }
   api.set(glyph)
   return api
 }
 
-/* ───────── text that arrives with weight, not a fade ───────── */
-function arrive(el, delay = 0) {
+/* ── text arrives with weight, it does not fade in ── */
+function arrive(node, delay = 0) {
   if (REDUCED) return
-  el.style.opacity = "0"
-  setTimeout(() => spring([14, 0], [0, 1], ([y, o]) => {
-    el.style.transform = `translateY(${y.toFixed(2)}px)`
-    el.style.opacity = o.toFixed(3)
-  }, { stiffness: 210, damping: 24 }), delay)
+  node.style.opacity = "0"
+  setTimeout(() => spring([12, 0], [0, 1], ([y, o]) => {
+    node.style.transform = `translateY(${y.toFixed(2)}px)`
+    node.style.opacity = o.toFixed(3)
+  }, { stiffness: 220, damping: 25 }), delay)
 }
 
-/* ───────────────────────────── the run ───────────────────────────── */
-const STEPS = [
-  ["verify", 0], ["build", 0], ["swap", 1], ["prove", 0], ["sweep", 0], ["gate", 1], ["report", 0],
-]
-const LAYERS = ["L0","L1","L2","L3","L6","S"]
-const FEATURES = [
-  { id:"page:/",                 area:"marketing", p:"P1", cells:{L0:"pass",L1:"none",L2:"pass",L3:"none",L6:"none",S:"none"} },
-  { id:"page:/login",            area:"auth",      p:"P0", cells:{L0:"pass",L1:"none",L2:"pass",L3:"pass",L6:"none",S:"none"} },
-  { id:"page:/settings/billing", area:"billing",   p:"P0", cells:{L0:"pass",L1:"none",L2:"pass",L3:"pass",L6:"none",S:"none"} },
-  { id:"api:/api/session",       area:"auth",      p:"P0", cells:{L0:"pass",L1:"pass",L2:"none",L3:"none",L6:"none",S:"none"} },
-  { id:"api:/api/docs",          area:"docs",      p:"P0", cells:{L0:"pass",L1:"pass",L2:"none",L3:"none",L6:"pass",S:"none"} },
-  { id:"api:/api/version",       area:"ops",       p:"P2", cells:{L0:"pass",L1:"pass",L2:"none",L3:"none",L6:"none",S:"none"} },
-  { id:"api:/api/push/vapid",    area:"ops",       p:"P1", cells:{L0:"pass",L1:"blocked",L2:"none",L3:"none",L6:"none",S:"none"} },
-  { id:"journey:doc",            area:"docs",      p:"P0", cells:{L0:"pass",L1:"none",L2:"none",L3:"none",L6:"pass",S:"none"} },
-  { id:"tool:files/read",        area:"agent",     p:"P0", cells:{L0:"pass",L1:"none",L2:"none",L3:"none",L6:"none",S:"pass"} },
-  { id:"tool:mail/send",         area:"agent",     p:"P0", cells:{L0:"pass",L1:"none",L2:"none",L3:"none",L6:"none",S:"pass"} },
-  { id:"exposure:5432",          area:"infra",     p:"P0", cells:{L0:"skip",L1:"none",L2:"none",L3:"none",L6:"none",S:"pass"} },
-]
-const REGRESSION = { "api:/api/docs": { L6:"fail" }, "tool:mail/send": { S:"fail" } }
-
-const $ = (s) => document.querySelector(s)
-const rail = $("#rail"), matrix = $("#matrix"), log = $("#log")
-let stepIcons = [], cellIcons = new Map(), busy = false, t0 = 0
-
+/* ══════════════════════ pipeline rail ══════════════════════ */
+const STEPS = [["verify",0],["build",0],["swap",1],["prove",0],["sweep",0],["gate",1],["report",0]]
+let railUI = []
 function buildRail() {
-  rail.innerHTML = ""
-  stepIcons = STEPS.map(([name, mut]) => {
+  const rail = $("#rail"); rail.innerHTML = ""
+  railUI = STEPS.map(([nm, mut]) => {
     const d = document.createElement("div")
     d.className = "step"; d.dataset.state = "pending"; d.dataset.mutates = mut
     d.innerHTML = `<div class="fill"></div><div class="row"></div><div class="mut">mutates</div>`
-    const ico = makeIcon(15, "pending")
-    const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = name
-    d.querySelector(".row").append(ico.el, nm)
+    const ico = makeIcon(14, "pending")
+    const s = document.createElement("span"); s.className = "nm"; s.textContent = nm
+    d.querySelector(".row").append(ico.el, s)
     rail.appendChild(d)
-    return { el: d, ico, fill: d.querySelector(".fill") }
+    return { el: d, ico, fill: d.querySelector(".fill"), p: 0 }
   })
 }
-function buildMatrix() {
-  matrix.innerHTML = ""; cellIcons = new Map()
-  for (const f of FEATURES) {
-    const row = document.createElement("div")
-    row.className = "mrow" + (f.p === "P0" ? " p0" : "")
-    const nm = document.createElement("div"); nm.className = "mname"
-    nm.innerHTML = `<b>${f.p}</b><span>${f.id}</span>`
-    const cells = document.createElement("div"); cells.className = "cells"
-    for (const L of LAYERS) {
-      const c = document.createElement("div")
-      c.className = "cell"; c.dataset.s = "none"
-      c.title = `${f.id} · ${L}`
-      const ico = makeIcon(12, f.cells[L] === "none" ? "none" : "pending")
-      c.appendChild(ico.el); cells.appendChild(c)
-      cellIcons.set(`${f.id}|${L}`, { el: c, ico })
-    }
-    row.append(nm, cells); matrix.appendChild(row)
-  }
-}
-function say(msg, cls = "") {
-  const el = document.createElement("div")
-  el.className = "line " + cls
-  const ms = (performance.now() - t0) / 1000
-  el.innerHTML = `<span class="t">${ms.toFixed(1)}s</span><span class="m"></span>`
-  el.querySelector(".m").textContent = msg
-  log.appendChild(el); arrive(el); log.scrollTop = log.scrollHeight
-  return el
-}
-const sleep = (ms) => new Promise((r) => setTimeout(r, REDUCED ? Math.min(ms, 60) : ms))
-
-function setStep(i, state, progress) {
-  const s = stepIcons[i]
-  s.el.dataset.state = state === "pass" ? "pass" : state === "fail" ? "fail" : state === "run" ? "run" : "pending"
+function setStep(i, state, p) {
+  const s = railUI[i]
+  s.el.dataset.state = ["pass","fail","run"].includes(state) ? state : "pending"
   s.ico.set(state)
-  if (progress !== undefined) {
-    spring([Number(s.fill.dataset.p || 0)], [progress], ([p]) => {
-      s.fill.style.transform = `scaleX(${p})`; s.fill.dataset.p = p
-    }, { stiffness: 120, damping: 20 })
-  }
+  if (p !== undefined) spring([s.p], [p], ([v]) => { s.p = v; s.fill.style.transform = `scaleX(${v})` }, { stiffness: 130, damping: 21 })
 }
 
-async function run(planted) {
-  if (busy) return
-  busy = true; t0 = performance.now()
-  $("#run").disabled = true; $("#runbad").disabled = true
-  $("#verdict").hidden = true; $("#verdict").classList.remove("on")
-  buildRail(); buildMatrix(); log.innerHTML = ""
-  $("#mstat").textContent = "running"; $("#lstat").textContent = "live"
+/* ══════════════════════ the graph ══════════════════════ */
+const CHAIN_W = 200, CHAIN_H = 40, AREA_W = 146, AREA_H = 34, ROUTE_W = 196, ROUTE_H = 22
+const svg = $("#svg")
+let root, gEdges, gNodes, view = { x: 0, y: 0, k: 1 }
+let selected = null, expanded = null, filter = "all", checked = new Set()
+const nodeIndex = new Map()
 
-  const cells = FEATURES.map((f) => ({ ...f, cells: { ...f.cells, ...(planted ? REGRESSION[f.id] ?? {} : {}) } }))
-
-  // 1 verify
-  setStep(0, "run", 0.35); say("1/7  verify — nothing is built until this is green", "head")
-  for (const [n, p] of [["tsc", 23], ["unit: kernel · 46 pass", 2], ["unit: adapters · 12 pass", 3], ["L0 + registry · 0 orphans", 2], ["security S0–S2 vs baseline", 16]]) {
-    await sleep(240); say(`  ✓ ${n}  ${p}s`, "ok")
-  }
-  await sleep(200); say("  ✓ all 6 layers can run", "ok"); setStep(0, "pass", 1)
-
-  // 2 build
-  setStep(1, "run", 0.3); await sleep(260)
-  say("2/7  build into a scratch directory", "head")
-  say("  · warm start: carried cache forward in 105s")
-  await sleep(420); say("  ✓ artifact YeBaM8fBraCTH5VphvJmt", "ok"); setStep(1, "pass", 1)
-
-  // 3 swap
-  setStep(2, "run", 0.5); await sleep(230)
-  say("3/7  swap — refuse if the tree changed since verify", "head")
-  await sleep(260); say("  ✓ tree hash unchanged since verify", "ok")
-  await sleep(200); say("  ✓ swapped m1YTaIJIqUw → YeBaM8fBraCT", "ok"); setStep(2, "pass", 1)
-
-  // 4 prove  ← the beat
-  setStep(3, "run", 0.4); await sleep(240)
-  say("4/7  prove — the only evidence accepted", "head")
-  say("  · fetching from OUTSIDE the deployed process…")
-  await sleep(620)
-  say("  ✓ the running site serves YeBaM8fBraCTH5VphvJmt", "ok"); setStep(3, "pass", 1)
-
-  // 5 sweep
-  setStep(4, "run", 0.06); await sleep(200)
-  say("5/7  sweep — P0 first, judged the moment it is known", "head")
-  const order = []
-  for (const L of LAYERS) for (const f of cells) if (f.cells[L] !== "none") order.push([f, L])
-  order.sort((a, b) => (a[0].p === "P0" ? -1 : 1) - (b[0].p === "P0" ? -1 : 1))
-  let done = 0, firstRed = null
-  for (const [f, L] of order) {
-    const s = f.cells[L]
-    const c = cellIcons.get(`${f.id}|${L}`)
-    c.el.dataset.s = s; c.ico.set(s)
-    done++; setStep(4, "run", done / order.length)
-    if (s === "fail" && f.p === "P0" && !firstRed) {
-      firstRed = { f, L }
-      say(`  ✗ P0 RED  ${f.id} · ${L}`, "bad")
-      say(`      ${L === "S" ? "S5.mcp.rug_pull — a tool definition changed after it was approved" : "create path returned 200 with an empty list — a failed read folded into \"you have none\""}`, "bad")
-    } else if (s === "blocked") {
-      say(`  – blocked  ${f.id} · ${L} — a dependency is down; rollback cannot fix it`, "warn")
-    }
-    await sleep(planted && firstRed ? 55 : 42)
-  }
-  setStep(4, firstRed ? "fail" : "pass", 1)
-
-  // 6 gate
-  setStep(5, "run", 0.5); await sleep(320)
-  say("6/7  gate", "head")
-  if (firstRed) {
-    say("  · P0 red — re-checking once to see whose fault it is", "warn")
-    await sleep(700)
-    say("  ✗ it failed again on re-check: this deploy owns it", "bad")
-    await sleep(200)
-    say("  · rolling back…", "warn"); setStep(5, "fail", 1)
-    await sleep(520)
-    say("  ✓ the running site serves m1YTaIJIqUw again — rollback PROVED", "ok")
-  } else {
-    say("  ✓ 0 P0 failures · 1 BLOCKED (reported, does not gate)", "ok"); setStep(5, "pass", 1)
-  }
-
-  setStep(6, "pass", 1); await sleep(180)
-  say("7/7  report written", "head")
-
-  showVerdict(firstRed)
-  $("#mstat").textContent = firstRed ? "rolled back" : "shipped"
-  $("#lstat").textContent = `${((performance.now() - t0) / 1000).toFixed(1)}s`
-  $("#run").disabled = false; $("#runbad").disabled = false; busy = false
-}
-
-function showVerdict(red) {
-  const v = $("#verdict")
-  v.hidden = false; v.dataset.v = red ? "rollback" : "ship"
-  $("#vicon").innerHTML = ""
-  const ico = makeIcon(30, "pending"); $("#vicon").appendChild(ico.el)
-  setTimeout(() => ico.set(red ? "fail" : "pass"), 90)
-  $("#vtitle").textContent = red ? "Rolled back — and the rollback was proved" : "Shipped"
-  $("#vbody").textContent = red
-    ? `${red.f.id} failed at ${red.L} and failed again on re-check, so this deploy owns it. The previous build is serving, and that was confirmed from outside the process — not from the exit code of the command that put it back.`
-    : "No P0 failure and no layer errored. One cell is BLOCKED: a dependency this deploy did not cause is unavailable, so rolling back could not reach it — reported, never silent."
-  $("#vev").innerHTML = red
-    ? `evidence · the running site serves <b>m1YTaIJIqUw6EdMJkZL6O</b> (the previous build)`
-    : `evidence · the running site serves <b>YeBaM8fBraCTH5VphvJmt</b> (the build just swapped in)`
-  requestAnimationFrame(() => {
-    v.classList.add("on")
-    if (!REDUCED) { v.style.opacity = ""; v.style.transform = ""; arrive(v) }
+function layout() {
+  const nodes = [], edges = []
+  const colX = [40, 40, 40, 40, 300, 500]
+  D.chain.forEach((c, i) => {
+    nodes.push({ id: c.id, type: "chain", label: c.label, sub: c.sub, tone: c.tone,
+      x: colX[i], y: 24 + i * 62, w: CHAIN_W, h: CHAIN_H })
+    if (i > 0) edges.push({ from: D.chain[i-1].id, to: c.id, kind: "spine" })
   })
+  const total = D.areas.length
+  const top = 24
+  D.areas.forEach((a, i) => {
+    const id = `area:${a.name}`
+    nodes.push({ id, type: "area", label: a.name, tone: a.ungated ? "bad" : "ok",
+      n: a.n, ungated: a.ungated, area: a,
+      x: colX[4], y: top + i * (AREA_H + 8), w: AREA_W, h: AREA_H })
+    edges.push({ from: "app", to: id, kind: "fan", open: a.ungated > 0 })
+  })
+  return { nodes, edges }
+}
+let G = layout()
+
+function routeNodes(area) {
+  const anchor = G.nodes.find((n) => n.id === `area:${area.name}`)
+  const rows = area.routes.slice(0, 26)
+  const h = rows.length * (ROUTE_H + 4)
+  const startY = Math.max(14, anchor.y + AREA_H / 2 - h / 2)
+  return rows.map((r, i) => ({
+    id: r.id, type: "route", label: r.label, tone: r.open ? "bad" : "ok", route: r,
+    x: 500, y: startY + i * (ROUTE_H + 4), w: ROUTE_W, h: ROUTE_H, from: anchor.id,
+  }))
 }
 
-/* ── idle state: the page shows what it does before you press anything ── */
-buildRail(); buildMatrix()
-say("ready — press Run the gate", "head")
-say("`Run with a planted regression` shows the gate refusing.")
-say("A gate you have never seen refuse is a gate you do not know works.")
-$("#mstat").textContent = `${FEATURES.length} features · ${LAYERS.length} layers`
+function toneOf(n) {
+  if (n.type === "chain") return n.tone
+  if (!checked.size) return "idle"
+  if (n.type === "area") return checked.has(n.id) ? n.tone : "idle"
+  return checked.has(n.from) ? n.tone : "idle"
+}
+const STROKE = { bad: "var(--bad)", ok: "var(--ok)", warn: "var(--warn)", idle: "var(--line-2)" }
+const FILLC  = { bad: "var(--bad-dim)", ok: "var(--ok-dim)", warn: "var(--warn-dim)", idle: "var(--panel-2)" }
 
-$("#run").onclick = () => run(false)
-$("#runbad").onclick = () => run(true)
+function visible(n) {
+  if (filter === "all" || n.type === "chain") return true
+  if (n.type === "area") return filter === "open" ? n.ungated > 0 : n.area.routes.some((r) => r.findings.length)
+  if (n.type === "route") return filter === "open" ? n.route.open : n.route.findings.length > 0
+  return true
+}
+
+function render() {
+  svg.innerHTML = ""
+  root = el("g"); svg.appendChild(root)
+  gEdges = el("g"); gNodes = el("g"); root.append(gEdges, gNodes)
+  nodeIndex.clear()
+
+  const extra = expanded ? routeNodes(expanded) : []
+  const all = [...G.nodes, ...extra]
+  const edges = [...G.edges, ...extra.map((r) => ({ from: r.from, to: r.id, kind: "leaf", open: r.route.open }))]
+  const pos = new Map(all.map((n) => [n.id, n]))
+
+  for (const e of edges) {
+    const a = pos.get(e.from), b = pos.get(e.to)
+    if (!a || !b) continue
+    const dim = !(visible(a) && visible(b))
+    const x1 = e.kind === "spine" ? a.x + a.w / 2 : a.x + a.w, y1 = e.kind === "spine" ? a.y + a.h : a.y + a.h / 2
+    const x2 = e.kind === "spine" ? b.x + b.w / 2 : b.x, y2 = e.kind === "spine" ? b.y : b.y + b.h / 2
+    const mid = (x1 + x2) / 2
+    const d = e.kind === "spine" ? `M${x1} ${y1} L${x2} ${y2}` : `M${x1} ${y1} C${mid} ${y1} ${mid} ${y2} ${x2} ${y2}`
+    const p = el("path", { d, fill: "none",
+      stroke: e.open ? "var(--bad)" : e.kind === "spine" ? "var(--line-2)" : "var(--ok)",
+      "stroke-width": e.kind === "spine" ? 1.5 : 1, opacity: dim ? .07 : (e.open ? .4 : .6) })
+    p.dataset.edge = `${e.from}|${e.to}`
+    gEdges.appendChild(p)
+  }
+
+  all.forEach((n, i) => {
+    const g = el("g", { class: "nodeg", tabindex: 0, transform: `translate(${n.x} ${n.y})`, role: "button" })
+    g.setAttribute("aria-label", `${n.label}${n.type === "area" ? `, ${n.ungated} of ${n.n} ungated` : ""}`)
+    const tone = toneOf(n)
+    const box = el("rect", { class: "box", width: n.w, height: n.h, rx: 3,
+      fill: FILLC[tone] ?? "var(--panel-2)", stroke: STROKE[tone] ?? "var(--line-2)",
+      "stroke-width": n.type === "chain" ? 1.2 : (selected === n.id ? 2 : 1) })
+    g.appendChild(box)
+    const pad = 8
+    const t1 = el("text", { x: pad, y: n.type === "route" ? 15 : 16, fill: "var(--ink)",
+      "font-family": "JetBrains Mono, monospace", "font-size": n.type === "chain" ? 11.5 : 10.5 })
+    t1.textContent = n.label.length > 26 ? n.label.slice(0, 25) + "…" : n.label
+    g.appendChild(t1)
+    if (n.type === "chain") {
+      const t2 = el("text", { x: pad, y: 30, fill: "var(--ink-3)", "font-family": "JetBrains Mono, monospace", "font-size": 8.8 })
+      t2.textContent = n.sub; g.appendChild(t2)
+    }
+    if (n.type === "area") {
+      const t2 = el("text", { x: n.w - pad, y: 16, "text-anchor": "end",
+        fill: tone === "idle" ? "var(--ink-3)" : STROKE[tone], "font-family": "JetBrains Mono, monospace", "font-size": 9 })
+      t2.textContent = tone === "idle" ? `${n.n}` : (n.ungated ? `${n.ungated}/${n.n} open` : `${n.n} gated`)
+      g.appendChild(t2)
+      const t3 = el("text", { x: pad, y: 28, fill: "var(--ink-3)", "font-family": "JetBrains Mono, monospace", "font-size": 8 })
+      t3.textContent = expanded?.name === n.label ? "▾ expanded" : "▸ click to expand"
+      g.appendChild(t3)
+    }
+    if (!visible(n)) g.classList.add("dim")
+    g.onclick = () => pick(n)
+    g.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(n) } }
+    g.onmouseenter = () => highlight(n, true)
+    g.onmouseleave = () => highlight(n, false)
+    gNodes.appendChild(g)
+    nodeIndex.set(n.id, { n, g, box })
+    if (n.type === "route" && !REDUCED) {
+      g.style.opacity = "0"
+      setTimeout(() => spring([n.x - 26, 0], [n.x, 1], ([x, o]) => {
+        g.setAttribute("transform", `translate(${x.toFixed(1)} ${n.y})`); g.style.opacity = o.toFixed(3)
+      }, { stiffness: 240, damping: 22 }), Math.min(i * 9, 240))
+    }
+  })
+  applyView()
+  $("#gmeta").textContent = `${D.areas.length} areas · ${D.meta.routes} routes · ${D.meta.pages} pages`
+}
+
+function highlight(n, on) {
+  if (n.type === "chain") return
+  const id = n.type === "area" ? n.id : n.from
+  for (const p of gEdges.querySelectorAll("path")) {
+    if (p.dataset.edge?.endsWith(`|${id}`) || p.dataset.edge?.startsWith(`${id}|`)) {
+      p.setAttribute("stroke-width", on ? 2.4 : 1); p.setAttribute("opacity", on ? .95 : .5)
+    }
+  }
+}
+
+function pick(n) {
+  selected = n.id
+  if (n.type === "area") expanded = expanded?.name === n.label ? null : n.area
+  render()
+  inspect(n)
+}
+
+/* ── pan / zoom ── */
+function applyView() { root.setAttribute("transform", `translate(${view.x} ${view.y}) scale(${view.k})`) }
+const stage = $("#stage")
+let drag = null
+stage.addEventListener("pointerdown", (e) => {
+  if (e.target.closest(".nodeg") || e.target.closest("button")) return
+  drag = { x: e.clientX - view.x, y: e.clientY - view.y }
+  stage.classList.add("drag"); stage.setPointerCapture(e.pointerId)
+})
+stage.addEventListener("pointermove", (e) => {
+  if (!drag) return
+  view.x = e.clientX - drag.x; view.y = e.clientY - drag.y; applyView()
+})
+stage.addEventListener("pointerup", () => { drag = null; stage.classList.remove("drag") })
+stage.addEventListener("wheel", (e) => {
+  e.preventDefault()
+  const r = stage.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top
+  const k = Math.min(2.4, Math.max(0.35, view.k * (e.deltaY < 0 ? 1.12 : 0.89)))
+  view.x = mx - (mx - view.x) * (k / view.k); view.y = my - (my - view.y) * (k / view.k); view.k = k
+  applyView()
+}, { passive: false })
+const zoomBy = (f) => { view.k = Math.min(2.4, Math.max(0.35, view.k * f)); applyView() }
+$("#zin").onclick = () => zoomBy(1.18)
+$("#zout").onclick = () => zoomBy(0.85)
+$("#reset").onclick = () => { view = { x: 0, y: 0, k: 1 }; expanded = null; selected = null; filter = "all"; setChips(); render(); inspect(null) }
+
+/* ── inspector ── */
+function inspect(n) {
+  const box = $("#insp")
+  if (!n) { box.innerHTML = `<div class="empty">Click any node in the graph.</div>`; $("#imeta").textContent = ""; return }
+  let h = ""
+  if (n.type === "chain") {
+    $("#imeta").textContent = "infrastructure"
+    h = `<h4>${n.label}</h4><div class="sub">${n.sub}</div>
+      <dl class="kv"><dt>tone</dt><dd>${n.tone === "bad" ? "reachable with no check in front" : "terminates TLS / routes"}</dd></dl>`
+    if (n.id === "app") h += `<div class="fnd"><div class="r">S2.route.ungated ×${D.areas.reduce((a,b)=>a+b.ungated,0)}</div>
+      <div class="t">app.use() mounts compression, cors and express.json — then the routes. There is no auth middleware between the two.</div></div>`
+  } else if (n.type === "area") {
+    $("#imeta").textContent = `${n.n} route${n.n>1?"s":""}`
+    h = `<h4>${n.label}</h4><div class="sub">${n.ungated} of ${n.n} with no auth gate</div>
+      <div class="rlist">${n.area.routes.map((r) => `<a data-r="${r.id}"><span>${r.label}</span><span class="s ${r.open?"open":"gated"}">${r.open?"open":"gated"}</span></a>`).join("")}</div>`
+  } else {
+    $("#imeta").textContent = "route"
+    const r = n.route
+    h = `<h4>${r.id.replace(/^api:|^page:/,"")}</h4><div class="sub">${r.src}</div>
+      <dl class="kv"><dt>discovered</dt><dd>${r.src}</dd><dt>declared</dt><dd>${r.findings.length?"no — orphan":"—"}</dd><dt>gate</dt><dd>${r.open?"none":"present"}</dd></dl>`
+    h += r.findings.map((f) => `<div class="fnd"><div class="r">${f.rule} · ${f.sev}</div><div class="t">${f.title}</div></div>`).join("")
+      || `<div class="empty">No finding on this route.</div>`
+  }
+  box.innerHTML = h
+  box.querySelectorAll("a[data-r]").forEach((a) => a.onclick = () => {
+    const nd = [...nodeIndex.values()].find((v) => v.n.id === a.dataset.r)
+    if (nd) pick(nd.n)
+  })
+  arrive(box)
+}
+
+/* ── filters ── */
+function setChips() {
+  for (const [id, v] of [["#f-all","all"],["#f-open","open"],["#f-fnd","fnd"]]) $(id).setAttribute("aria-pressed", String(filter === v))
+}
+for (const [id, v] of [["#f-all","all"],["#f-open","open"],["#f-fnd","fnd"]]) $(id).onclick = () => { filter = v; setChips(); render() }
+
+/* ══════════════════════ the run ══════════════════════ */
+const log = $("#log")
+let t0 = 0, busy = false
+function say(msg, cls = "") {
+  const d = document.createElement("div"); d.className = "line " + cls
+  d.innerHTML = `<span class="t">${((performance.now() - t0) / 1000).toFixed(1)}s</span><span class="m"></span>`
+  d.querySelector(".m").textContent = msg
+  log.appendChild(d); arrive(d); log.scrollTop = log.scrollHeight
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, REDUCED ? Math.min(ms, 40) : ms))
+
+async function run() {
+  if (busy) return
+  busy = true; t0 = performance.now(); $("#run").disabled = true
+  checked = new Set(); expanded = null; selected = null; filter = "all"; setChips()
+  buildRail(); render(); log.innerHTML = ""; $("#lmeta").textContent = "live"
+
+  setStep(0, "run", .3); say("1/7  verify — nothing is built until this is green", "head")
+  for (const [n, s] of [["tsc", 3],["unit: kernel · 82 pass", 2],["L0 + registry", 1]]) { await sleep(200); say(`  ✓ ${n}  ${s}s`, "ok") }
+  await sleep(160); say("  ✓ all 4 layers can run", "ok"); setStep(0, "pass", 1)
+
+  setStep(1, "run", .4); await sleep(220); say("2/7  build", "head")
+  await sleep(260); say("  ✓ artifact 8c89c38", "ok"); setStep(1, "pass", 1)
+
+  setStep(2, "run", .5); await sleep(200); say("3/7  swap", "head")
+  await sleep(200); say("  ✓ tree hash unchanged since verify", "ok"); setStep(2, "pass", 1)
+
+  setStep(3, "run", .5); await sleep(220)
+  say("4/7  prove — evidence from OUTSIDE the deployed process", "head")
+  await sleep(420)
+  say("  ✗ this project has no endpoint that echoes its own build", "bad")
+  say("      `ship` cannot tell a deploy that took from one that silently did not", "bad")
+  setStep(3, "fail", 1)
+
+  setStep(4, "run", .02); await sleep(200)
+  say("5/7  sweep — judged the moment each is known", "head")
+  let done = 0
+  for (const a of D.areas) {
+    checked.add(`area:${a.name}`); done++
+    setStep(4, "run", done / D.areas.length); render()
+    if (a.ungated) say(`  ✗ ${a.name} — ${a.ungated}/${a.n} route(s) with no auth gate`, "bad")
+    else say(`  ✓ ${a.name} — ${a.n} gated`, "ok")
+    await sleep(120)
+  }
+  setStep(4, "fail", 1)
+  await sleep(200)
+  say("  ✗ S0.secret.tree — a private key in k8s/configmap-ssh-keys.yaml", "bad")
+  say("  ✗ S0.secret.history — the same key is in git history; rotate it", "bad")
+
+  setStep(5, "run", .5); await sleep(320); say("6/7  gate", "head")
+  await sleep(360)
+  say("  ✗ 2 critical · 65 high — and `prove` could not answer at all", "bad")
+  say("  · a layer that could not answer has not cleared the deploy", "warn")
+  setStep(5, "fail", 1)
+  setStep(6, "pass", 1); await sleep(160); say("7/7  report written", "head")
+
+  $("#lmeta").textContent = `${((performance.now() - t0) / 1000).toFixed(1)}s · grade F`
+  $("#run").disabled = false; busy = false
+  inspect(G.nodes.find((n) => n.id === "app"))
+}
+/* ── if a local server is serving this page, Run executes the real CLI ── */
+let LIVE = null
+fetch("/api/where").then((r) => r.ok ? r.json() : null).then((w) => {
+  if (!w?.live) return
+  LIVE = w
+  $("#sub").textContent = `${D.meta.project} · live · ${w.root}`
+  $("#run").lastChild.textContent = " Run the gate (live)"
+}).catch(() => {})
+
+async function runLive() {
+  if (busy) return
+  busy = true; t0 = performance.now(); $("#run").disabled = true
+  checked = new Set(); render(); log.innerHTML = ""; $("#lmeta").textContent = "live"
+  buildRail(); setStep(0, "run", .3)
+  say(`ubi scan --root ${LIVE.root}`, "head")
+
+  await new Promise((done) => {
+    const es = new EventSource("/api/run?cmd=scan&layer=S0,S2,S4")
+    let n = 0
+    es.addEventListener("line", (e) => {
+      const { line } = JSON.parse(e.data)
+      if (!line.trim()) return
+      const cls = /✗|CRITICAL/.test(line) ? "bad" : /✓/.test(line) ? "ok" : /HIGH|MEDIUM/.test(line) ? "warn" : ""
+      say(line, cls)
+      setStep(0, "run", Math.min(.95, .3 + (++n) * .01))
+    })
+    es.addEventListener("done", (e) => {
+      const { code } = JSON.parse(e.data)
+      setStep(0, code === 0 ? "pass" : "fail", 1)
+      say(code === 0 ? "clean" : `exit ${code} — new findings at or above the fail threshold`, code === 0 ? "ok" : "bad")
+      es.close(); done()
+    })
+    es.onerror = () => { say("the console lost the stream", "bad"); es.close(); done() }
+  })
+
+  // Colour the graph from what the run actually wrote.
+  for (const a of D.areas) checked.add(`area:${a.name}`)
+  render()
+  $("#lmeta").textContent = `${((performance.now() - t0) / 1000).toFixed(1)}s`
+  $("#run").disabled = false; busy = false
+}
+
+$("#run").onclick = () => (LIVE ? runLive() : run())
+
+/* ── boot: show the real thing at rest, before anything is pressed ── */
+$("#sub").textContent = `${D.meta.project} · scanned ${D.meta.at.slice(0,10)} · grade ${D.meta.grade.grade}`
+buildRail(); render()
+say("ready — 66 routes and 7 pages discovered, nothing declared by hand", "head")
+say("press Run the gate, or click any node now.")
 $("#theme").onclick = () => {
   const r = document.documentElement
   const dark = r.dataset.theme ? r.dataset.theme === "dark" : !matchMedia("(prefers-color-scheme: light)").matches
   r.dataset.theme = dark ? "light" : "dark"
+  render()
 }
 </script>
