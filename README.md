@@ -158,3 +158,30 @@ npm run verify    # 46 unit tests + 5 end-to-end smoke checks
 ```
 
 MIT.
+
+---
+
+## Reading
+
+| | |
+|---|---|
+| [`docs/WHY.html`](docs/WHY.html) | the full argument — ten kinds of remembering, three axioms, the security model, the commercial split. Open it in a browser. |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | rings, statuses, why judging early is provably safe |
+| [`docs/SECURITY.md`](docs/SECURITY.md) | S0–S7, the agent surface, ASI mapping |
+| [`docs/COMMANDS.md`](docs/COMMANDS.md) | every command, and which ones need a human |
+| [`docs/PLUGINS.md`](docs/PLUGINS.md) | the DSH-shaped extension contract |
+| [`docs/PORTING.md`](docs/PORTING.md) | wiring a new project, and the porting checklist |
+| [`docs/DIAGRAMS.md`](docs/DIAGRAMS.md) | archify and any other diagram skill |
+| [`apps/console/index.html`](apps/console/index.html) | a browser console — press **Run with a planted regression** to watch the gate refuse |
+
+## A note on the name
+
+`vibeship` is **taken** on npm (2025) and there are 11+ public
+`vibeship-*` repositories under one owner — including `vibeship-scanner`, a
+security scanner, and `vibeship-optimizer`, a rollback-friendly optimisation
+workflow. Both overlap this project's positioning. `vibeship.dev` and
+`vibeship.com` both resolve.
+
+Fine for a private repo. Worth revisiting before any public release — not for
+legal reasons, but because the first page of results for the name belongs to
+someone else.
