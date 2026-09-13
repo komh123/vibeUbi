@@ -14,7 +14,7 @@
     "./adapters/*": "./packages/adapters/src/*"
   },
   "scripts": {
-    "test": "node --test packages/kernel/test/",
+    "test": "node --test packages/kernel/test/ packages/security/test/",
     "smoke": "node scripts/smoke.mjs",
     "verify": "npm run test && npm run smoke"
   },

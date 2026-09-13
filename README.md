@@ -144,7 +144,7 @@ export function apply(ctx, config = {}) {
 ## Layout
 
 ```
-packages/kernel      every decision, zero I/O, 66 tests — the product
+packages/kernel      every decision, zero I/O, 82 tests — the product
 packages/registry    discovery + declaration + the orphan rule
 packages/security    S0–S7 rule catalogue
 packages/adapters    per-stack plugins
@@ -154,7 +154,7 @@ bin/vibeship.mjs     the CLI every harness can fall back to
 ```
 
 ```bash
-npm run verify    # 66 unit tests + 5 end-to-end smoke checks
+npm run verify    # 82 unit tests + 5 end-to-end smoke checks
 ```
 
 MIT.
@@ -185,3 +185,45 @@ workflow. Both overlap this project's positioning. `vibeship.dev` and
 Fine for a private repo. Worth revisiting before any public release — not for
 legal reasons, but because the first page of results for the name belongs to
 someone else.
+
+## Proven on a project it had never seen
+
+`examples/system-monitor.config.mjs` points VibeShip at an **Express + React +
+k8s** app — a completely different stack from the Next.js one it was extracted
+from. Zero files were written into that repository (`--config` keeps the config
+outside it).
+
+```bash
+npx vibeship scan --root ../system-monitor --config examples/system-monitor.config.mjs --layer S0,S2,S4
+```
+
+First run, nothing declared by hand:
+
+- **66 API routes and 7 pages discovered** — including routes that only exist as
+  `router.get('/x')` joined to the prefix its router is mounted at. Counting
+  those halves separately gets the registry wrong in both directions.
+- **61 of 66 routes have no auth gate**, including `POST /api/processes/:pid/kill`,
+  behind a public TLS ingress.
+- `verifyToken` is written, exported and documented in that codebase — and
+  referenced **exactly once, inside its own doc comment.** Zero call sites.
+- A private key in the working tree **and in git history**.
+- Grade **F**.
+
+It also caught VibeShip lying about itself: the Express adapter returned
+`{external: true, carriesArtifactId: true}` unconditionally while putting
+"NOT WIRED" in the human-readable field, so `plan` printed a green tick next to
+the words NOT WIRED. Fixed — the claim now describes what the adapter can
+actually do, and `plan` refuses.
+
+### And the scan failed its own precision rule first
+
+The secret-in-logs rule initially matched the *word* "token" or "secret"
+anywhere in a `console.log`. Nine hits on the real project; one was real. About
+**11% precision**.
+
+`textRuleFitness` in the kernel refuses to let a rule under 90% gate anything,
+and `baselineAdmission` refuses to absorb the noise. So the rule was rewritten
+with a lexer, not excused — and `token`/`tokens` were deliberately dropped from
+the credential-name list, because in that codebase they are a *unit of
+measurement*. That costs one real finding and removes nine false ones: a hole
+instead of a statement somebody signs for as real debt.

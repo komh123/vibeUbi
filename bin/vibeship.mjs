@@ -21,6 +21,7 @@ const cmd = argv[0] ?? "help"
 const flag = (n) => argv.includes(`--${n}`)
 const val = (n, d) => { const i = argv.indexOf(`--${n}`); return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[i + 1] : d }
 const ROOT = resolve(val("root", process.cwd()))
+const relativeish = (p) => p.startsWith(ROOT) ? p.slice(ROOT.length + 1) : p
 
 const C = { dim: "\x1b[90m", red: "\x1b[31m", green: "\x1b[32m", yellow: "\x1b[33m", bold: "\x1b[1m", off: "\x1b[0m" }
 const say = (s = "") => console.log(s)
@@ -29,7 +30,10 @@ const bad = (s) => say(`  ${C.red}✗${C.off} ${s}`)
 const note = (s) => say(`  ${C.dim}·${C.off} ${s}`)
 
 async function loadConfig() {
-  const p = join(ROOT, "vibeship.config.mjs")
+  // `--config` lets a run point at a project WITHOUT writing a file into it —
+  // which is what CI usually wants, and what you want the very first time you
+  // scan somebody else's repo.
+  const p = val("config", "") ? resolve(val("config", "")) : join(ROOT, "vibeship.config.mjs")
   if (!existsSync(p)) return null
   return (await import(pathToFileURL(p).href)).default
 }
@@ -82,7 +86,12 @@ const COMMANDS = {
     if (!claim) bad("no deploy target registered — nothing can prove a deploy")
     else {
       const v = proofContract(claim)
-      v.ok ? ok(claim.source) : bad(v.reason)
+      if (v.ok) ok(claim.source)
+      else {
+        bad(v.reason)
+        note(claim.source)
+        note("until this is wired, `ship` cannot tell a deploy that took from one that silently did not.")
+      }
     }
 
     const discovered = await discoverAll(ctx)
@@ -142,6 +151,38 @@ const COMMANDS = {
     process.exit(findings.some((f) => f.severity === "critical" || f.severity === "high") ? 1 : 0)
   },
 
+  async scan() {
+    const { config, ctx } = await boot()
+    const { runScan } = await import("../packages/security/src/run.mjs")
+    const base = val("base", config.base ?? "")
+    const layers = val("layer", "S0,S1,S2,S4").split(",").map((x) => x.trim()).filter(Boolean)
+    say(`\n${C.bold}vibeship scan${C.off} ${C.dim}${ROOT} · ${layers.join(" ")}${base ? " · " + base : ""}${C.off}\n`)
+
+    const discovered = await discoverAll(ctx)
+    const r = await runScan({ root: ROOT, config, layers, base, discovered, note: (m) => note(m) })
+
+    const order = { critical: 0, high: 1, medium: 2, low: 3, info: 4 }
+    const col = { critical: C.red, high: C.yellow, medium: C.dim, low: C.dim, info: C.dim }
+    const sorted = [...r.findings].sort((a, b) => order[a.severity] - order[b.severity])
+
+    for (const fnd of sorted.slice(0, Number(val("max", "40")))) {
+      say(`  ${col[fnd.severity] ?? ""}${fnd.severity.toUpperCase().padEnd(8)}${C.off} ${fnd.rule}`)
+      say(`           ${fnd.title}`)
+      say(`           ${C.dim}${fnd.where}${fnd.evidence ? "  ·  " + fnd.evidence : ""}${C.off}`)
+    }
+    if (sorted.length > Number(val("max", "40"))) note(`…and ${sorted.length - Number(val("max", "40"))} more`)
+
+    const g = r.grade
+    say(`\n  ${C.bold}grade ${g.grade}${C.off} ${C.dim}(score ${g.score})${C.off}  ·  ${r.findings.length} finding(s)  ·  ${r.counts}`)
+    for (const s of r.skipped) note(`skipped ${s}`)
+    if (r.precision < 1) note(`rule precision ${(r.precision * 100).toFixed(0)}% (${r.falsePositives} lexically-excluded match(es) dropped before you saw them)`)
+
+    const out = join(ROOT, ".vibeship"); await mkdir(out, { recursive: true })
+    await writeFile(join(out, "scan.json"), JSON.stringify(r, null, 2))
+    note(`written ${relativeish(join(out, "scan.json"))}`)
+    process.exit(r.blocking.length > 0 ? 1 : 0)
+  },
+
   async init() {
     const p = join(ROOT, "vibeship.config.mjs")
     if (existsSync(p) && !flag("force")) { bad("vibeship.config.mjs already exists (use --force)"); process.exit(2) }
@@ -171,10 +212,13 @@ ${C.bold}vibeship${C.off} — the gate that remembers so you do not have to
   ${C.bold}adopt${C.off}     write declarations for the orphans     ${C.dim}(agent skill)${C.off}
   ${C.bold}roster${C.off}    check the agent/MCP tool surface
   ${C.bold}viz${C.off}       export a diagram IR   --format ir|archify|mermaid
+  ${C.bold}scan${C.off}      S0–S4 security layers  --layer S0,S1,S2,S4 [--base URL]
   ${C.bold}init${C.off}      write a vibeship.config.mjs draft
   ${C.bold}guard${C.off}     --action <a>   refuse a narrowing action
 
-${C.dim}ship / verify / scan / rollback need a wired target; see docs/PORTING.md${C.off}
+${C.dim}--root DIR    where the project is
+--config F    use this config instead of <root>/vibeship.config.mjs
+              (scan somebody else's repo without writing a file into it)${C.off}
 `)
   },
 }
