@@ -108,3 +108,36 @@ test("declared AND open is still reported — it just has to be a decision", () 
   assert.ok(out.some((f) => f.rule === "S4.exposure.unauthenticated_listener"))
   assert.ok(out.some((f) => f.rule === "S4.exposure.plaintext_public"))
 })
+
+test("a secret with a non-empty fallback literal is CRITICAL", () => {
+  // Found live: a token signed with the repo's own default reached a
+  // process-kill handler that had just been given an auth guard.
+  const hit = s2Sinks({ files: [file("a.js", ["const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';"])] })
+  assert.equal(hit.length, 1)
+  assert.equal(hit[0].severity, "critical")
+  assert.match(hit[0].rule, /default_secret/)
+})
+
+test("an empty fallback means unconfigured and fails closed — not a finding", () => {
+  assert.equal(s2Sinks({ files: [file("a.js", ["const S = process.env.GOOGLE_CLIENT_SECRET || '';"])] }).length, 0)
+})
+
+test("a non-secret default is not a finding", () => {
+  assert.equal(s2Sinks({ files: [file("a.js", ["const PORT = process.env.PORT || '3000';"])] }).length, 0)
+})
+
+test("generated output is never scanned — a finding nobody can act on", async () => {
+  const { codeFiles } = await import("../src/collect.mjs")
+  const { mkdtemp, mkdir, writeFile, rm } = await import("node:fs/promises")
+  const { tmpdir } = await import("node:os")
+  const { join } = await import("node:path")
+  const dir = await mkdtemp(join(tmpdir(), "ubi-skip-"))
+  await mkdir(join(dir, "dist-new"), { recursive: true })
+  await writeFile(join(dir, "dist-new", "vendor.js"), "var a=1;".repeat(200) + "\nel.innerHTML=x")
+  await writeFile(join(dir, "app.js"), "el.innerHTML = `${x}`")
+  const { walk } = await import("../src/collect.mjs")
+  const files = await walk(dir)
+  const code = await codeFiles(dir, files)
+  assert.deepEqual(code.map((c) => c.path), ["app.js"])
+  await rm(dir, { recursive: true, force: true })
+})

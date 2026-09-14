@@ -241,6 +241,29 @@ export const SINK_PATTERNS = [
     why: "a shell command built by interpolation",
   },
   {
+    id: "default_secret", sev: "critical",
+    /**
+     * A secret with a fallback literal is not a secret.
+     *
+     * Found live: `process.env.JWT_SECRET || 'your-secret-key-change-in-production'`.
+     * That string is in the repository, so anyone who can read it can mint a
+     * token every guard accepts — verified by signing one and reaching the
+     * process-kill handler with it. Adding an auth check in front of a
+     * destructive route while this line exists produces the appearance of a
+     * control and none of the effect.
+     *
+     * An empty-string fallback (`|| ''`) is a different thing: it usually
+     * means "unconfigured", which fails closed on its own. Only a non-empty
+     * literal is reported.
+     */
+    test: (line) => {
+      const m = /process\.env\.([A-Z0-9_]*(?:SECRET|TOKEN|KEY|PASSWORD|PASSWD|CREDENTIAL)[A-Z0-9_]*)\s*\|\|\s*(['"`])([^'"`]+)\2/.exec(line)
+      if (!m) return false
+      return m[3].trim().length > 0
+    },
+    why: "a secret falls back to a literal in the source — anyone who can read the repo has it, and every check that uses it becomes decoration",
+  },
+  {
     id: "log_secret", sev: "high",
     /** After the strings are hollowed out, a surviving match is an IDENTIFIER. */
     test: (line) => {

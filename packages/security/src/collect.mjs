@@ -14,7 +14,24 @@ import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 const run = promisify(execFile)
 
-const SKIP = new Set(["node_modules", ".git", "dist", "build", ".next", "coverage", ".cache", "screenshots-rwd", "__snapshots__"])
+/**
+ * Directories a rule must never see.
+ *
+ * `dist-new` / `dist-prev` / `dist-snapshot` are here because of a live miss:
+ * `dist` was skipped but the scratch copies this pipeline creates were not, so
+ * a scan started reporting `innerHTML` inside a minified React vendor bundle.
+ * Generated output is `generated` in `sourceScanHit`'s terms — a false
+ * positive by definition, and nobody can act on a finding at column 30 of a
+ * bundle they did not write.
+ */
+const SKIP = new Set([
+  "node_modules", ".git", "coverage", ".cache", "__snapshots__", "screenshots-rwd",
+  "dist", "dist-new", "dist-prev", "dist-snapshot", "build",
+  ".next", ".next-new", ".next-prev", ".vibeubi", ".vibeship",
+])
+
+/** A line this long is minified: not something a person wrote or can fix. */
+const MINIFIED_LINE = 500
 const CODE_EXT = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"])
 
 export async function walk(root, { maxBytes = 400_000 } = {}) {
@@ -78,6 +95,8 @@ export async function codeFiles(root, files) {
     if (!CODE_EXT.has(extname(file.path))) continue
     try {
       const text = await readFile(file.abs, "utf8")
+      // Minified or bundled: generated, so any match is a false positive.
+      if (text.split("\n").some((l) => l.length > MINIFIED_LINE)) continue
       out.push({ path: file.path, text, lines: lex(text) })
     } catch { /* skip */ }
   }
