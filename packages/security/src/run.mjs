@@ -5,7 +5,7 @@
  * npm audit on this machine" and "npm audit found nothing" must never look the
  * same in a report.
  */
-import { grade, baselineDiff, textRuleFitness, declaredFieldsAreRead, READ_DECLARED_FIELDS } from "../../kernel/src/index.mjs"
+import { grade, coverageOf, baselineDiff, textRuleFitness, declaredFieldsAreRead, READ_DECLARED_FIELDS } from "../../kernel/src/index.mjs"
 import * as collect from "./collect.mjs"
 import * as rules from "./rules.mjs"
 
@@ -143,6 +143,23 @@ export async function runScan({ root, config = {}, layers, base = "", discovered
     ))
   }
 
+  /**
+   * A requested layer that could not run is not a zero — it is a hole.
+   *
+   * `skipped` existed from the start and the grade never read it, so a scan
+   * that discovered nothing returned A/100/"clean". Same shape as every other
+   * defect found this week: written down, believed, consumed by nobody.
+   */
+  const coverage = coverageOf({ layers, skipped })
+  for (const gap of coverage.unmeasured) {
+    findings.push(rules.finding(
+      "B.coverage.unmeasured", "high", "scan",
+      `a requested check did not run: ${gap}`,
+      `layers requested: ${layers.join(",")}`,
+      "an unrun check contributes zero findings, which reads exactly like a clean one",
+    ))
+  }
+
   const baseline = config.baseline ?? []
   const diff = baselineDiff(findings, baseline)
   const counts = ["critical", "high", "medium", "low", "info"]
@@ -156,7 +173,8 @@ export async function runScan({ root, config = {}, layers, base = "", discovered
   return {
     root, layers, base: base || null,
     findings, skipped, counts,
-    grade: grade(findings),
+    coverage,
+    grade: grade(findings, coverage.unmeasured),
     baseline: { new: diff.new.length, known: diff.known.length, resolved: diff.resolved.length },
     blocking: diff.blocking,
     precision: fitness.precision,

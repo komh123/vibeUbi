@@ -108,3 +108,53 @@ test("the check reports the fields adopt writes and nothing runs", () => {
   assert.equal(r.ok, false)
   assert.deepEqual(r.unread.sort(), ["probes", "testId"])
 })
+
+/* ── coverage ─────────────────────────────────────────────────────────────
+ * A scan that looked at nothing must not score like a scan that looked and
+ * found nothing. Measured before the fix, on a project whose stack no adapter
+ * recognises and which contains an ungated POST /api/admin/delete_everything:
+ * grade A, score 100, counts "clean", 0 findings.
+ */
+import { mkdtemp, writeFile, mkdir, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { grade, coverageOf } from "../../kernel/src/index.mjs"
+import { runScan } from "../src/run.mjs"
+
+test("no grade is issued when a requested check never ran", () => {
+  const g = grade([], ["S2.route.ungated — no api routes discovered"])
+  assert.equal(g.grade, "—")
+  assert.equal(g.score, null, "a number here is the whole bug — it gets believed")
+  assert.match(g.reason, /never ran/)
+})
+
+test("a fully measured clean scan still grades A", () => {
+  assert.equal(grade([], []).grade, "A")
+  assert.equal(grade([{ severity: "critical" }, { severity: "critical" }, { severity: "critical" }, { severity: "critical" }], []).grade, "F")
+})
+
+test("F is withheld too — claiming a bad score you did not measure is the same lie", () => {
+  const g = grade([{ severity: "critical" }, { severity: "critical" }, { severity: "critical" }, { severity: "critical" }],
+                  ["S2 — nothing discovered"])
+  assert.equal(g.grade, "—")
+})
+
+test("a layer skipped BY CHOICE is not counted against coverage", () => {
+  const c = coverageOf({ layers: ["S0"], skipped: ["S3 DAST — not requested"] })
+  assert.equal(c.ok, true)
+  assert.equal(coverageOf({ layers: ["S2"], skipped: ["S2 — no api routes discovered"] }).ok, false)
+})
+
+test("an unrecognised stack cannot come back clean", async () => {
+  const root = await mkdtemp(join(tmpdir(), "vibeubi-blind-"))
+  try {
+    await mkdir(join(root, "src"), { recursive: true })
+    await writeFile(join(root, "package.json"), '{"name":"unknown-stack"}', "utf8")
+    // A real, dangerous, completely ungated route — in a language no adapter reads.
+    await writeFile(join(root, "src/server.py"),
+      '@app.route("/api/admin/delete_everything", methods=["POST"])\ndef nuke(): return do_it()\n', "utf8")
+    const r = await runScan({ root, config: {}, layers: ["S0", "S2", "S4"], discovered: [] })
+    assert.equal(r.grade.grade, "—", `graded ${r.grade.grade} over a scan that discovered nothing`)
+    assert.ok(r.blocking.length > 0, "an unmeasured requested check must block, not pass quietly")
+    assert.notEqual(r.counts, "clean")
+  } finally { await rm(root, { recursive: true, force: true }) }
+})

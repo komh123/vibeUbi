@@ -21,10 +21,46 @@ export function score(findings) {
   return Math.max(0, s)
 }
 
-export function grade(findings) {
+/**
+ * A grade is a claim about COVERAGE, so it cannot be issued without any.
+ *
+ * Measured on a real project whose stack no adapter recognises: nothing was
+ * discovered, so no route rule ran, and a codebase containing an ungated
+ *
+ *     POST /api/admin/delete_everything
+ *
+ * came back **grade A, score 100, "clean"**. The skip was recorded — in a
+ * `skipped` array the grade never read. An empty registry scoring full marks
+ * is the exact failure this product exists to remove, sitting in the product.
+ *
+ * So: if a layer was asked for and could not run, no letter is issued. Not A,
+ * not F — F is also a claim, and claiming a bad score you did not measure
+ * teaches people to ignore the number. The grade is WITHHELD and says what was
+ * never looked at.
+ *
+ * @param {readonly object[]} findings
+ * @param {readonly string[]} [unmeasured] layers requested that produced no judgement
+ */
+export function grade(findings, unmeasured = []) {
+  if (unmeasured.length > 0) {
+    return {
+      grade: "—",
+      score: null,
+      unmeasured: [...unmeasured],
+      reason:
+        `no grade: ${unmeasured.length} requested check(s) never ran (${unmeasured.join("; ")}). ` +
+        `A score over a scan that looked at nothing is worse than no score, because it is believed.`,
+    }
+  }
   const n = score(findings)
   for (const [letter, floor] of BANDS) if (n >= floor) return { grade: letter, score: n }
   return { grade: "F", score: n }
+}
+
+/** Did the run measure anything at all? Separated so the gate can ask directly. */
+export function coverageOf({ layers = [], skipped = [] }) {
+  const blocked = skipped.filter((s) => !/not requested|not configured — skipped by choice/i.test(String(s)))
+  return { requested: layers.length, unmeasured: blocked, ok: blocked.length === 0 }
 }
 
 /** Severities at or above which a NEW finding blocks. Case-insensitive on purpose:
