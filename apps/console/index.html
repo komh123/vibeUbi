@@ -912,7 +912,22 @@ async function run(which = "shipped") {
     // step verdicts
     if (/all \d+ layer\(s\) can run/.test(line)) setStep(0, "pass", 1)
     if (/artifact /.test(line)) setStep(1, "pass", 1)
-    if (/^✓ swapped/.test(line)) { setStep(2, "pass", 1); showApp("broken") }
+    if (/^✓ swapped/.test(line)) {
+      setStep(2, "pass", 1)
+      /**
+       * Only the blocked run put a broken build up.
+       *
+       * This used to key off the log line alone — and BOTH runs contain
+       * "✓ swapped", because both of them swapped. So pressing "Run the gate",
+       * which replays a run that deployed a GOOD build, showed the broken page
+       * for 5.25 seconds (measured) before settling. The console was telling a
+       * true story about the wrong run.
+       *
+       * The discriminator has to belong to the thing being judged: `which` is
+       * the run, the log line is only a symptom both runs share.
+       */
+      if (which === "rolledback") showApp("broken")
+    }
     if (/running service serves/.test(line) && !/again/.test(line)) setStep(3, "pass", 1)
     if (/NOT REACHED/.test(line)) { setStep(4, "unreached"); setStep(5, "unreached"); setStep(6, "unreached") }
     // Only a line that IS a verdict may move a step. A summary that merely
@@ -932,7 +947,7 @@ async function run(which = "shipped") {
     // 2.1s of a 5.4s replay — measured — while the reader's eye was on the log.
     // The window where the broken build is live is the whole point, so the
     // lines inside it get held.
-    const inBrokenWindow = $("#appstate").textContent === "BROKEN"
+    const inBrokenWindow = which === "rolledback" && $("#appstate").textContent === "BROKEN"
     await sleep(/^\d\/7/.test(line) ? 420 : inBrokenWindow ? 850 : 150)
   }
 
