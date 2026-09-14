@@ -18,15 +18,27 @@
  * @param {{expected:string, previous:string|null, observed:string}} input
  *   `observed` is whatever the adapter fetched from outside: a served page, a
  *   /version body, an image digest, an in-pod file hash. The kernel does not
- *   care which — only that the adapter went and looked.
+ *   care which — only that the adapter went and looked. `unreachable`, when
+ *   present, is why looking failed.
  * @returns {DeployProof}
  */
-export function deployProof({ expected, previous, observed }) {
+export function deployProof({ expected, previous, observed, unreachable }) {
   if (!expected) {
     return { ok: false, reason: "no artifact id was read from the new build — nothing to look for" }
   }
   if (typeof observed !== "string" || observed === "") {
-    return { ok: false, reason: "nothing was observed from outside the deployment — the proof was never actually taken" }
+    /**
+     * "Nothing observed" has two causes that need different fixes, and saying
+     * the wrong one sends the operator to the wrong place: the adapter never
+     * looked, or it looked and the service was not there. `unreachable` is the
+     * adapter reporting the second — keep its words.
+     */
+    return {
+      ok: false,
+      reason: unreachable
+        ? `the service could not be reached from outside: ${unreachable}`
+        : "nothing was observed from outside the deployment — the proof was never actually taken",
+    }
   }
   /**
    * Same id on both sides: the check cannot fail, so it proves nothing.

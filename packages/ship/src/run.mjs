@@ -221,13 +221,9 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
   /* ── 4 · prove — the only evidence accepted ──────────────────────────── */
   step(3, "prove", "run")
   say("head", "4/7  prove — from OUTSIDE the deployed process")
-  let proof
-  try {
-    const observed = await target.proof({ base: config.base, expected: artifactId, previous: previousId })
-    proof = deployProof(observed)
-  } catch (err) {
-    proof = { ok: false, reason: `could not observe the running service: ${err.message}` }
-  }
+  const proof = deployProof(
+    await readyObservation({ target, config, expected: artifactId, previous: previousId, say }),
+  )
   if (!proof.ok) {
     step(3, "prove", "fail")
     say("bad", proof.reason)
@@ -291,6 +287,51 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
 
 /** A rollback is not done when the files move. It is done when the old
  *  artifact is OBSERVED serving again. */
+/**
+ * Observe the running service, waiting for it to be up — but judging it once.
+ *
+ * `restart` waits a fixed 1.2s and then checks the process is ALIVE, which is
+ * not the same as SERVING. Measured on this machine: an app that takes 1.5s to
+ * bind is still down 500ms after restart returns. `proof` was a single fetch,
+ * so it fired into a closed port, threw ECONNREFUSED, and the deploy was rolled
+ * back — a healthy app, rejected for booting slowly. A gate that punishes the
+ * correct thing is worse than no gate.
+ *
+ * The distinction this function is built around: IT RETRIES THE OBSERVATION,
+ * NOT THE VERDICT. It returns whatever it last saw and `deployProof` judges
+ * that once, by rules this function cannot reach. A deploy that never takes
+ * still fails — it just fails at the deadline instead of instantly, and says
+ * how long it waited. Nothing here can turn a red into a green; the only thing
+ * it can change is judging an answer the service had not given yet.
+ *
+ * Waiting on a mismatch, not just on a refusal, is deliberate: a swap whose old
+ * process is still holding the port serves the OLD id, which is indistinguishable
+ * at t=0 from a new process that has not finished booting.
+ */
+export async function readyObservation({ target, config, expected, previous, say = () => {}, readyMs = config?.proveReadyMs ?? 15_000, now = () => Date.now(), sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+  const deadline = now() + Math.max(0, readyMs)
+  let last = { expected, previous, observed: "" }
+  let waited = false
+  for (let attempt = 1; ; attempt++) {
+    try {
+      last = await target.proof({ base: config.base, expected, previous })
+      if (deployProof(last).ok) {
+        if (waited) say("ok", `the service answered after ${attempt} attempts`)
+        return last
+      }
+    } catch (err) {
+      // Keep the reason: if the deadline passes, this is what the operator needs.
+      last = { expected, previous, observed: "", unreachable: err.message }
+    }
+    if (now() >= deadline) {
+      if (waited) say("warn", `waited ${Math.round(readyMs / 1000)}s for the service and it never served ${expected}`)
+      return last
+    }
+    if (!waited) { waited = true; say("warn", `the service is not answering with ${expected} yet — waiting up to ${Math.round(readyMs / 1000)}s`) }
+    await sleep(250)
+  }
+}
+
 async function rollbackAndProve({ target, config, artifactId, previousId, say }) {
   try {
     await target.rollback()
