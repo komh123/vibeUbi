@@ -79,8 +79,15 @@ const server = createServer(async (req, res) => {
 
   const file = url.pathname === "/" ? "index.html" : url.pathname.replace(/^\/+/, "")
   try {
-    const body = await readFile(join(HERE, file))
+    let body = await readFile(join(HERE, file))
     const type = file.endsWith(".json") ? "application/json" : file.endsWith(".html") ? "text/html; charset=utf-8" : "text/plain"
+    // The page is authored WITHOUT a doctype so it can also be published as an
+    // artifact, where the host supplies one. Served raw from here the browser
+    // falls into quirks mode and lays the page out differently — which is a
+    // demo discovering, live, that the local copy is not the published one.
+    if (file.endsWith(".html") && !/^\s*<!doctype/i.test(body.toString("utf8", 0, 40))) {
+      body = Buffer.concat([Buffer.from("<!doctype html>\n"), body])
+    }
     res.writeHead(200, { "content-type": type }); res.end(body)
   } catch {
     res.writeHead(404); res.end("not found")

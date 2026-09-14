@@ -103,3 +103,42 @@ polylines of three points on a 24×24 grid, so any glyph morphs into any other;
 joins go round while moving and back to **miter at rest**, so corners stay sharp
 when nothing is happening. Log lines arrive with weight — a spring settle, not a
 fade. `prefers-reduced-motion` turns all of it off and the page still works.
+
+## DOM verification
+
+The console is checked in a real browser, not by eye. What is asserted:
+
+| | |
+|---|---|
+| at rest | 22 nodes, verdict banner hidden, log seeded |
+| refused replay | rail ends `verify:pass build:pass swap:pass prove:pass sweep:fail gate:fail report:pass` |
+| shipped replay | all seven `pass`, verdict `clean` |
+| expand | clicking an area goes 22 → 47 nodes, inspector lists 25 routes |
+| filter | `ungated` dims exactly the gated areas |
+| zoom / reset | transform changes, reset returns `translate(0 0) scale(1)` |
+| theme | toggle stamps `data-theme` and the body background actually changes |
+| tokens | every colour token resolves — none empty |
+| **labels** | **measured with `getBBox()`**: zero overlaps between an area name and its count |
+| console | zero messages |
+| layout | `document.compatMode === "CSS1Compat"`, no horizontal scroll |
+
+Three real defects came out of doing this rather than looking at it:
+
+1. **A tick appeared on a step that failed.** The summary line
+   `ROLLED BACK  1 P0 failure(s)` matched the same pattern as the failure line
+   before it — but without the `✗` — so it reset sweep and gate to `pass`, and
+   a rolled-back run ended showing green. Step verdicts are now **monotonic**:
+   once failed, nothing later may turn it into a tick. Same shape as
+   `verdictFor` filtering rather than counting.
+2. **`verify` never resolved.** Its completion test looked for the word
+   "verify" in a line that does not contain it (`✓ all 2 layer(s) can run`).
+   It sat on `run` forever and nobody noticed by looking.
+3. **Overlapping text.** `claude-remote` ran straight through `10/10 open`.
+   Labels are now truncated to what actually fits beside the count. In a
+   picture whose entire claim is that it can be checked, two strings on top of
+   each other is not a style nit.
+
+Also: the page is authored without a doctype so it can be published as an
+artifact (the host supplies one). Served raw, the browser fell into quirks mode
+— a demo would have discovered live that the local copy lays out differently
+from the published one. `server.mjs` now prepends it.
