@@ -185,11 +185,11 @@ button.chip[aria-pressed="true"]{background:var(--teal-dim);border-color:var(--t
       </div>
     </div>
     <div class="ctl">
-      <button class="go" id="run">
+      <button class="go" id="run" title="Replays the run that shipped — or, when this page is served by apps/console/server.mjs, spawns the real CLI.">
         <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5 L19 12 L8 19 Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></svg>
         Run the gate
       </button>
-      <button id="runbad">Replay the run it blocked</button>
+      <button id="runbad" title="Replays a real run from earlier today: a P0 landed during the sweep, the gate rolled the deploy back, and then proved the old build was serving again.">Replay a blocked deploy</button>
       <button class="ghost" id="reset" title="Reset view">⤾</button>
       <button class="ghost" id="theme" aria-label="Toggle theme">◐</button>
     </div>
@@ -887,7 +887,9 @@ $("#runbad").onclick = () => run("rolledback")
 $("#sub").textContent = `${D.meta.project} · scanned ${D.meta.at.slice(0,10)} · grade ${D.meta.grade.grade}`
 buildRail(); render()
 say("ready — 66 routes and 7 pages discovered, nothing declared by hand", "head")
-say("Run the gate replays a REAL ship that succeeded; the other replays one that rolled back.")
+say("Two buttons, two real runs — the logs below are their actual stdout, not a mock-up.")
+say("  Run the gate         → the run that SHIPPED (0 P0, deploy proved from outside)")
+say("  Replay a blocked deploy → an earlier run: P0 during the sweep, rolled back, rollback proved")
 say("Both were confirmed afterwards with curl against /api/version.")
 $("#theme").onclick = () => {
   const r = document.documentElement
