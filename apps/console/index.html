@@ -172,40 +172,55 @@ button.chip[aria-pressed="true"]{background:var(--teal-dim);border-color:var(--t
 .foot b{color:var(--ink-2);font-weight:400}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 
-/* ── the app preview: what the running service is actually serving ── */
+/* ── the app preview, at the top ──────────────────────────────────────
+   The first thing this page shows is the thing being deployed. A wide band,
+   not a sidebar: the screenshot is 1905px of page, and squeezed into a narrow
+   column the one legible difference between two builds disappeared. */
 .side{display:flex;flex-direction:column;gap:1rem;min-width:0}
+.topapp{margin-bottom:1rem}
+.topapp .ph{flex-wrap:nowrap;gap:.8rem}
+.buildnow{font-family:"JetBrains Mono",monospace;font-size:.68rem;color:var(--ink-2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:28ch}
 .appbox{min-width:0;overflow:hidden}
-.appbox .shot{background:var(--void);border-bottom:1px solid var(--line);padding:.5rem;min-width:0}
-.appbox img{display:block;width:100%;max-width:100%;height:auto;border-radius:2px;
-  border:1px solid var(--line-2);transition:opacity .28s var(--ease),filter .28s var(--ease)}
+.appsplit{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1fr);align-items:stretch}
+@media(max-width:820px){.appsplit{grid-template-columns:1fr}}
+.appbox .shot{background:var(--void);padding:.6rem;min-width:0;display:flex;align-items:center;justify-content:center}
+.appbox .shot img{display:block;max-width:100%;max-height:320px;width:auto;height:auto;border-radius:2px;
+  border:1px solid var(--line-2);object-fit:contain;
+  transition:opacity .28s var(--ease),filter .28s var(--ease)}
 .appbox img.swapping{opacity:.22;filter:grayscale(1)}
+.appside{border-left:1px solid var(--line);display:flex;flex-direction:column;min-width:0;justify-content:flex-start;padding-top:.2rem}
+@media(max-width:820px){.appside{border-left:0;border-top:1px solid var(--line)}}
 .appbox.flash{animation:flash .9s var(--ease)}
 @keyframes flash{0%{box-shadow:inset 0 0 0 0 transparent}
   18%{box-shadow:inset 0 0 0 3px var(--bad)}100%{box-shadow:inset 0 0 0 0 transparent}}
 .appbox.flash-ok{animation:flashok .9s var(--ease)}
 @keyframes flashok{0%{box-shadow:inset 0 0 0 0 transparent}
   18%{box-shadow:inset 0 0 0 3px var(--ok)}100%{box-shadow:inset 0 0 0 0 transparent}}
-.buildline{border-bottom:1px solid var(--line);padding-top:.35rem;padding-bottom:.45rem}
-.buildline .meta{font-size:.7rem}
-@media(prefers-reduced-motion:reduce){.appbox.flash,.appbox.flash-ok{animation:none;outline:2px solid var(--bad)}}
-.shotnote{margin:0;padding:.55rem .8rem .75rem;font-size:.71rem;color:var(--ink-3);line-height:1.55}
+.shotnote{margin:0;padding:.55rem .95rem .95rem;font-size:.78rem;color:var(--ink-3);line-height:1.6}
 .shotnote b{color:var(--ink-2);font-weight:400}
 .shotnote code{font-family:"JetBrains Mono",monospace;font-size:.94em;background:var(--panel-2);padding:.04em .28em;border-radius:2px}
 .shotnote .same{color:var(--ok)}
+.evid{display:grid;grid-template-columns:auto 1fr;gap:.18rem .8rem;margin:.7rem .95rem .1rem;
+  font-family:"JetBrains Mono",monospace;font-size:.66rem;align-content:start}
+.evid dt{color:var(--ink-3);white-space:nowrap}
+.evid dd{margin:0;color:var(--ink-2);word-break:break-all}
+.evid dd.bad{color:var(--bad)}
+.evid dd.ok{color:var(--ok)}
 #appstate[data-s="rolled"]{color:var(--bad)}
 #appstate[data-s="new"]{color:var(--ok)}
 
-/* The badge is ~147x27 CSS px, inset 12px from the bottom-LEFT — unreadable at panel size. Crop to exactly that corner and
-   magnify. Bottom-LEFT because the PWA install banner owns the bottom-right —
-   the first version pointed at that corner and magnified an Install App
-   button. At scale S the image's own corner sits 12*S outside the window. */
-.zoomstrip{display:flex;flex-direction:column;gap:.3rem;padding:.5rem .8rem .1rem;border-top:1px dashed var(--line-2)}
-.zoomwin{width:100%;height:56px;overflow:hidden;border:1px solid var(--line-2);border-radius:2px;
-  background:var(--void);flex:none;position:relative}
-.zoomwin img{position:absolute;left:-19px;bottom:-19px;width:auto;max-width:none;height:auto;
-  transform:scale(1.55);transform-origin:bottom left;border:0;border-radius:0}
+/* The badge is ~147x27 CSS px, inset 12px from the bottom-LEFT. Crop to that
+   corner and magnify — at page scale, the one thing that differs between two
+   builds is unreadable. */
+.zoomstrip{display:flex;flex-direction:column;gap:.3rem;padding:.8rem .95rem .2rem}
+.zoomwin{width:100%;height:74px;overflow:hidden;border:1px solid var(--line-2);border-radius:2px;
+  background:var(--void);position:relative}
+.zoomwin img{position:absolute;left:-24px;bottom:-24px;width:auto;max-width:none;max-height:none;height:auto;
+  transform:scale(2);transform-origin:bottom left;border:0;border-radius:0;object-fit:none}
 .zoomlabel{font-family:"JetBrains Mono",monospace;font-size:.58rem;color:var(--ink-3);line-height:1.5;letter-spacing:.04em}
 .zoomlabel span{color:var(--ink-2);word-break:break-all}
+@media(prefers-reduced-motion:reduce){.appbox.flash,.appbox.flash-ok{animation:none;outline:2px solid var(--bad)}}
 #appstate[data-s="rolled"]{color:var(--bad)}
 #appstate[data-s="new"]{color:var(--ok)}
 
@@ -234,6 +249,28 @@ button.chip[aria-pressed="true"]{background:var(--teal-dim);border-color:var(--t
     </div>
   </div>
 
+  <section class="panel appbox topapp">
+    <div class="ph">
+      <span>The app itself <span class="meta" id="appstate">serving</span></span>
+      <span class="ctl">
+        <span class="meta buildnow" id="appbuild"></span>
+        <button class="chip" id="ab-broken" aria-pressed="false" title="what shipped">broken</button>
+        <button class="chip" id="ab-good" aria-pressed="true" title="what the gate put back">good</button>
+      </span>
+    </div>
+    <div class="appsplit">
+      <div class="shot"><img id="appshot" alt="the system-monitor login page as the running service is serving it"></div>
+      <div class="appside">
+        <div class="zoomstrip" title="the bottom-left corner of that page, magnified">
+          <div class="zoomwin"><img id="appzoom" alt="the bottom-left corner of that page, magnified"></div>
+          <div class="zoomlabel">bottom-left of that page, magnified — <span id="zoomcap"></span></div>
+        </div>
+        <dl class="evid" id="evid"></dl>
+        <p class="shotnote" id="shotnote"></p>
+      </div>
+    </div>
+  </section>
+
   <div class="rail" id="rail"></div>
 
   <div class="main">
@@ -259,22 +296,6 @@ button.chip[aria-pressed="true"]{background:var(--teal-dim);border-color:var(--t
     </section>
 
     <aside class="side">
-    <section class="panel appbox">
-      <div class="ph">
-        <span>The app itself <span class="meta" id="appstate">serving</span></span>
-        <span class="ctl">
-          <button class="chip" id="ab-broken" aria-pressed="false" title="what shipped">broken</button>
-          <button class="chip" id="ab-good" aria-pressed="true" title="what the gate put back">good</button>
-        </span>
-      </div>
-      <div class="ph buildline"><span class="meta" id="appbuild"></span></div>
-      <div class="shot"><img id="appshot" alt="the system-monitor login page as the running service is serving it right now"></div>
-      <div class="zoomstrip" title="the build badge, magnified — this is the part that changes">
-        <div class="zoomwin"><img id="appzoom" alt="the build badge on that page, magnified"></div>
-        <div class="zoomlabel">bottom-left of that page, magnified — <span id="zoomcap"></span></div>
-      </div>
-      <p class="shotnote" id="shotnote"></p>
-    </section>
     <section class="panel">
       <div class="ph"><span>Inspector</span><span class="meta" id="imeta"></span></div>
       <div class="insp" id="insp"><div class="empty">Click any node in the graph.<br><br>Or press <b>Run the gate</b> — every node is checked live, and the two that fail are marked as they are judged, not at the end.</div></div>
@@ -789,6 +810,16 @@ function showApp(which) {
     $("#appbuild").textContent = build
     $("#appstate").textContent = broken ? "BROKEN" : "serving"
     $("#appstate").dataset.s = broken ? "rolled" : ""
+    // The evidence for THIS state, from the run that produced it — not filler.
+    const rows = broken
+      ? [["document", ["200", "ok"]], ["/api/version", [D.app.builds.broken, "ok"]],
+         ["script", ["200 · text/html", "bad"]], ["stylesheet", ["200 · text/html", "bad"]],
+         ["page", ["never mounted", "bad"]], ["unit tests", ["57 passing", "ok"]]]
+      : [["document", ["200", "ok"]], ["/api/version", [D.app.builds.good, "ok"]],
+         ["assets", ["8 referenced, all resolve", "ok"]], ["script", ["200 · text/javascript", "ok"]],
+         ["page", ["mounted", "ok"]], ["gate", ["no failures", "ok"]]]
+    $("#evid").innerHTML = rows.map(([k, [v, tone]]) =>
+      `<dt>${k}</dt><dd class="${tone}">${v}</dd>`).join("")
     $("#shotnote").innerHTML = broken
       ? `This is what shipped. The document answered <b>200</b>, <code>/api/version</code> answered with the
          new artifact, and <b>every script came back 200 with <code>content-type: text/html</code></b> — the
