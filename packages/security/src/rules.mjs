@@ -388,6 +388,84 @@ export function s3Cors({ url, origin, allowOrigin, allowCredentials }) {
   return dedupe(out)
 }
 
+/**
+ * The page returns 200 and every asset it references is a 404.
+ *
+ * A documented failure mode, not a hypothetical: a build written to the wrong
+ * output directory emptied the live static folder, the home page kept
+ * answering 200, and every chunk 500'd. `deployProof` passes — the served HTML
+ * carries the new artifact id — and the site is blank.
+ *
+ * This is the cheapest check that catches it: read the HTML the deploy is
+ * actually serving, take every script/link/img it references, and fetch them.
+ * A page whose own assets do not resolve has not deployed, whatever the
+ * status line says.
+ *
+ * P0 by nature. There is no version of "some of the JavaScript is missing"
+ * that is a non-blocking finding.
+ */
+const EXPECTED_TYPE = {
+  script: /javascript|ecmascript|application\/json/i,
+  stylesheet: /text\/css/i,
+  image: /^image\//i,
+}
+
+export function s2Assets({ url, html, assets }) {
+  const out = []
+  if (assets.length === 0 && /<script|<link/i.test(html)) {
+    out.push(f("L2.assets.unchecked", "high", url, "the page references assets and none were fetched", "",
+      "an unchecked reference is not a passing one"))
+  }
+  for (const a of assets) {
+    if (a.status >= 400) {
+      out.push(f(a.status >= 500 ? "L2.assets.server_error" : "L2.assets.missing", "critical", `${url} → ${a.href}`,
+        `the page references ${a.href} and it answers ${a.status}`, String(a.status),
+        "the page is serving, and the code it needs to run is not. 200 on the document says nothing about this."))
+      continue
+    }
+    /**
+     * A 200 is not enough, and this is the version that actually happens.
+     *
+     * An SPA fallback answers ANY unmatched path with index.html — so a wrong
+     * `base`, or a chunk that never got written, comes back 200 with
+     * `content-type: text/html`. The browser is handed HTML where it expected
+     * JavaScript, the script never executes, and the page sits on its loading
+     * text forever.
+     *
+     * Observed exactly that: document 200, script 200, type text/html, page
+     * blank. A status-code check passes it. This is the same shape as every
+     * other rule in this project — the absence of bad news is not good news.
+     */
+    const want = EXPECTED_TYPE[a.kind]
+    if (want && a.type && !want.test(a.type)) {
+      out.push(f("L2.assets.wrong_type", "critical", `${url} → ${a.href}`,
+        `${a.kind} ${a.href} answered 200 with content-type ${a.type.split(";")[0]}`,
+        a.type.split(";")[0],
+        "almost certainly the SPA fallback answering for a file that is not there. The status line says 200 and the browser gets HTML where it expected code."))
+    }
+  }
+  return dedupe(out)
+}
+
+/** Every src/href the document actually depends on to render. */
+export function referencedAssets(html) {
+  const out = new Map()
+  for (const m of String(html).matchAll(/<(script|link|img)\b([^>]*?)>/gi)) {
+    const [tag, attrs] = [m[1].toLowerCase(), m[2]]
+    const href = /\b(?:src|href)=["']([^"']+)["']/i.exec(attrs)?.[1]
+    if (!href) continue
+    if (/^(?:https?:)?\/\//.test(href) || href.startsWith("data:") || href.startsWith("#")) continue
+    const rel = /\brel=["']?([\w-]+)/i.exec(attrs)?.[1]?.toLowerCase()
+    if (tag === "link" && !["stylesheet", "icon", "apple-touch-icon", "manifest"].includes(rel ?? "")) continue
+    const kind = tag === "script" ? "script"
+      : tag === "img" ? "image"
+      : rel === "stylesheet" ? "stylesheet"
+      : "other"
+    out.set(href.startsWith("/") ? href : "/" + href, kind)
+  }
+  return [...out.entries()].map(([href, kind]) => ({ href, kind }))
+}
+
 /* ══════════════════ S4 · exposure map ══════════════════ */
 
 /**

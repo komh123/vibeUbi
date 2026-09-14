@@ -40,7 +40,7 @@ export default {
   verify: [
     { name: "unit", cmd: "npx vitest run --reporter=basic", expectsTests: true },
   ],
-  layers: ["S0", "S2"],
+  layers: ["S0", "S2", "L2"],
 
   declared: [
     {"id":"api:/api/metrics","area":"metrics","kind":"api","priority":"P2","requiredRole":"user","source":"server/index.js"},

@@ -73,6 +73,32 @@ export async function runScan({ root, config = {}, layers, base = "", discovered
     else findings.push(...(await dast(base, discovered, config)))
   }
 
+  /* ── L2 · does the page it is serving actually have its own code? ── */
+  if (layers.includes("L2")) {
+    if (!base) skipped.push("L2 assets — needs --base <url>")
+    else {
+      try {
+        const res = await fetch(base.replace(/\/+$/, "") + (config.probePath ?? "/"), { redirect: "follow" })
+        const html = await res.text()
+        const refs = rules.referencedAssets(html)
+        const assets = []
+        for (const { href, kind } of refs.slice(0, 60)) {
+          try {
+            const r = await fetch(base.replace(/\/+$/, "") + href, { method: "GET", signal: AbortSignal.timeout(8000) })
+            assets.push({ href, kind, status: r.status, type: r.headers.get("content-type") })
+          } catch {
+            // Unreachable is not "fine". Recorded as a failure so the rule sees it.
+            assets.push({ href, kind, status: 599, type: null })
+          }
+        }
+        note(`${assets.length} referenced asset(s) fetched`)
+        findings.push(...rules.s2Assets({ url: base, html, assets }))
+      } catch (err) {
+        skipped.push(`L2 assets — could not read the page: ${err.message}`)
+      }
+    }
+  }
+
   /* ── S4 ── */
   if (layers.includes("S4")) {
     const live = await collect.listeners(root)

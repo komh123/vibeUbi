@@ -182,3 +182,56 @@ test("a template that never closes is reported, not cleared", () => {
 test("innerHTML from a variable is still reported", () => {
   assert.equal(s2Sinks({ files: [file("x.js", ["el.innerHTML = userHtml;"])] }).length, 1)
 })
+
+test("a page whose own assets 404 has not deployed, whatever the status line says", async () => {
+  const { s2Assets, referencedAssets } = await import("../src/rules.mjs")
+  const html = '<div id="root"></div><script src="/assets/index-abc.js"></script><link rel="stylesheet" href="/assets/index-abc.css">'
+  const refs = referencedAssets(html)
+  assert.deepEqual(refs, [{ href: "/assets/index-abc.js", kind: "script" }, { href: "/assets/index-abc.css", kind: "stylesheet" }])
+
+  const broken = s2Assets({ url: "http://x/", html, assets: refs.map((r) => ({ ...r, status: 404 })) })
+  assert.equal(broken.length, 2)
+  assert.ok(broken.every((b) => b.severity === "critical"))
+
+  const ok = s2Assets({ url: "http://x/", html,
+    assets: [{ href: "/assets/index-abc.js", kind: "script", status: 200, type: "text/javascript" },
+             { href: "/assets/index-abc.css", kind: "stylesheet", status: 200, type: "text/css" }] })
+  assert.equal(ok.length, 0)
+})
+
+test("REGRESSION: 200 with the wrong content-type is the failure that actually happens", async () => {
+  const { s2Assets } = await import("../src/rules.mjs")
+  // Observed live: a wrong vite `base` made index.html reference /static/assets/…,
+  // the SPA fallback answered every one of them 200 with text/html, and the page
+  // sat on "Loading System Monitor…" forever. A status-code check passes this.
+  const r = s2Assets({ url: "http://x/", html: '<script src="/static/assets/index-abc.js"></script>',
+    assets: [{ href: "/static/assets/index-abc.js", kind: "script", status: 200, type: "text/html; charset=UTF-8" }] })
+  assert.equal(r.length, 1)
+  assert.equal(r[0].rule, "L2.assets.wrong_type")
+  assert.equal(r[0].severity, "critical")
+  assert.match(r[0].why, /SPA fallback/)
+})
+
+test("referencedAssets classifies what each reference is for", async () => {
+  const { referencedAssets } = await import("../src/rules.mjs")
+  const html = [
+    '<link rel="preconnect" href="/nope">',
+    '<link rel="stylesheet" href="/a.css">',
+    '<link rel="icon" href="/i.png">',
+    '<script src="https://cdn.example/x.js"></script>',
+    '<script src="/app.js"></script>',
+    '<img src="/p.png">',
+  ].join("")
+  assert.deepEqual(referencedAssets(html), [
+    { href: "/a.css", kind: "stylesheet" },
+    { href: "/i.png", kind: "other" },
+    { href: "/app.js", kind: "script" },
+    { href: "/p.png", kind: "image" },
+  ])
+})
+
+test("assets referenced but never fetched is itself a finding", async () => {
+  const { s2Assets } = await import("../src/rules.mjs")
+  const r = s2Assets({ url: "http://x/", html: '<script src="/a.js"></script>', assets: [] })
+  assert.equal(r[0].rule, "L2.assets.unchecked")
+})

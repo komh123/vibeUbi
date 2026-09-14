@@ -153,3 +153,49 @@ asserts on its value, not on the absence of an exception.
 - OWASP Top 10 for LLM Applications 2026
 - CVE-2025-32711 (EchoLeak) · CVE-2025-54136 (MCPoison) · postmark-mcp backdoor
 - Veracode, *GenAI Code Security* 2026 · CSA, *AI-Generated Code Vulnerability Surge* 2026
+
+## L2 — the page is serving, and its own code is not
+
+A layer that exists because of a documented outage: a build written to the
+wrong output directory emptied the live static folder, the home page kept
+answering **200**, and every chunk 500'd.
+
+`deployProof` passes that. The served document carries the new artifact id, so
+the deploy genuinely *took* — it was a successful deploy of a broken build, and
+those are two different things.
+
+```
+L2.assets.missing       a referenced file answers 4xx
+L2.assets.server_error  a referenced file answers 5xx
+L2.assets.wrong_type    a referenced file answers 200 with the wrong content type
+L2.assets.unchecked     the page references assets and none were fetched
+```
+
+All CRITICAL. There is no version of "some of the JavaScript is missing" that
+is a non-blocking finding.
+
+### The one that actually happens
+
+`wrong_type` was added after watching a status-code check pass a completely
+dead page.
+
+A wrong `base` in the bundler config makes `index.html` reference
+`/static/assets/index-abc.js`. The server has no such file — but it is an SPA,
+so its fallback answers **any** unmatched path with `index.html`. The script
+tag gets **200**, `content-type: text/html`. The browser is handed HTML where
+it expected JavaScript, nothing executes, and the page sits on its loading text
+forever.
+
+Measured on a real deploy:
+
+```
+/login                          200
+/api/version                    200  → the NEW artifact id
+/static/assets/index-C60AaLn7.js 200  → content-type: text/html
+page                            "Loading System Monitor…", forever
+57 unit tests                   all passing
+```
+
+Every signal said fine. So the rule compares the content type against what the
+reference is *for* — a `<script src>` must come back as JavaScript, a
+stylesheet as CSS. The status line is not the evidence; it never was.
