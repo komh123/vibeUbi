@@ -179,3 +179,35 @@ export function textRuleFitness({ hits, name = "rule" }) {
       `into the baseline is how non-problems get signed for as real debt. Give it a lexer before it gates anything.`,
   }
 }
+
+/**
+ * Is every field the registry declares actually READ by something?
+ *
+ * The defect this project is named after, turned on the project itself: the
+ * gate's cell builder derived every priority from a finding's severity and
+ * never looked at the `priority` the registry declared. `adopt` had marked 34
+ * routes P0; the gate saw 34 P1s and shipped over them.
+ *
+ * A declared field nobody consumes is worse than a missing one. A missing
+ * field is an error somebody fixes. A field that is written, reviewed, and
+ * ignored looks like a control and is a decoration — and everyone downstream
+ * believes it is doing something.
+ *
+ * @param {readonly object[]} declared   the registry entries
+ * @param {readonly string[]} readFields fields the pipeline actually consumes
+ */
+export function declaredFieldsAreRead(declared, readFields) {
+  const present = new Set()
+  for (const d of declared) for (const k of Object.keys(d)) present.add(k)
+  const read = new Set(readFields)
+  const unread = [...present].filter((k) => !read.has(k) && !k.startsWith("_"))
+  if (unread.length === 0) return { ok: true }
+  return {
+    ok: false,
+    unread,
+    reason:
+      `these declared field(s) are read by nothing: ${unread.join(", ")}. ` +
+      `A field that is written, reviewed and then ignored looks like a control and is a decoration — ` +
+      `and everyone downstream believes it is doing something.`,
+  }
+}

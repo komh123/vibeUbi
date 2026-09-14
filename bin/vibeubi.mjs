@@ -258,10 +258,27 @@ const COMMANDS = {
       async *sweep({ root, base, discovered }) {
         const { runScan } = await import("../packages/security/src/run.mjs")
         const r = await runScan({ root, config, layers: config.layers ?? ["S0", "S2", "S4"], base, discovered, note: () => {} })
+
+        /**
+         * The DECLARED priority wins over the one derived from severity.
+         *
+         * Getting this backwards is how a ship went green over 61 routes with
+         * no auth: every `S2.route.ungated` is severity `high`, high mapped to
+         * P1, and P1 does not block. Meanwhile `adopt` had already declared 34
+         * of those same routes P0 — and the gate never read the field.
+         *
+         * "Declared but never read" is the defect class this whole project is
+         * about, and it was sitting in the gate's own cell builder.
+         */
+        const declaredPriority = new Map((config.declared ?? []).map((d) => [d.id, d.priority]).filter(([, p]) => p))
+        const fromSeverity = (sev) => (sev === "critical" ? "P0" : sev === "high" ? "P1" : "P2")
+
         for (const f of r.findings) {
+          const declared = declaredPriority.get(f.where)
           yield {
             feature: f.where, layer: f.rule.split(".")[0], reason: f.title,
-            priority: f.severity === "critical" ? "P0" : f.severity === "high" ? "P1" : "P2",
+            priority: declared ?? fromSeverity(f.severity),
+            priorityFrom: declared ? "declared" : "severity",
             status: config.baseline?.some((b) => b.fingerprint === f.fingerprint) ? "pass" : "fail",
           }
         }

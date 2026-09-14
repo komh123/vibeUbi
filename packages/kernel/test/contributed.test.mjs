@@ -7,7 +7,7 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import {
   budgetVerdict, vacuousComparison, MIN_BUDGET_MS,
-  baselineAdmission, exemptionScope, checkAssertsOnBehaviour, sourceScanHit, textRuleFitness,
+  baselineAdmission, exemptionScope, checkAssertsOnBehaviour, sourceScanHit, textRuleFitness, declaredFieldsAreRead,
 } from "../src/index.mjs"
 
 const MIN = 60_000
@@ -168,4 +168,16 @@ test("a low-precision text rule may not gate anything", () => {
 test("a precise rule passes", () => {
   const hits = [...Array(19).fill({ matchedIn: "call-expression" }), { matchedIn: "comment" }]
   assert.equal(textRuleFitness({ hits }).ok, true)
+})
+
+test("a declared field nobody reads is a decoration wearing a control's clothes", () => {
+  // The real one: `priority` was declared on 34 routes by adopt, and the
+  // gate's cell builder derived priority from severity instead — so a ship
+  // went green over 61 routes with no auth.
+  const declared = [{ id: "api:/x", area: "a", priority: "P0", testId: "t" }]
+  const bad = declaredFieldsAreRead(declared, ["id", "area", "testId"])
+  assert.equal(bad.ok, false)
+  assert.deepEqual(bad.unread, ["priority"])
+  assert.match(bad.reason, /read by nothing/)
+  assert.equal(declaredFieldsAreRead(declared, ["id", "area", "priority", "testId"]).ok, true)
 })

@@ -133,3 +133,37 @@ lexically-wrong match must be fixed with a lexer, *never* by baselining it;
 text rule is the main thing that generates pressure to sign for non-problems as
 real debt, so the rule that produces the noise and the rule that would absorb it
 have to agree.
+
+## The gate's own "declared but never read"
+
+The most instructive bug in this repo was in the gate's cell builder.
+
+`adopt` declared 34 routes **P0**, including `POST /api/processes/:pid/kill`.
+The sweep then built its cells like this:
+
+```js
+priority: f.severity === "critical" ? "P0" : f.severity === "high" ? "P1" : "P2"
+```
+
+Every `S2.route.ungated` is severity `high`. High mapped to P1. P1 does not
+block. So a ship went **green over 61 routes with no authentication**, and the
+report read `70 non-P0 failure(s), reported not blocking` — which was true, and
+completely misleading.
+
+The `priority` field was written by adopt, reviewed by a human, stored in the
+registry, and **read by nothing**.
+
+That is the defect this whole project is named after, sitting inside the gate.
+A missing field is an error somebody fixes; a field that is written, reviewed
+and ignored *looks like a control* and is a decoration — and everyone
+downstream believes it is doing something.
+
+Fixed two ways, because one of them would have been a patch:
+
+1. the cell builder now reads the declared priority and falls back to severity
+   only when nothing is declared, recording which it used (`priorityFrom`);
+2. `declaredFieldsAreRead()` generalises it — given the registry entries and
+   the list of fields the pipeline consumes, it names any field nobody reads.
+
+With the fix, the same command on the same tree blocks on the process-kill
+endpoint and proves the rollback.

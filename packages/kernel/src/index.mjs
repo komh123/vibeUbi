@@ -16,5 +16,5 @@ export { grade, score, baselineDiff, atOrAbove, debtAge, SEVERITIES, DEFAULT_FAI
 export { rosterVerdict, rosterDrift, toolFingerprint, toolKey, shadowedTools, poisonFindings, patternsAreEscapeOnly, POISON_PATTERNS } from "./roster.mjs"
 export { orphanVerdict, requiresHuman, NARROWING_ACTIONS } from "./orphan.mjs"
 export { budgetVerdict, vacuousComparison, MIN_BUDGET_MS, MIN_FACTOR, MAX_FACTOR } from "./budget.mjs"
-export { baselineAdmission, exemptionScope, checkAssertsOnBehaviour, sourceScanHit, textRuleFitness, NON_CODE_REGIONS } from "./admission.mjs"
+export { baselineAdmission, exemptionScope, checkAssertsOnBehaviour, sourceScanHit, textRuleFitness, declaredFieldsAreRead, NON_CODE_REGIONS } from "./admission.mjs"
 export { createContext, applyAll, capabilityCells } from "./plugin.mjs"
