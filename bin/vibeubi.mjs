@@ -183,6 +183,129 @@ const COMMANDS = {
     process.exit(r.blocking.length > 0 ? 1 : 0)
   },
 
+  async adopt() {
+    const { config, ctx } = await boot()
+    const { adopt, writeDeclared } = await import("../packages/registry/src/adopt.mjs")
+    const { orphanVerdict, requiresHuman } = await import("../packages/kernel/src/index.mjs")
+
+    const discovered = await discoverAll(ctx)
+    const v = orphanVerdict(discovered, config.declared ?? [], config.ignored ?? [])
+    say(`\n${C.bold}ubi adopt${C.off} ${C.dim}${ROOT}${C.off}\n`)
+
+    if (v.orphans.length === 0) { ok("nothing to adopt — everything discovered is claimed"); return }
+
+    const only = val("only", "")
+    const wanted = only.startsWith("area=")
+      ? v.orphans.filter((o) => o.id.includes(only.slice(5)))
+      : v.orphans
+
+    const r = adopt({ orphans: wanted, prefix: config.testIdPrefix ?? "app", intents: config.intents ?? {} })
+
+    ok(`${r.summary.adopted} orphan(s) claimed`)
+    note(`priority  ${Object.entries(r.summary.byPriority).map(([k, n]) => `${k}:${n}`).join("  ")}`)
+    note(`areas     ${Object.keys(r.summary.byArea).length}`)
+
+    if (r.proposals.length) {
+      say(`\n${C.bold}${C.yellow}needs a human — ${r.proposals.length} proposal(s)${C.off}`)
+      say(`${C.dim}These NARROW what gets checked or need a code change. adopt refuses to do either.${C.off}`)
+      const gates = r.proposals.filter((p) => p.kind === "gate")
+      const pub = r.proposals.filter((p) => p.kind === "publicApi")
+      if (gates.length) {
+        say(`\n  ${C.red}${gates.length} route(s) that WRITE with no auth check${C.off}`)
+        for (const g of gates.slice(0, 6)) say(`     ${g.id}  ${C.dim}${g.suggestion}${C.off}`)
+        if (gates.length > 6) note(`…and ${gates.length - 6} more`)
+        say(`  ${C.dim}Adopting these did not gate them. Only wiring your guard does.${C.off}`)
+      }
+      if (pub.length) {
+        say(`\n  ${C.yellow}${pub.length} route(s) that MIGHT be deliberately public${C.off}`)
+        for (const p of pub.slice(0, 6)) say(`     ${p.id}`)
+        say(`  ${C.dim}\`ubi public <id> --reason "…"\` — and ${requiresHuman("public") ? "that one is yours to approve, not mine" : ""}${C.off}`)
+      }
+    }
+
+    const target = val("config", "") ? resolve(val("config", "")) : join(ROOT, "vibeubi.config.mjs")
+    if (flag("dry-run")) { say(`\n${C.dim}--dry-run: nothing written. Target would be ${target}${C.off}\n`); return }
+
+    const before = await readFile(target, "utf8")
+    const merged = [...(config.declared ?? []), ...r.declared]
+    await writeFile(target, writeDeclared(before, merged), "utf8")
+    say("")
+    ok(`wrote ${merged.length} declaration(s) into ${relativeish(target)}`)
+
+    const review = join(ROOT, ".vibeubi", "adopt-proposals.json")
+    await mkdir(join(ROOT, ".vibeubi"), { recursive: true })
+    await writeFile(review, JSON.stringify(r.proposals, null, 2))
+    if (r.proposals.length) note(`proposals for a human: ${relativeish(review)}`)
+    say(`\n${C.dim}next:  ubi orphans   →  should now be clean${C.off}\n`)
+  },
+
+  async ship() {
+    const { config, ctx } = await boot()
+    const { ship, SHIP_STEPS } = await import("../packages/ship/src/run.mjs")
+    const target = ctx.__registry.target
+    if (!target) { bad("no deploy target registered — no adapter claimed one"); process.exit(2) }
+
+    const discovered = await discoverAll(ctx)
+    const base = val("base", config.base ?? "")
+    say(`\n${C.bold}ubi ship${C.off} ${C.dim}${ROOT}${base ? " → " + base : ""}${C.off}\n`)
+
+    const shipCfg = {
+      ...config, base,
+      verify: config.verify ?? [],
+      layers: config.layers ?? ["S0", "S2", "S4"],
+      /** The sweep, as an async generator so the gate can judge each cell the
+       *  moment it is known rather than at the end. */
+      async *sweep({ root, base, discovered }) {
+        const { runScan } = await import("../packages/security/src/run.mjs")
+        const r = await runScan({ root, config, layers: config.layers ?? ["S0", "S2", "S4"], base, discovered, note: () => {} })
+        for (const f of r.findings) {
+          yield {
+            feature: f.where, layer: f.rule.split(".")[0], reason: f.title,
+            priority: f.severity === "critical" ? "P0" : f.severity === "high" ? "P1" : "P2",
+            status: config.baseline?.some((b) => b.fingerprint === f.fingerprint) ? "pass" : "fail",
+          }
+        }
+      },
+    }
+
+    const COL = { head: C.bold, ok: C.green, bad: C.red, warn: C.yellow, dim: C.dim }
+    let n = 0
+    const res = await ship({
+      root: ROOT, config: shipCfg, target, discovered,
+      emit: (e) => {
+        if (e.kind === "step") {
+          const s = SHIP_STEPS[e.n]
+          if (e.state === "run") return
+          const mark = e.state === "pass" ? `${C.green}✓${C.off}` : e.state === "fail" ? `${C.red}✗${C.off}` : `${C.dim}·${C.off}`
+          if (e.state === "unreached") say(`  ${C.dim}${mark} ${s.id} — NOT REACHED${C.off}`)
+        } else if (e.kind === "cell") { n++ }
+        else if (e.kind === "done") {
+          say(`\n  ${e.outcome === "shipped" ? C.green : C.red}${e.outcome.toUpperCase()}${C.off}  ${C.dim}${e.reason}${C.off}`)
+          note(`${n} cell(s) judged · ${(e.ms / 1000).toFixed(1)}s · ${relativeish(e.outDir)}`)
+        } else if (e.msg) {
+          say(`  ${COL[e.kind] ?? ""}${e.kind === "head" ? "" : e.kind === "ok" ? "✓ " : e.kind === "bad" ? "✗ " : "· "}${e.msg}${C.off}`)
+        }
+      },
+    })
+    process.exit(res.outcome === "shipped" ? 0 : 1)
+  },
+
+  async rollback() {
+    const { ctx, config } = await boot()
+    const target = ctx.__registry.target
+    if (!target?.rollback) { bad("this adapter cannot roll back"); process.exit(2) }
+    say(`\n${C.bold}ubi rollback${C.off}\n`)
+    const before = await target.artifactId?.().catch(() => null)
+    await target.rollback()
+    await target.restart?.()
+    const after = await target.artifactId?.().catch(() => null)
+    const { deployProof } = await import("../packages/kernel/src/index.mjs")
+    const observed = await target.proof({ base: val("base", config.base ?? ""), expected: after, previous: before })
+    const p = deployProof(observed)
+    p.ok ? ok(`the running service serves ${after} again — rollback PROVED`) : bad(`ROLLBACK UNPROVEN: ${p.reason}`)
+    process.exit(p.ok ? 0 : 1)
+  },
+
   async init() {
     const { probe, renderConfig } = await import("../packages/registry/src/probe.mjs")
     say(`\n${C.bold}ubi init${C.off} ${C.dim}${ROOT}${C.off}\n`)
@@ -257,10 +380,13 @@ ${C.bold}vibeubi${C.off} — the gate that remembers so you do not have to
 
   ${C.bold}plan${C.off}      print what a run would do; touch nothing
   ${C.bold}orphans${C.off}   list what was discovered and nobody claimed
-  ${C.bold}adopt${C.off}     write declarations for the orphans     ${C.dim}(agent skill)${C.off}
+
   ${C.bold}roster${C.off}    check the agent/MCP tool surface
   ${C.bold}viz${C.off}       export a diagram IR   --format ir|archify|mermaid
   ${C.bold}scan${C.off}      S0–S4 security layers  --layer S0,S1,S2,S4 [--base URL]
+  ${C.bold}adopt${C.off}     claim every orphan  [--dry-run] [--only area=x]
+  ${C.bold}ship${C.off}      verify → build → swap → prove → sweep → gate → report
+  ${C.bold}rollback${C.off}  put the previous build back, and prove it
   ${C.bold}init${C.off}      probe the project and write a config  [--dry-run] [--force]
   ${C.bold}guard${C.off}     --action <a>   refuse a narrowing action
 

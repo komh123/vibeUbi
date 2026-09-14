@@ -15,6 +15,7 @@
  *    is exactly the false positive `sourceScanHit` refuses.
  */
 import { readdir, readFile } from "node:fs/promises"
+import * as target from "./process-target.mjs"
 import { existsSync } from "node:fs"
 import { join, relative, sep, basename } from "node:path"
 
@@ -42,6 +43,8 @@ async function walk(dir, out = []) {
 }
 
 export function apply(ctx, config = {}) {
+  /** The id the current build stamped, before it has been swapped into place. */
+  let _pendingId = null
   const root = config.root ?? process.cwd()
   const entry = join(root, config.entry ?? "server/index.js")
   const routesDir = join(root, config.routesDir ?? "server/routes")
@@ -105,8 +108,58 @@ export function apply(ctx, config = {}) {
   })
 
   ctx.target({
-    /** Vite writes no build id, so the honest artifact id is the commit. */
+    /* ── the three that change things ─────────────────────────────────── */
+    async build() {
+      if (!config.buildCommand) return { skipped: "no buildCommand configured" }
+      const p = await target.build({ root, cmd: config.buildCommand, distDir: config.distDir ?? "dist" })
+      // Stamp the id INTO the artifact. Without this the served version number
+      // describes the working tree, and swapping the artifact back and forth
+      // leaves it unchanged — a proof that cannot tell a rollback from a no-op.
+      const { writeFile } = await import("node:fs/promises")
+      const { execFile } = await import("node:child_process")
+      const { promisify } = await import("node:util")
+      const run = promisify(execFile)
+      let commit = "nogit"
+      try { commit = (await run("git", ["-C", root, "rev-parse", "--short", "HEAD"])).stdout.trim() } catch { /* no git */ }
+      _pendingId = `${commit}-${Date.now()}`
+      await writeFile(join(p.next, "BUILD_ID"), _pendingId, "utf8")
+      return p
+    },
+    async swap() { return target.swap({ root, distDir: config.distDir ?? "dist" }) },
+    async rollback() { return target.rollback({ root, distDir: config.distDir ?? "dist" }) },
+    async restart() {
+      if (!config.startCommand) return { skipped: "no startCommand configured" }
+      return target.restart({ root, cmd: config.startCommand, env: config.env ?? {}, waitMs: config.startWaitMs ?? 1500 })
+    },
+    async stop() { return target.stop({ root }) },
+    swapPlan() { return target.swapMoves(target.distPaths(root, config.distDir ?? "dist")) },
+
+    /**
+     * What is the RUNNING service serving right now?
+     *
+     * Asked before the swap, from outside, for the same reason `proof` is:
+     * the id that matters for a rollback is the one the live process is
+     * actually serving, not the one a file on disk claims. Without it a
+     * rollback can move the files back and still not be provable — which is
+     * the state this adapter shipped in for one run.
+     */
+    async previousArtifactId({ base, fetchImpl = fetch } = {}) {
+      const url = base ?? config.base
+      if (!config.versionPath || !url) return null
+      try {
+        const res = await fetchImpl(`${url}${config.versionPath}`, { signal: AbortSignal.timeout(4000) })
+        const body = await res.text()
+        return JSON.parse(body).build ?? null
+      } catch { return null }   // nothing is running yet: a first deploy
+    },
+
+    /** The id this build stamped into its own artifact. */
     async artifactId() {
+      if (_pendingId) return _pendingId
+      try { return (await readFile(join(root, config.distDir ?? "dist", "BUILD_ID"), "utf8")).trim() } catch { return "" }
+    },
+
+    async _unusedArtifactId() {
       const { execFile } = await import("node:child_process")
       const { promisify } = await import("node:util")
       const run = promisify(execFile)

@@ -28,6 +28,23 @@ export function deployProof({ expected, previous, observed }) {
   if (typeof observed !== "string" || observed === "") {
     return { ok: false, reason: "nothing was observed from outside the deployment — the proof was never actually taken" }
   }
+  /**
+   * Same id on both sides: the check cannot fail, so it proves nothing.
+   *
+   * This is `vacuousComparison` in the shape it takes here. It happens for
+   * real whenever the artifact id is the git commit and nothing was committed
+   * between two deploys — the served page carries the expected id before the
+   * swap as happily as after it, and a green tick appears for a swap that may
+   * never have taken. Observed on the first end-to-end run of this pipeline.
+   */
+  if (previous && previous === expected) {
+    return {
+      ok: false,
+      reason:
+        `the new and previous artifacts have the same id (${expected}), so observing it proves nothing — ` +
+        `the service would serve that id whether or not the swap took. Commit, or use an artifact id that changes per build.`,
+    }
+  }
   if (observed.includes(expected)) return { ok: true, artifactId: expected }
   if (previous && observed.includes(previous)) {
     return {

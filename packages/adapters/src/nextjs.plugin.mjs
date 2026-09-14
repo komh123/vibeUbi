@@ -5,6 +5,7 @@
  * path, never throws into the host loop. Not configured → returns silently.
  */
 import { readdir, readFile } from "node:fs/promises"
+import * as target from "./process-target.mjs"
 import { join, relative, sep } from "node:path"
 
 export const name = "vibeubi-nextjs"
@@ -60,6 +61,22 @@ export function apply(ctx, config = {}) {
 
   // ── C · evidence ─────────────────────────────────────────────────────
   ctx.target({
+    async build() {
+      // Next reads its own env var for the output directory. Getting the NAME
+      // of that variable wrong once emptied a live `.next` while the home page
+      // still returned 200 — so it is spelled here, once, and nowhere else.
+      return target.build({ root, cmd: config.buildCommand ?? "npx next build",
+        distDir: config.distDir ?? ".next", env: { NEXT_DIST_DIR: `${config.distDir ?? ".next"}-new` } })
+    },
+    async swap() { return target.swap({ root, distDir: config.distDir ?? ".next" }) },
+    async rollback() { return target.rollback({ root, distDir: config.distDir ?? ".next" }) },
+    async restart() {
+      if (!config.startCommand) return { skipped: "no startCommand configured" }
+      return target.restart({ root, cmd: config.startCommand, env: config.env ?? {} })
+    },
+    async stop() { return target.stop({ root }) },
+    swapPlan() { return target.swapMoves(target.distPaths(root, config.distDir ?? ".next")) },
+
     /** Next stamps BUILD_ID into the asset paths of every served page — which
      *  is why a served page can carry the proof at all. */
     async artifactId({ distDir = ".next" } = {}) {

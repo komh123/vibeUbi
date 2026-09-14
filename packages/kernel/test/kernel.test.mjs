@@ -325,3 +325,12 @@ test("a plugin missing name or apply is rejected without crashing the loader", a
   assert.equal(r.loaded.length, 0)
   assert.equal(r.disabled.length, 2)
 })
+
+test("REGRESSION: same id on both sides proves nothing", () => {
+  // Real: the artifact id is the git commit, nothing was committed between two
+  // deploys, and the served page carried the expected id whether or not the
+  // swap took. A green tick for a swap that may never have happened.
+  const r = deployProof({ expected: "abc123", previous: "abc123", observed: "serving abc123" })
+  assert.equal(r.ok, false)
+  assert.match(r.reason, /proves nothing/)
+})
