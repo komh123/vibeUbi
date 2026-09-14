@@ -141,3 +141,14 @@ test("generated output is never scanned — a finding nobody can act on", async 
   assert.deepEqual(code.map((c) => c.path), ["app.js"])
   await rm(dir, { recursive: true, force: true })
 })
+
+test("a route mounted behind a guard is gated — the rule must not punish the better practice", () => {
+  // app.use('/api/chat', verifyToken, chatRoutes) guards all 28 routes behind
+  // it. Reporting them as ungated pushes people to put a guard on every route
+  // instead, which is exactly how the next route added starts out unguarded.
+  const mounted = [{ path: "/api/chat/sessions", methods: ["GET"], body: "res.json([])", mountedBehind: ["verifyToken"] }]
+  assert.equal(s2Routes({ routes: mounted, gateTokens: ["verifyToken"] }).length, 0)
+
+  const unmounted = [{ path: "/api/chat/sessions", methods: ["GET"], body: "res.json([])", mountedBehind: ["compression"] }]
+  assert.equal(s2Routes({ routes: unmounted, gateTokens: ["verifyToken"] })[0].rule, "S2.route.ungated")
+})

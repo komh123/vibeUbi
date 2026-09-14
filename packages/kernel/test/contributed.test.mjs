@@ -181,3 +181,33 @@ test("a declared field nobody reads is a decoration wearing a control's clothes"
   assert.match(bad.reason, /read by nothing/)
   assert.equal(declaredFieldsAreRead(declared, ["id", "area", "priority", "testId"]).ok, true)
 })
+
+test("a mount with middleware between the path and the router still resolves", async () => {
+  // Both halves of this were caused by adding a security guard:
+  //   app.use('/api/chat', verifyToken, chatRoutes)
+  //   import authRoutes, { verifyToken } from './routes/authRoutes.js'
+  // The discoverer understood only the shapes the codebase had BEFORE it was
+  // hardened, so 36 routes lost their prefix at the exact moment the hardening
+  // landed — and every one of them read as an orphan.
+  const MOUNT = /\bapp\.use\(\s*['"`]([^'"`]+)['"`]\s*,\s*([^)]+)\)/g
+  const IMPORT = /(?:import\s+(\w+)\s*(?:,\s*\{[^}]*\})?\s+from|const\s+(\w+)\s*=\s*require\()\s*['"`]([^'"`]+)['"`]/g
+
+  const src = [
+    "import authRoutes, { verifyToken } from './routes/authRoutes.js'",
+    "import chatRoutes from './routes/chatRoutes.js'",
+    "app.use('/api/auth', authRoutes)",
+    "app.use('/api/chat', verifyToken, chatRoutes)",
+  ].join("\n")
+
+  const imports = new Map()
+  for (const m of src.matchAll(IMPORT)) imports.set(m[1] ?? m[2], m[3])
+  assert.ok(imports.has("authRoutes"), "default binding beside a named one must still be seen")
+
+  const resolved = []
+  for (const m of src.matchAll(MOUNT)) {
+    const idents = m[2].split(",").map((x) => x.trim()).filter((x) => /^\w+$/.test(x))
+    const routers = idents.filter((id) => imports.has(id))
+    resolved.push([m[1], routers[routers.length - 1] ?? idents[idents.length - 1]])
+  }
+  assert.deepEqual(resolved, [["/api/auth", "authRoutes"], ["/api/chat", "chatRoutes"]])
+})

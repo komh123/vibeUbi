@@ -138,7 +138,14 @@ export function s2Routes({ routes, publicApi = [], gateTokens = [] }) {
   const allowed = new Map(publicApi.map((p) => [p.id, p.reason]))
   const out = []
   for (const r of routes) {
-    const gated = gateTokens.some((t) => (r.body ?? "").includes(t))
+    // Guarded in the handler, OR mounted behind a guard. The second was missed
+    // at first, so the moment this project did the RIGHT thing —
+    // `app.use('/api/chat', verifyToken, chatRoutes)` — all 28 routes behind
+    // that mount still read as ungated. A rule that punishes the better
+    // practice teaches the worse one.
+    const gatedInBody = gateTokens.some((t) => (r.body ?? "").includes(t))
+    const gatedAtMount = (r.mountedBehind ?? []).some((mw) => gateTokens.includes(mw))
+    const gated = gatedInBody || gatedAtMount
     const id = `api:${r.path}`
     if (gated) continue
     if (allowed.has(id)) {

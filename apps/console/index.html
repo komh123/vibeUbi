@@ -117,6 +117,47 @@ button.chip[aria-pressed="true"]{background:var(--teal-dim);border-color:var(--t
 .rlist a .s.open{color:var(--bad)}
 .rlist a .s.gated{color:var(--ok)}
 
+/* ── inspector: 判決與依據 ── */
+.pill{display:inline-flex;align-items:center;gap:.3em;font-family:"JetBrains Mono",monospace;font-size:.6rem;
+  letter-spacing:.06em;padding:.18em .45em;border-radius:2px;white-space:nowrap;vertical-align:2px}
+.pill em{font-style:normal;opacity:.72;font-size:.92em;padding-left:.15em;border-left:1px solid currentColor;margin-left:.1em}
+.pill.blocks{color:var(--bad);background:var(--bad-dim);font-weight:700}
+.pill.flagged{color:var(--warn);background:var(--warn-dim)}
+.pill.clean{color:var(--ok);background:var(--ok-dim)}
+.pill.idle{color:var(--ink-3);background:var(--quiet-dim)}
+.pill.p0{color:var(--bad);background:var(--bad-dim);font-weight:700}
+.pill.p1{color:var(--warn);background:var(--warn-dim)}
+.pill.p2{color:var(--ink-3);background:var(--quiet-dim)}
+.why{font-size:.79rem;color:var(--ink-2);line-height:1.55;margin:.55rem 0 .8rem;
+  padding-left:.6rem;border-left:2px solid var(--line-2)}
+.why b{color:var(--ink);font-weight:700}
+.why code{font-family:"JetBrains Mono",monospace;font-size:.88em;background:var(--panel-2);padding:.05em .3em;border-radius:2px}
+.tally{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;margin:.1rem 0 .7rem}
+.tallynote{font-family:"JetBrains Mono",monospace;font-size:.58rem;color:var(--ink-3);letter-spacing:.05em}
+.kv .from{color:var(--ink-3)}
+.fhead{font-family:"JetBrains Mono",monospace;font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);margin:.9rem 0 .45rem;border-top:1px solid var(--line);padding-top:.6rem}
+.fnd{border-left:2px solid var(--warn);padding:.35rem 0 .45rem .6rem;margin-bottom:.55rem}
+.fnd.critical{border-left-color:var(--bad)}
+.fnd.high{border-left-color:var(--warn)}
+.fnd.medium,.fnd.low{border-left-color:var(--line-2)}
+.fnd.acc{border-left-color:var(--ink-3);border-left-style:dashed}
+.fnd .r{font-family:"JetBrains Mono",monospace;font-size:.63rem;color:var(--warn);letter-spacing:.04em}
+.fnd.critical .r{color:var(--bad)}
+.fnd.acc .r{color:var(--ink-3)}
+.fnd .t{font-size:.78rem;color:var(--ink);margin-top:.1rem}
+.fnd .w{font-size:.73rem;color:var(--ink-3);margin-top:.2rem;line-height:1.5}
+.fnd .w.acc{color:var(--ink-2);font-style:italic}
+.rlist a .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rlist a .rt{display:flex;gap:.35rem;align-items:center;flex:none}
+.dot{width:8px;height:8px;border-radius:2px;display:inline-block}
+.dot.blocks{background:var(--bad)}.dot.flagged{background:var(--warn)}.dot.clean{background:var(--ok)}
+.dotp{font-family:"JetBrains Mono",monospace;font-size:.55rem;font-style:normal;letter-spacing:.04em;
+  padding:.05em .28em;border-radius:2px}
+.dotp.p0{color:var(--bad);background:var(--bad-dim);font-weight:700}
+.dotp.p1{color:var(--warn);background:var(--warn-dim)}
+.dotp.p2{color:var(--ink-3);background:var(--quiet-dim)}
+
 /* log */
 .log{padding:.5rem 0 .6rem;max-height:190px;overflow:auto;font-family:"JetBrains Mono",monospace;font-size:.71rem;line-height:1.7}
 .line{padding:.03rem .8rem;display:flex;gap:.55rem;align-items:baseline;will-change:transform,opacity}
@@ -162,8 +203,8 @@ button.chip[aria-pressed="true"]{background:var(--teal-dim);border-color:var(--t
         <span>Architecture <span class="meta" id="gmeta"></span></span>
         <span class="ctl">
           <button class="chip" id="f-all"  aria-pressed="true">all</button>
-          <button class="chip" id="f-open" aria-pressed="false">ungated</button>
-          <button class="chip" id="f-fnd"  aria-pressed="false">has findings</button>
+          <button class="chip" id="f-open" aria-pressed="false" title="P0 — the gate rolls back on these">blocks</button>
+          <button class="chip" id="f-fnd"  aria-pressed="false" title="reported, does not block">flagged</button>
         </span>
       </div>
       <div id="stage">
@@ -193,16 +234,19 @@ button.chip[aria-pressed="true"]{background:var(--teal-dim);border-color:var(--t
   </div>
 
   <div class="legend">
-    <span><i style="background:var(--bad)"></i>no auth gate, not in the allow-list</span>
-    <span><i style="background:var(--ok)"></i>gated</span>
-    <span><i style="background:var(--warn)"></i>other finding</span>
-    <span><i style="background:var(--line-2)"></i>not yet checked</span>
+    <span><i style="background:var(--bad)"></i><b>blocks</b> — P0 fail: the gate rolls the deploy back</span>
+    <span><i style="background:var(--warn)"></i><b>reported</b> — P1/P2, or debt accepted with a written reason</span>
+    <span><i style="background:var(--ok)"></i><b>clean</b> — checked, nothing fired</span>
+    <span><i style="background:var(--line-2)"></i>not checked yet</span>
   </div>
-  <p class="foot"><b>Every node was discovered by walking the source tree</b> — 66 routes and 7 pages, nothing declared by hand.
-  Click a node and the inspector names the file it came from. Nothing here was inferred by a model.</p>
+  <p class="foot"><b>Colour is the consequence, not the alarm.</b> A route that stops a deploy and one that merely gets
+  mentioned used to be the same red, which is what made this picture unreadable.
+  <b>Which priority a cell gets is the whole question</b> — the registry's declared priority wins, and severity is only
+  the fallback for something nobody declared. Getting that backwards once let a ship go green over 61 routes with no auth.
+  Click any box: it says why it is that colour, which rule fired, and where its priority came from.</p>
 </div>
 
-<script id="data" type="application/json">{"meta":{"project":"system-monitor","at":"2026-09-13T19:33:04.779Z","grade":{"grade":"F","score":0},"counts":"2 critical \u00b7 65 high \u00b7 2 medium","scanned":248,"historyLines":52286,"lexDropped":4023,"layers":["S0","S2","S4"],"routes":66,"pages":7,"live":{"service":"http://127.0.0.1:3401","shipped":"77b7e20-1789348775339","baseline":"77b7e20-1789345538154","blocked":"POST /api/processes/:pid/kill","fix":"verifyToken wired + mount guard on /api/chat and /api/futures + JWT_SECRET fails closed"}},"chain":[{"id":"internet","label":"internet","sub":"anyone","tone":"bad"},{"id":"ingress","label":"traefik ingress","sub":"TLS \u00b7 monitor.ko.unieai.com","tone":"ok"},{"id":"svc","label":"Service :80","sub":"ClusterIP","tone":"ok"},{"id":"app","label":"express :3000","sub":"cors() \u00b7 json() \u00b7 no auth middleware","tone":"bad"}],"areas":[{"name":"chat","kind":"api","routes":[{"id":"api:/api/chat/models","label":"chat/models","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/models has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/commands","label":"chat/commands","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/commands has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/skills","label":"chat/skills","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/skills has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/mcp-tools","label":"chat/mcp-tools","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/mcp-tools has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/servers","label":"chat/servers","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/servers has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/sessions","label":"chat/sessions","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET/POST /api/chat/sessions has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/sessions/deep-clean","label":"chat/sessions/deep-clean","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/chat/sessions/deep-clean has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/projects","label":"chat/projects","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET/POST /api/chat/projects has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/projects/config","label":"chat/projects/config","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/projects/config has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/projects/:slug/open","label":"chat/projects/:slug/open","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/chat/projects/:slug/open has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/projects/:slug","label":"chat/projects/:slug","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"DELETE /api/chat/projects/:slug has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/sessions/:id","label":"chat/sessions/:id","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"PATCH/DELETE /api/chat/sessions/:id has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/sessions/:id/history","label":"chat/sessions/:id/history","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/sessions/:id/history has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/sessions/:id/context","label":"chat/sessions/:id/context","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/sessions/:id/context has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/sessions/:id/compact","label":"chat/sessions/:id/compact","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/chat/sessions/:id/compact has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/sessions/:id/message","label":"chat/sessions/:id/message","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/chat/sessions/:id/message has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/sessions/:id/blobs","label":"chat/sessions/:id/blobs","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/sessions/:id/blobs has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/sessions/:id/stream","label":"chat/sessions/:id/stream","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/sessions/:id/stream has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/sessions/:id/stop","label":"chat/sessions/:id/stop","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/chat/sessions/:id/stop has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/sessions/:id/health","label":"chat/sessions/:id/health","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/sessions/:id/health has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/push/key","label":"chat/push/key","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/push/key has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/push/subscribe","label":"chat/push/subscribe","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/chat/push/subscribe has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/push/unsubscribe","label":"chat/push/unsubscribe","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/chat/push/unsubscribe has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/rate-limit","label":"chat/rate-limit","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/rate-limit has no auth gate and is not in the allow-list"}]},{"id":"api:/api/chat/token-stats","label":"chat/token-stats","src":"server/routes/chatRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/chat/token-stats has no auth gate and is not in the allow-list"}]}],"n":25,"ungated":25},{"name":"claude-remote","kind":"api","routes":[{"id":"api:/api/claude-remote/status","label":"claude-remote/status","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/claude-remote/status has no auth gate and is not in the allow-list"}]},{"id":"api:/api/claude-remote/logs","label":"claude-remote/logs","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/claude-remote/logs has no auth gate and is not in the allow-list"}]},{"id":"api:/api/claude-remote/recover/:ip","label":"claude-remote/recover/:ip","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/claude-remote/recover/:ip has no auth gate and is not in the allow-list"}]},{"id":"api:/api/claude-remote/start-session/:ip","label":"claude-remote/start-session/:ip","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/claude-remote/start-session/:ip has no auth gate and is not in the allow-list"}]},{"id":"api:/api/claude-remote/restart-session/:ip","label":"claude-remote/restart-session/:ip","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/claude-remote/restart-session/:ip has no auth gate and is not in the allow-list"}]},{"id":"api:/api/claude-remote/reconnect/:ip","label":"claude-remote/reconnect/:ip","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/claude-remote/reconnect/:ip has no auth gate and is not in the allow-list"}]},{"id":"api:/api/claude-remote/session-status/:ip/:sessionName","label":"claude-remote/session-status/:ip/:sessionName","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/claude-remote/session-status/:ip/:sessionName has no auth gate and is not in the allow-list"}]},{"id":"api:/api/claude-remote/health/:ip","label":"claude-remote/health/:ip","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/claude-remote/health/:ip has no auth gate and is not in the allow-list"}]},{"id":"api:/api/claude-remote/test-ssh/:ip","label":"claude-remote/test-ssh/:ip","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/claude-remote/test-ssh/:ip has no auth gate and is not in the allow-list"}]},{"id":"api:/api/claude-remote/config","label":"claude-remote/config","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/claude-remote/config has no auth gate and is not in the allow-list"}]}],"n":10,"ungated":10},{"name":"futures","kind":"api","routes":[{"id":"api:/api/futures/kline/daily","label":"futures/kline/daily","src":"server/routes/futuresRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/futures/kline/daily has no auth gate and is not in the allow-list"}]},{"id":"api:/api/futures/kline/hourly","label":"futures/kline/hourly","src":"server/routes/futuresRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/futures/kline/hourly has no auth gate and is not in the allow-list"}]},{"id":"api:/api/futures/kline/15min","label":"futures/kline/15min","src":"server/routes/futuresRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/futures/kline/15min has no auth gate and is not in the allow-list"}]},{"id":"api:/api/futures/chat/session","label":"futures/chat/session","src":"server/routes/futuresRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/futures/chat/session has no auth gate and is not in the allow-list"}]},{"id":"api:/api/futures/chat/message","label":"futures/chat/message","src":"server/routes/futuresRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/futures/chat/message has no auth gate and is not in the allow-list"}]},{"id":"api:/api/futures/chat/history","label":"futures/chat/history","src":"server/routes/futuresRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/futures/chat/history has no auth gate and is not in the allow-list"}]}],"n":6,"ungated":6},{"name":"processes","kind":"api","routes":[{"id":"api:/api/processes/:pid/kill","label":"processes/:pid/kill","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/processes/:pid/kill has no auth gate and is not in the allow-list"}]},{"id":"api:/api/processes/:pid/oom","label":"processes/:pid/oom","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/processes/:pid/oom has no auth gate and is not in the allow-list"}]},{"id":"api:/api/processes/claude-buddy/cleanup","label":"processes/claude-buddy/cleanup","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/processes/claude-buddy/cleanup has no auth gate and is not in the allow-list"}]},{"id":"api:/api/processes/claude-buddy/stats","label":"processes/claude-buddy/stats","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/processes/claude-buddy/stats has no auth gate and is not in the allow-list"}]}],"n":4,"ungated":4},{"name":"other","kind":"api","routes":[{"id":"api:/health","label":"api:/health","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /health has no auth gate and is not in the allow-list"}]},{"id":"api:/claude-remote/docs","label":"api:/claude-remote/docs","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /claude-remote/docs has no auth gate and is not in the allow-list"}]},{"id":"api:*","label":"api:*","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET * has no auth gate and is not in the allow-list"}]}],"n":3,"ungated":3},{"name":"host-protection","kind":"api","routes":[{"id":"api:/api/host-protection/events","label":"host-protection/events","src":"server/routes/hostProtectionRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/host-protection/events has no auth gate and is not in the allow-list"}]},{"id":"api:/api/host-protection/status","label":"host-protection/status","src":"server/routes/hostProtectionRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/host-protection/status has no auth gate and is not in the allow-list"}]}],"n":2,"ungated":2},{"name":"usage","kind":"api","routes":[{"id":"api:/api/usage","label":"usage","src":"server/routes/usageRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/usage has no auth gate and is not in the allow-list"}]},{"id":"api:/api/usage/history","label":"usage/history","src":"server/routes/usageRoutes.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/usage/history has no auth gate and is not in the allow-list"}]}],"n":2,"ungated":2},{"name":"metrics","kind":"api","routes":[{"id":"api:/api/metrics","label":"metrics","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/metrics has no auth gate and is not in the allow-list"}]}],"n":1,"ungated":1},{"name":"logs","kind":"api","routes":[{"id":"api:/api/logs","label":"logs","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/logs has no auth gate and is not in the allow-list"}]}],"n":1,"ungated":1},{"name":"oom","kind":"api","routes":[{"id":"api:/api/oom","label":"oom","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/oom has no auth gate and is not in the allow-list"}]}],"n":1,"ungated":1},{"name":"config","kind":"api","routes":[{"id":"api:/api/config","label":"config","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET/POST /api/config has no auth gate and is not in the allow-list"}]}],"n":1,"ungated":1},{"name":"refresh","kind":"api","routes":[{"id":"api:/api/refresh","label":"refresh","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/refresh has no auth gate and is not in the allow-list"}]}],"n":1,"ungated":1},{"name":"disk","kind":"api","routes":[{"id":"api:/api/disk/cleanup","label":"disk/cleanup","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/disk/cleanup has no auth gate and is not in the allow-list"}]}],"n":1,"ungated":1},{"name":"network-diagnostics","kind":"api","routes":[{"id":"api:/api/network-diagnostics/:ip","label":"network-diagnostics/:ip","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/network-diagnostics/:ip has no auth gate and is not in the allow-list"}]}],"n":1,"ungated":1},{"name":"debug","kind":"api","routes":[{"id":"api:/api/debug/exec/:ip","label":"debug/exec/:ip","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"POST /api/debug/exec/:ip has no auth gate and is not in the allow-list"}]}],"n":1,"ungated":1},{"name":"docs","kind":"api","routes":[{"id":"api:/api/docs/claude-remote-monitoring","label":"docs/claude-remote-monitoring","src":"server/index.js","open":true,"findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/docs/claude-remote-monitoring has no auth gate and is not in the allow-list"}]}],"n":1,"ungated":1},{"name":"client","kind":"page","routes":[{"id":"page:/chat-page","label":"chat-page","src":"client/src/pages/ChatPage.jsx","open":false,"findings":[]},{"id":"page:/claude-remote-monitor","label":"claude-remote-monitor","src":"client/src/pages/ClaudeRemoteMonitor.jsx","open":false,"findings":[]},{"id":"page:/cpu-monitor","label":"cpu-monitor","src":"client/src/pages/CpuMonitor.jsx","open":false,"findings":[]},{"id":"page:/host-protection","label":"host-protection","src":"client/src/pages/HostProtection.jsx","open":false,"findings":[]},{"id":"page:/login-page","label":"login-page","src":"client/src/pages/LoginPage.jsx","open":false,"findings":[]},{"id":"page:/recovery-logs","label":"recovery-logs","src":"client/src/pages/RecoveryLogs.jsx","open":false,"findings":[]},{"id":"page:/usage-page","label":"usage-page","src":"client/src/pages/UsagePage.jsx","open":false,"findings":[]}],"n":7,"ungated":0},{"name":"auth","kind":"api","routes":[{"id":"api:/api/auth/google/url","label":"auth/google/url","src":"server/routes/authRoutes.js","open":false,"findings":[]},{"id":"api:/api/auth/google/callback","label":"auth/google/callback","src":"server/routes/authRoutes.js","open":false,"findings":[]},{"id":"api:/api/auth/verify","label":"auth/verify","src":"server/routes/authRoutes.js","open":false,"findings":[]},{"id":"api:/api/auth/logout","label":"auth/logout","src":"server/routes/authRoutes.js","open":false,"findings":[]},{"id":"api:/api/auth/protected","label":"auth/protected","src":"server/routes/authRoutes.js","open":false,"findings":[]}],"n":5,"ungated":0}],"files":[{"where":"k8s/configmap-ssh-keys.yaml","rule":"S0.secret.tree","sev":"critical","title":"a credential is in the working tree","evidence":"privkey ----\u2026(35 chars)","why":"anything here ships in the image and in every clone"},{"where":"test_streaming_e2e_puppeteer.cjs","rule":"S0.secret.tree","sev":"high","title":"a credential is in the working tree","evidence":"pw_inline secr\u2026(55 chars)","why":"anything here ships in the image and in every clone"},{"where":"23378918 test_streaming_e2e_puppeteer.cjs","rule":"S0.secret.history","sev":"high","title":"a credential exists in git history","evidence":"pw_inline secr\u2026(55 chars)","why":"a key deleted in the next commit is still a key: anyone who can clone can read it. Rotate it \u2014 rewriting history does not un-leak it"},{"where":"5d3dd053 k8s/configmap-ssh-keys.yaml","rule":"S0.secret.history","sev":"critical","title":"a credential exists in git history","evidence":"privkey ----\u2026(35 chars)","why":"a key deleted in the next commit is still a key: anyone who can clone can read it. Rotate it \u2014 rewriting history does not un-leak it"},{"where":"Dockerfile","rule":"S0.dockerfile.no_user","sev":"medium","title":"the image runs as root","evidence":"no USER directive","why":"a container escape starts as root, and nothing in this file says that was a decision"},{"where":"Dockerfile","rule":"S0.dockerfile.copy_all","sev":"high","title":"`COPY . .` with no .dockerignore","evidence":"COPY . .","why":"the whole working tree goes into the image \u2014 including .env, .git, and whatever else is lying around"},{"where":"client/src/pwa-register.js:153","rule":"S2.sink.inner_html","sev":"high","title":"unsanitised HTML reaches the DOM from a non-literal value","evidence":"banner.innerHTML = `","why":"unsanitised HTML reaches the DOM from a non-literal value"},{"where":"k8s/system-monitor:80","rule":"S4.exposure.orphan","sev":"medium","title":"k8s/system-monitor listens on cluster:80 and nobody declared it","evidence":"cluster:80 ","why":"an undeclared listener is the network version of an orphan feature"}],"runs":{"rolledback":["ubi ship /home/ubuntu/system-monitor \u2192 http://127.0.0.1:3401","  \u2713 proof: GET /api/version on the running server echoes the commit","  1/7  verify \u2014 nothing is built until this is green","  \u2713 unit  34s \u00b7 57 pass","  \u2713 all 2 layer(s) can run","  2/7  build into a scratch directory","  \u2713 artifact 77b7e20-1789347238367","  3/7  swap","  \u2713 tree hash unchanged since verify","  \u2713 swapped 77b7e20-1789345538154 \u2192 77b7e20-1789347238367","  4/7  prove \u2014 from OUTSIDE the deployed process","  \u2713 the running service serves 77b7e20-1789347238367","  5/7  sweep \u2014 judged the moment each cell is known","  \u2717 api:/api/processes/:pid/kill \u00b7 S2 \u2014 POST /api/processes/:pid/kill has no auth gate and is not in the allow-list","  6/7  gate","  \u2717 1 P0 failure(s)","  \u2713 the running service serves 77b7e20-1789345538154 again \u2014 rollback PROVED","  ROLLED BACK  1 P0 failure(s)","  \u00b7 13 cell(s) judged \u00b7 55.4s \u00b7 .vibeubi/ship-2026-09-14T00-53-10-272Z"],"shipped":["ubi ship /home/ubuntu/system-monitor \u2192 http://127.0.0.1:3401","  \u2713 proof: GET /api/version on the running server echoes the commit","  1/7  verify \u2014 nothing is built until this is green","  \u2713 unit  41s \u00b7 57 pass","  \u2713 all 2 layer(s) can run","  2/7  build into a scratch directory","  \u2713 artifact 77b7e20-1789348775339","  3/7  swap","  \u2713 tree hash unchanged since verify","  \u2713 swapped unbuilt \u2192 77b7e20-1789348775339","  4/7  prove \u2014 from OUTSIDE the deployed process","  \u2713 the running service serves 77b7e20-1789348775339","  5/7  sweep \u2014 judged the moment each cell is known","  6/7  gate","  \u2713 40 non-P0 failure(s), reported not blocking","  7/7  report /home/ubuntu/system-monitor/.vibeubi/ship-2026-09-14T01-18-39-294Z","  SHIPPED  40 non-P0 failure(s), reported not blocking","  \u00b7 42 cell(s) judged \u00b7 60.0s \u00b7 .vibeubi/ship-2026-09-14T01-18-39-294Z"]}}</script>
+<script id="data" type="application/json">{"meta":{"project":"system-monitor","at":"2026-09-14T01:33:51.989Z","grade":{"grade":"F","score":0},"counts":"2 critical \u00b7 8 high \u00b7 2 medium","scanned":248,"historyLines":52286,"lexDropped":4023,"layers":["S0","S2","S4"],"routes":67,"pages":7,"live":{"service":"http://127.0.0.1:3401","shipped":"77b7e20-1789348775339","baseline":"77b7e20-1789345538154","blocked":"POST /api/processes/:pid/kill","fix":"verifyToken wired + mount guard on /api/chat and /api/futures + JWT_SECRET fails closed"}},"chain":[{"id":"internet","label":"internet","sub":"anyone","tone":"bad"},{"id":"ingress","label":"traefik ingress","sub":"TLS \u00b7 monitor.ko.unieai.com","tone":"ok"},{"id":"svc","label":"Service :80","sub":"ClusterIP","tone":"ok"},{"id":"app","label":"express :3000","sub":"cors() \u00b7 json() \u00b7 no auth middleware","tone":"bad"}],"areas":[{"name":"host-protection","routes":[{"id":"api:/api/host-protection/events","label":"host-protection/events","kind":"api","src":"server/routes/hostProtectionRoutes.js","p":"P1","pFrom":"declared","state":"flagged","findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/host-protection/events has no auth gate and is not in the allow-list","why":"a route that neither gates itself nor is declared public is the security version of an orphan","accepted":false}]},{"id":"api:/api/host-protection/status","label":"host-protection/status","kind":"api","src":"server/routes/hostProtectionRoutes.js","p":"P2","pFrom":"declared","state":"flagged","findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/host-protection/status has no auth gate and is not in the allow-list","why":"a route that neither gates itself nor is declared public is the security version of an orphan","accepted":false}]}],"n":2,"blocks":0,"flagged":2,"clean":0,"byP":{"P1":1,"P2":1},"state":"flagged"},{"name":"usage","routes":[{"id":"api:/api/usage","label":"usage","kind":"api","src":"server/routes/usageRoutes.js","p":"P1","pFrom":"declared","state":"flagged","findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/usage has no auth gate and is not in the allow-list","why":"a route that neither gates itself nor is declared public is the security version of an orphan","accepted":false}]},{"id":"api:/api/usage/history","label":"usage/history","kind":"api","src":"server/routes/usageRoutes.js","p":"P1","pFrom":"declared","state":"flagged","findings":[{"rule":"S2.route.ungated","sev":"high","title":"GET /api/usage/history has no auth gate and is not in the allow-list","why":"a route that neither gates itself nor is declared public is the security version of an orphan","accepted":false}]}],"n":2,"blocks":0,"flagged":2,"clean":0,"byP":{"P1":2},"state":"flagged"},{"name":"chat","routes":[{"id":"api:/api/chat/models","label":"chat/models","kind":"api","src":"server/routes/chatRoutes.js","p":"P1","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/commands","label":"chat/commands","kind":"api","src":"server/routes/chatRoutes.js","p":"P1","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/skills","label":"chat/skills","kind":"api","src":"server/routes/chatRoutes.js","p":"P1","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/mcp-tools","label":"chat/mcp-tools","kind":"api","src":"server/routes/chatRoutes.js","p":"P1","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/servers","label":"chat/servers","kind":"api","src":"server/routes/chatRoutes.js","p":"P1","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/sessions","label":"chat/sessions","kind":"api","src":"server/routes/chatRoutes.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/sessions/deep-clean","label":"chat/sessions/deep-clean","kind":"api","src":"server/routes/chatRoutes.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/projects","label":"chat/projects","kind":"api","src":"server/routes/chatRoutes.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/projects/config","label":"chat/projects/config","kind":"api","src":"server/routes/chatRoutes.js","p":"P1","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/projects/:slug/open","label":"chat/projects/:slug/open","kind":"api","src":"server/routes/chatRoutes.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/projects/:slug","label":"chat/projects/:slug","kind":"api","src":"server/routes/chatRoutes.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/sessions/:id","label":"chat/sessions/:id","kind":"api","src":"server/routes/chatRoutes.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/sessions/:id/history","label":"chat/sessions/:id/history","kind":"api","src":"server/routes/chatRoutes.js","p":"P1","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/sessions/:id/context","label":"chat/sessions/:id/context","kind":"api","src":"server/routes/chatRoutes.js","p":"P1","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/sessions/:id/compact","label":"chat/sessions/:id/compact","kind":"api","src":"server/routes/chatRoutes.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/sessions/:id/message","label":"chat/sessions/:id/message","kind":"api","src":"server/routes/chatRoutes.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/sessions/:id/blobs","label":"chat/sessions/:id/blobs","kind":"api","src":"server/routes/chatRoutes.js","p":"P1","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/sessions/:id/stream","label":"chat/sessions/:id/stream","kind":"api","src":"server/routes/chatRoutes.js","p":"P1","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/sessions/:id/stop","label":"chat/sessions/:id/stop","kind":"api","src":"server/routes/chatRoutes.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/sessions/:id/health","label":"chat/sessions/:id/health","kind":"api","src":"server/routes/chatRoutes.js","p":"P2","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/push/key","label":"chat/push/key","kind":"api","src":"server/routes/chatRoutes.js","p":"P1","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/push/subscribe","label":"chat/push/subscribe","kind":"api","src":"server/routes/chatRoutes.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/push/unsubscribe","label":"chat/push/unsubscribe","kind":"api","src":"server/routes/chatRoutes.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/rate-limit","label":"chat/rate-limit","kind":"api","src":"server/routes/chatRoutes.js","p":"P1","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/chat/token-stats","label":"chat/token-stats","kind":"api","src":"server/routes/chatRoutes.js","p":"P0","pFrom":"declared","state":"clean","findings":[]}],"n":25,"blocks":0,"flagged":0,"clean":25,"byP":{"P1":12,"P0":12,"P2":1},"state":"clean"},{"name":"claude-remote","routes":[{"id":"api:/api/claude-remote/status","label":"claude-remote/status","kind":"api","src":"server/index.js","p":"P2","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/claude-remote/logs","label":"claude-remote/logs","kind":"api","src":"server/index.js","p":"P2","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/claude-remote/recover/:ip","label":"claude-remote/recover/:ip","kind":"api","src":"server/index.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/claude-remote/start-session/:ip","label":"claude-remote/start-session/:ip","kind":"api","src":"server/index.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/claude-remote/restart-session/:ip","label":"claude-remote/restart-session/:ip","kind":"api","src":"server/index.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/claude-remote/reconnect/:ip","label":"claude-remote/reconnect/:ip","kind":"api","src":"server/index.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/claude-remote/session-status/:ip/:sessionName","label":"claude-remote/session-status/:ip/:sessionName","kind":"api","src":"server/index.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/claude-remote/health/:ip","label":"claude-remote/health/:ip","kind":"api","src":"server/index.js","p":"P2","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/claude-remote/test-ssh/:ip","label":"claude-remote/test-ssh/:ip","kind":"api","src":"server/index.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/claude-remote/config","label":"claude-remote/config","kind":"api","src":"server/index.js","p":"P1","pFrom":"declared","state":"clean","findings":[]}],"n":10,"blocks":0,"flagged":0,"clean":10,"byP":{"P2":3,"P0":6,"P1":1},"state":"clean"},{"name":"client","routes":[{"id":"page:/chat-page","label":"chat-page","kind":"page","src":"client/src/pages/ChatPage.jsx","p":"P1","pFrom":"declared","state":"clean","findings":[]},{"id":"page:/claude-remote-monitor","label":"claude-remote-monitor","kind":"page","src":"client/src/pages/ClaudeRemoteMonitor.jsx","p":"P1","pFrom":"declared","state":"clean","findings":[]},{"id":"page:/cpu-monitor","label":"cpu-monitor","kind":"page","src":"client/src/pages/CpuMonitor.jsx","p":"P1","pFrom":"declared","state":"clean","findings":[]},{"id":"page:/host-protection","label":"host-protection","kind":"page","src":"client/src/pages/HostProtection.jsx","p":"P1","pFrom":"declared","state":"clean","findings":[]},{"id":"page:/login-page","label":"login-page","kind":"page","src":"client/src/pages/LoginPage.jsx","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"page:/recovery-logs","label":"recovery-logs","kind":"page","src":"client/src/pages/RecoveryLogs.jsx","p":"P2","pFrom":"declared","state":"clean","findings":[]},{"id":"page:/usage-page","label":"usage-page","kind":"page","src":"client/src/pages/UsagePage.jsx","p":"P1","pFrom":"declared","state":"clean","findings":[]}],"n":7,"blocks":0,"flagged":0,"clean":7,"byP":{"P1":5,"P0":1,"P2":1},"state":"clean"},{"name":"futures","routes":[{"id":"api:/api/futures/kline/daily","label":"futures/kline/daily","kind":"api","src":"server/routes/futuresRoutes.js","p":"P1","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/futures/kline/hourly","label":"futures/kline/hourly","kind":"api","src":"server/routes/futuresRoutes.js","p":"P1","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/futures/kline/15min","label":"futures/kline/15min","kind":"api","src":"server/routes/futuresRoutes.js","p":"P1","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/futures/chat/session","label":"futures/chat/session","kind":"api","src":"server/routes/futuresRoutes.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/futures/chat/message","label":"futures/chat/message","kind":"api","src":"server/routes/futuresRoutes.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/futures/chat/history","label":"futures/chat/history","kind":"api","src":"server/routes/futuresRoutes.js","p":"P1","pFrom":"declared","state":"clean","findings":[]}],"n":6,"blocks":0,"flagged":0,"clean":6,"byP":{"P1":4,"P0":2},"state":"clean"},{"name":"auth","routes":[{"id":"api:/api/auth/google/url","label":"auth/google/url","kind":"api","src":"server/routes/authRoutes.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/auth/google/callback","label":"auth/google/callback","kind":"api","src":"server/routes/authRoutes.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/auth/verify","label":"auth/verify","kind":"api","src":"server/routes/authRoutes.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/auth/logout","label":"auth/logout","kind":"api","src":"server/routes/authRoutes.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/auth/protected","label":"auth/protected","kind":"api","src":"server/routes/authRoutes.js","p":"P0","pFrom":"declared","state":"clean","findings":[]}],"n":5,"blocks":0,"flagged":0,"clean":5,"byP":{"P0":5},"state":"clean"},{"name":"processes","routes":[{"id":"api:/api/processes/:pid/kill","label":"processes/:pid/kill","kind":"api","src":"server/index.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/processes/:pid/oom","label":"processes/:pid/oom","kind":"api","src":"server/index.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/processes/claude-buddy/cleanup","label":"processes/claude-buddy/cleanup","kind":"api","src":"server/index.js","p":"P0","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/api/processes/claude-buddy/stats","label":"processes/claude-buddy/stats","kind":"api","src":"server/index.js","p":"P2","pFrom":"declared","state":"clean","findings":[]}],"n":4,"blocks":0,"flagged":0,"clean":4,"byP":{"P0":3,"P2":1},"state":"clean"},{"name":"other","routes":[{"id":"api:/health","label":"api:/health","kind":"api","src":"server/index.js","p":"P2","pFrom":"declared","state":"clean","findings":[]},{"id":"api:/claude-remote/docs","label":"api:/claude-remote/docs","kind":"api","src":"server/index.js","p":"P2","pFrom":"declared","state":"clean","findings":[]},{"id":"api:*","label":"api:*","kind":"api","src":"server/index.js","p":"P1","pFrom":"declared","state":"clean","findings":[]}],"n":3,"blocks":0,"flagged":0,"clean":3,"byP":{"P2":2,"P1":1},"state":"clean"},{"name":"metrics","routes":[{"id":"api:/api/metrics","label":"metrics","kind":"api","src":"server/index.js","p":"P2","pFrom":"declared","state":"clean","findings":[]}],"n":1,"blocks":0,"flagged":0,"clean":1,"byP":{"P2":1},"state":"clean"},{"name":"logs","routes":[{"id":"api:/api/logs","label":"logs","kind":"api","src":"server/index.js","p":"P2","pFrom":"declared","state":"clean","findings":[]}],"n":1,"blocks":0,"flagged":0,"clean":1,"byP":{"P2":1},"state":"clean"},{"name":"oom","routes":[{"id":"api:/api/oom","label":"oom","kind":"api","src":"server/index.js","p":"P0","pFrom":"declared","state":"clean","findings":[]}],"n":1,"blocks":0,"flagged":0,"clean":1,"byP":{"P0":1},"state":"clean"},{"name":"config","routes":[{"id":"api:/api/config","label":"config","kind":"api","src":"server/index.js","p":"P0","pFrom":"declared","state":"clean","findings":[]}],"n":1,"blocks":0,"flagged":0,"clean":1,"byP":{"P0":1},"state":"clean"},{"name":"refresh","routes":[{"id":"api:/api/refresh","label":"refresh","kind":"api","src":"server/index.js","p":"P0","pFrom":"declared","state":"clean","findings":[]}],"n":1,"blocks":0,"flagged":0,"clean":1,"byP":{"P0":1},"state":"clean"},{"name":"disk","routes":[{"id":"api:/api/disk/cleanup","label":"disk/cleanup","kind":"api","src":"server/index.js","p":"P0","pFrom":"declared","state":"clean","findings":[]}],"n":1,"blocks":0,"flagged":0,"clean":1,"byP":{"P0":1},"state":"clean"},{"name":"network-diagnostics","routes":[{"id":"api:/api/network-diagnostics/:ip","label":"network-diagnostics/:ip","kind":"api","src":"server/index.js","p":"P1","pFrom":"declared","state":"clean","findings":[]}],"n":1,"blocks":0,"flagged":0,"clean":1,"byP":{"P1":1},"state":"clean"},{"name":"debug","routes":[{"id":"api:/api/debug/exec/:ip","label":"debug/exec/:ip","kind":"api","src":"server/index.js","p":"P0","pFrom":"declared","state":"clean","findings":[]}],"n":1,"blocks":0,"flagged":0,"clean":1,"byP":{"P0":1},"state":"clean"},{"name":"version","routes":[{"id":"api:/api/version","label":"version","kind":"api","src":"server/index.js","p":"P2","pFrom":"declared","state":"clean","findings":[]}],"n":1,"blocks":0,"flagged":0,"clean":1,"byP":{"P2":1},"state":"clean"},{"name":"docs","routes":[{"id":"api:/api/docs/claude-remote-monitoring","label":"docs/claude-remote-monitoring","kind":"api","src":"server/index.js","p":"P2","pFrom":"declared","state":"clean","findings":[]}],"n":1,"blocks":0,"flagged":0,"clean":1,"byP":{"P2":1},"state":"clean"}],"files":[{"where":"k8s/configmap-ssh-keys.yaml","rule":"S0.secret.tree","sev":"critical","title":"a credential is in the working tree","evidence":"privkey ----\u2026(35 chars)","why":"anything here ships in the image and in every clone","accepted":true},{"where":"test_streaming_e2e_puppeteer.cjs","rule":"S0.secret.tree","sev":"high","title":"a credential is in the working tree","evidence":"pw_inline secr\u2026(55 chars)","why":"anything here ships in the image and in every clone","accepted":false},{"where":"23378918 test_streaming_e2e_puppeteer.cjs","rule":"S0.secret.history","sev":"high","title":"a credential exists in git history","evidence":"pw_inline secr\u2026(55 chars)","why":"a key deleted in the next commit is still a key: anyone who can clone can read it. Rotate it \u2014 rewriting history does not un-leak it","accepted":false},{"where":"5d3dd053 k8s/configmap-ssh-keys.yaml","rule":"S0.secret.history","sev":"critical","title":"a credential exists in git history","evidence":"privkey ----\u2026(35 chars)","why":"a key deleted in the next commit is still a key: anyone who can clone can read it. Rotate it \u2014 rewriting history does not un-leak it","accepted":true},{"where":"Dockerfile","rule":"S0.dockerfile.no_user","sev":"medium","title":"the image runs as root","evidence":"no USER directive","why":"a container escape starts as root, and nothing in this file says that was a decision","accepted":false},{"where":"Dockerfile","rule":"S0.dockerfile.copy_all","sev":"high","title":"`COPY . .` with no .dockerignore","evidence":"COPY . .","why":"the whole working tree goes into the image \u2014 including .env, .git, and whatever else is lying around","accepted":false},{"where":"client/src/pwa-register.js:153","rule":"S2.sink.inner_html","sev":"high","title":"unsanitised HTML reaches the DOM from a non-literal value","evidence":"banner.innerHTML = `","why":"unsanitised HTML reaches the DOM from a non-literal value","accepted":false},{"where":"k8s/system-monitor:80","rule":"S4.exposure.orphan","sev":"medium","title":"k8s/system-monitor listens on cluster:80 and nobody declared it","evidence":"cluster:80 ","why":"an undeclared listener is the network version of an orphan feature","accepted":false}],"runs":{"rolledback":["ubi ship /home/ubuntu/system-monitor \u2192 http://127.0.0.1:3401","  \u2713 proof: GET /api/version on the running server echoes the commit","  1/7  verify \u2014 nothing is built until this is green","  \u2713 unit  34s \u00b7 57 pass","  \u2713 all 2 layer(s) can run","  2/7  build into a scratch directory","  \u2713 artifact 77b7e20-1789347238367","  3/7  swap","  \u2713 tree hash unchanged since verify","  \u2713 swapped 77b7e20-1789345538154 \u2192 77b7e20-1789347238367","  4/7  prove \u2014 from OUTSIDE the deployed process","  \u2713 the running service serves 77b7e20-1789347238367","  5/7  sweep \u2014 judged the moment each cell is known","  \u2717 api:/api/processes/:pid/kill \u00b7 S2 \u2014 POST /api/processes/:pid/kill has no auth gate and is not in the allow-list","  6/7  gate","  \u2717 1 P0 failure(s)","  \u2713 the running service serves 77b7e20-1789345538154 again \u2014 rollback PROVED","  ROLLED BACK  1 P0 failure(s)","  \u00b7 13 cell(s) judged \u00b7 55.4s \u00b7 .vibeubi/ship-2026-09-14T00-53-10-272Z"],"shipped":["ubi ship /home/ubuntu/system-monitor \u2192 http://127.0.0.1:3401","  \u2713 proof: GET /api/version on the running server echoes the commit","  1/7  verify \u2014 nothing is built until this is green","  \u2713 unit  41s \u00b7 57 pass","  \u2713 all 2 layer(s) can run","  2/7  build into a scratch directory","  \u2713 artifact 77b7e20-1789348775339","  3/7  swap","  \u2713 tree hash unchanged since verify","  \u2713 swapped unbuilt \u2192 77b7e20-1789348775339","  4/7  prove \u2014 from OUTSIDE the deployed process","  \u2713 the running service serves 77b7e20-1789348775339","  5/7  sweep \u2014 judged the moment each cell is known","  6/7  gate","  \u2713 40 non-P0 failure(s), reported not blocking","  7/7  report /home/ubuntu/system-monitor/.vibeubi/ship-2026-09-14T01-18-39-294Z","  SHIPPED  40 non-P0 failure(s), reported not blocking","  \u00b7 42 cell(s) judged \u00b7 60.0s \u00b7 .vibeubi/ship-2026-09-14T01-18-39-294Z"]},"rules":{"S2.route.ungated":"The route neither calls one of this project\u2019s auth helpers nor appears in publicApi. Declared-but-unguarded is the security version of an orphan.","S0.secret.tree":"A credential sits in a file in the working tree \u2014 it ships in the image and in every clone.","S0.secret.history":"A credential exists in git history. Deleting the file does not un-leak it; only rotation does.","S0.dockerfile.copy_all":"COPY . . with no .dockerignore puts the whole tree in the image, .env and .git included.","S0.dockerfile.no_user":"No USER directive: a container escape starts as root, and nothing says that was a decision.","S2.sink.inner_html":"Unsanitised HTML from a non-literal value reaches the DOM.","S4.exposure.orphan":"Something is listening and nobody declared it."},"gateRule":{"blocks":"P0 fail, or a layer that errored. An unanswered question about the thing you just deployed is not a pass.","reports":"P1 / P2 fail, and anything accepted into the baseline with a written reason. A gate that blocks on known debt is a gate people delete \u2014 so it is reported, with its age, instead.","priority":"The priority the registry DECLARED wins. Severity is only the fallback for something nobody declared. Getting that backwards let a ship go green over 61 routes with no auth."}}</script>
 <script>
 "use strict"
 const D = JSON.parse(document.getElementById("data").textContent)
@@ -347,10 +391,10 @@ function layout() {
   const top = 24
   D.areas.forEach((a, i) => {
     const id = `area:${a.name}`
-    nodes.push({ id, type: "area", label: a.name, tone: a.ungated ? "bad" : "ok",
-      n: a.n, ungated: a.ungated, area: a,
+    nodes.push({ id, type: "area", label: a.name, tone: a.state ?? "clean",
+      n: a.n, ungated: a.blocks + a.flagged, area: a,
       x: colX[4], y: top + i * (AREA_H + 8), w: AREA_W, h: AREA_H })
-    edges.push({ from: "app", to: id, kind: "fan", open: a.ungated > 0 })
+    edges.push({ from: "app", to: id, kind: "fan", open: (a.blocks + a.flagged) > 0 })
   })
   return { nodes, edges }
 }
@@ -362,7 +406,7 @@ function routeNodes(area) {
   const h = rows.length * (ROUTE_H + 4)
   const startY = Math.max(14, anchor.y + AREA_H / 2 - h / 2)
   return rows.map((r, i) => ({
-    id: r.id, type: "route", label: r.label, tone: r.open ? "bad" : "ok", route: r,
+    id: r.id, type: "route", label: r.label, tone: r.state ?? "clean", route: r,
     x: 500, y: startY + i * (ROUTE_H + 4), w: ROUTE_W, h: ROUTE_H, from: anchor.id,
   }))
 }
@@ -370,16 +414,31 @@ function routeNodes(area) {
 function toneOf(n) {
   if (n.type === "chain") return n.tone
   if (!checked.size) return "idle"
-  if (n.type === "area") return checked.has(n.id) ? n.tone : "idle"
-  return checked.has(n.from) ? n.tone : "idle"
+  if (n.type === "area") return checked.has(n.id) ? (n.area.state ?? "clean") : "idle"
+  return checked.has(n.from) ? (n.route.state ?? "clean") : "idle"
 }
-const STROKE = { bad: "var(--bad)", ok: "var(--ok)", warn: "var(--warn)", idle: "var(--line-2)" }
-const FILLC  = { bad: "var(--bad-dim)", ok: "var(--ok-dim)", warn: "var(--warn-dim)", idle: "var(--panel-2)" }
+/**
+ * Colour by CONSEQUENCE, not by how alarming the word sounds.
+ *
+ *   blocks  — a P0 fail: the gate rolls the deploy back
+ *   flagged — a finding that is reported and does NOT block (P1/P2, or debt
+ *             accepted into the baseline with a written reason)
+ *   clean   — checked, nothing found
+ *   idle    — not checked yet
+ *
+ * Everything used to be one red, which is what made the picture unreadable:
+ * a route that stops a deploy and a route that merely gets mentioned looked
+ * identical.
+ */
+const STROKE = { blocks: "var(--bad)", flagged: "var(--warn)", clean: "var(--ok)", bad: "var(--bad)", ok: "var(--ok)", idle: "var(--line-2)" }
+const FILLC  = { blocks: "var(--bad-dim)", flagged: "var(--warn-dim)", clean: "var(--ok-dim)", bad: "var(--bad-dim)", ok: "var(--ok-dim)", idle: "var(--panel-2)" }
+const STATE_WORD = { blocks: "blocks the deploy", flagged: "reported, does not block", clean: "checked, nothing found", idle: "not checked yet" }
 
 function visible(n) {
   if (filter === "all" || n.type === "chain") return true
-  if (n.type === "area") return filter === "open" ? n.ungated > 0 : n.area.routes.some((r) => r.findings.length)
-  if (n.type === "route") return filter === "open" ? n.route.open : n.route.findings.length > 0
+  const want = filter === "blocks" ? "blocks" : "flagged"
+  if (n.type === "area") return want === "blocks" ? n.area.blocks > 0 : (n.area.blocks + n.area.flagged) > 0
+  if (n.type === "route") return want === "blocks" ? n.route.state === "blocks" : n.route.state !== "clean"
   return true
 }
 
@@ -417,31 +476,45 @@ function render() {
       fill: FILLC[tone] ?? "var(--panel-2)", stroke: STROKE[tone] ?? "var(--line-2)",
       "stroke-width": n.type === "chain" ? 1.2 : (selected === n.id ? 2 : 1) })
     g.appendChild(box)
+    /**
+     * Draw the RIGHT-hand count first, measure it, and only then decide how
+     * much room the name has.
+     *
+     * A fixed reserve was wrong twice: `claude-remote` ran through `10/10
+     * open`, and when the counts became words ("12 blocking") the same 23
+     * overlaps came straight back. Reserving a guessed number of pixels is a
+     * guess; asking the glyphs is not.
+     */
     const pad = 8
-    const t1 = el("text", { x: pad, y: n.type === "route" ? 15 : 16, fill: "var(--ink)",
-      "font-family": "JetBrains Mono, monospace", "font-size": n.type === "chain" ? 11.5 : 10.5 })
-    // Truncate to what actually FITS beside the count, not to an arbitrary
-    // number: an area box carries a right-aligned "n/m open" and at 10.5px
-    // mono `claude-remote` ran straight through it. Two strings overlapping is
-    // not a style nit in a picture whose whole claim is that it can be checked.
-    const perChar = n.type === "chain" ? 6.9 : 6.3
-    const reserve = n.type === "area" ? 62 : 0
-    const room = Math.max(6, Math.floor((n.w - pad * 2 - reserve) / perChar))
-    t1.textContent = n.label.length > room ? n.label.slice(0, room - 1) + "…" : n.label
-    if (n.label.length > room) { const t = el("title"); t.textContent = n.label; g.appendChild(t) }
-    g.appendChild(t1)
-    if (n.type === "chain") {
-      const t2 = el("text", { x: pad, y: 30, fill: "var(--ink-3)", "font-family": "JetBrains Mono, monospace", "font-size": 8.8 })
-      t2.textContent = n.sub; g.appendChild(t2)
-    }
+    let reserve = 0
     if (n.type === "area") {
+      const label = tone === "idle" ? `${n.n}`
+        : n.area.blocks ? `${n.area.blocks} blocking`
+        : n.area.flagged ? `${n.area.flagged} flagged`
+        : `${n.n} clean`
       const t2 = el("text", { x: n.w - pad, y: 16, "text-anchor": "end",
         fill: tone === "idle" ? "var(--ink-3)" : STROKE[tone], "font-family": "JetBrains Mono, monospace", "font-size": 9 })
-      t2.textContent = tone === "idle" ? `${n.n}` : (n.ungated ? `${n.ungated}/${n.n} open` : `${n.n} gated`)
+      t2.textContent = label
       g.appendChild(t2)
-      const t3 = el("text", { x: pad, y: 28, fill: "var(--ink-3)", "font-family": "JetBrains Mono, monospace", "font-size": 8 })
-      t3.textContent = expanded?.name === n.label ? "▾ expanded" : "▸ click to expand"
-      g.appendChild(t3)
+      reserve = label.length * 5.6 + 8
+    }
+
+    const t1 = el("text", { x: pad, y: n.type === "route" ? 15 : 16, fill: "var(--ink)",
+      "font-family": "JetBrains Mono, monospace", "font-size": n.type === "chain" ? 11.5 : 10.5 })
+    const perChar = n.type === "chain" ? 6.9 : 6.3
+    const room = Math.max(4, Math.floor((n.w - pad * 2 - reserve) / perChar))
+    t1.textContent = n.label.length > room ? n.label.slice(0, room - 1) + "\u2026" : n.label
+    if (n.label.length > room) { const t = el("title"); t.textContent = n.label; g.appendChild(t) }
+    g.appendChild(t1)
+
+    if (n.type === "chain") {
+      const t3 = el("text", { x: pad, y: 30, fill: "var(--ink-3)", "font-family": "JetBrains Mono, monospace", "font-size": 8.8 })
+      t3.textContent = n.sub; g.appendChild(t3)
+    }
+    if (n.type === "area") {
+      const t4 = el("text", { x: pad, y: 28, fill: "var(--ink-3)", "font-family": "JetBrains Mono, monospace", "font-size": 8 })
+      t4.textContent = expanded?.name === n.label ? "\u25be expanded" : "\u25b8 click to expand"
+      g.appendChild(t4)
     }
     if (!visible(n)) g.classList.add("dim")
     g.onclick = () => pick(n)
@@ -505,41 +578,134 @@ $("#zout").onclick = () => zoomBy(0.85)
 $("#reset").onclick = () => { view = { x: 0, y: 0, k: 1 }; expanded = null; selected = null; filter = "all"; setChips(); render(); inspect(null) }
 
 /* ── inspector ── */
+/**
+ * The inspector answers one question: WHY is this box that colour?
+ *
+ * Everything here is traceable — the file a node was discovered in, the rule
+ * that fired, and which of `declared` or `severity` supplied the priority that
+ * decided whether it blocks. A picture whose claim is that it can be checked
+ * has to hand you the thing to check it against.
+ */
+const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 }
+const esc = (x) => String(x).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+
+function badge(state) {
+  const label = { blocks: "BLOCKS", flagged: "reported", clean: "clean", idle: "unchecked" }[state] ?? state
+  return `<span class="pill ${state}">${label}</span>`
+}
+function pBadge(p, from) {
+  if (!p) return ""
+  const t = from === "declared" ? "the registry declared this" : "derived from the finding's severity (nothing declared)"
+  return `<span class="pill p${p[1]}" title="${t}">${p}<em>${from === "declared" ? "declared" : "severity"}</em></span>`
+}
+
+function whyColour(n) {
+  if (n.type === "chain") {
+    return n.tone === "bad"
+      ? "Reachable with nothing checking who is asking."
+      : "Terminates TLS and routes — not an application surface."
+  }
+  const r = n.type === "route" ? n.route : null
+  const a = n.type === "area" ? n.area : null
+
+  if (r) {
+    if (r.state === "blocks")
+      return `A finding fired here and its priority is <b>P0</b>${r.pFrom === "declared" ? " — declared in the registry" : " — derived from severity"}. <b>P0 rolls the deploy back.</b>`
+    if (r.state === "flagged")
+      return r.findings.every((f) => f.accepted)
+        ? "Every finding here is accepted debt, in the baseline with a written reason. Reported with its age, never silently."
+        : `Findings fired, but the priority is <b>${r.p ?? "P1"}</b>. P1 and P2 are reported and do not block — a gate that blocks on everything is a gate people delete.`
+    return "Checked at every layer this run used, and nothing fired."
+  }
+  if (a) {
+    if (a.blocks) return `${a.blocks} of ${a.n} would roll the deploy back.`
+    if (a.flagged) return `${a.flagged} of ${a.n} have findings, none of them blocking.`
+    return `All ${a.n} were checked and nothing fired.`
+  }
+  return ""
+}
+
+function findingHTML(f) {
+  return `<div class="fnd ${f.accepted ? "acc" : f.sev}">
+    <div class="r">${esc(f.rule)} · ${f.sev}${f.accepted ? " · ACCEPTED DEBT" : ""}</div>
+    <div class="t">${esc(f.title)}</div>
+    <div class="w">${esc(f.why ?? "")}</div>
+    ${f.accepted ? `<div class="w acc">In the baseline with a written reason and a date — reported every run, with its age, so it cannot quietly become permanent.</div>` : ""}
+  </div>`
+}
+
 function inspect(n) {
   const box = $("#insp")
-  if (!n) { box.innerHTML = `<div class="empty">Click any node in the graph.</div>`; $("#imeta").textContent = ""; return }
+  if (!n) {
+    box.innerHTML = `<div class="empty">Click any box in the graph.<br><br>It will say <b>why it is that colour</b>, which rule fired, and whether the priority came from the registry or from the finding's severity.</div>`
+    $("#imeta").textContent = ""
+    return
+  }
   let h = ""
+
   if (n.type === "chain") {
     $("#imeta").textContent = "infrastructure"
-    h = `<h4>${n.label}</h4><div class="sub">${n.sub}</div>
-      <dl class="kv"><dt>tone</dt><dd>${n.tone === "bad" ? "reachable with no check in front" : "terminates TLS / routes"}</dd></dl>`
-    if (n.id === "app") h += `<div class="fnd"><div class="r">S2.route.ungated ×${D.areas.reduce((a,b)=>a+b.ungated,0)}</div>
-      <div class="t">app.use() mounts compression, cors and express.json — then the routes. There is no auth middleware between the two.</div></div>`
-  } else if (n.type === "area") {
-    $("#imeta").textContent = `${n.n} route${n.n>1?"s":""}`
-    h = `<h4>${n.label}</h4><div class="sub">${n.ungated} of ${n.n} with no auth gate</div>
-      <div class="rlist">${n.area.routes.map((r) => `<a data-r="${r.id}"><span>${r.label}</span><span class="s ${r.open?"open":"gated"}">${r.open?"open":"gated"}</span></a>`).join("")}</div>`
-  } else {
-    $("#imeta").textContent = "route"
-    const r = n.route
-    h = `<h4>${r.id.replace(/^api:|^page:/,"")}</h4><div class="sub">${r.src}</div>
-      <dl class="kv"><dt>discovered</dt><dd>${r.src}</dd><dt>declared</dt><dd>${r.findings.length?"no — orphan":"—"}</dd><dt>gate</dt><dd>${r.open?"none":"present"}</dd></dl>`
-    h += r.findings.map((f) => `<div class="fnd"><div class="r">${f.rule} · ${f.sev}</div><div class="t">${f.title}</div></div>`).join("")
-      || `<div class="empty">No finding on this route.</div>`
+    h = `<h4>${esc(n.label)}</h4><div class="sub">${esc(n.sub)}</div>
+      <div class="why">${whyColour(n)}</div>`
+    if (n.id === "app") {
+      const b = D.areas.reduce((t, a) => t + a.blocks, 0), f = D.areas.reduce((t, a) => t + a.flagged, 0)
+      h += `<dl class="kv"><dt>routes</dt><dd>${D.meta.routes}</dd><dt>blocking</dt><dd>${b}</dd><dt>reported</dt><dd>${f}</dd></dl>
+        <div class="why">Middleware order matters here: <code>compression</code>, <code>cors</code>, <code>express.json</code>, then the mounts. A guard placed on the mount covers everything behind it — which is why <code>/api/chat</code>'s 28 routes count as gated without touching any of them.</div>`
+    }
   }
+
+  else if (n.type === "area") {
+    const a = n.area
+    $("#imeta").textContent = `${a.n} item${a.n > 1 ? "s" : ""}`
+    h = `<h4>${esc(a.name)} ${badge(a.state)}</h4>
+      <div class="sub">${a.blocks} blocking · ${a.flagged} reported · ${a.clean} clean</div>
+      <div class="why">${whyColour(n)}</div>
+      <div class="tally">
+        ${Object.entries(a.byP).sort().map(([p, c]) => `<span class="pill p${p[1]}" title="${c} item(s) the gate treated as ${p}">${p}<em>${c}</em></span>`).join("")}
+        <span class="tallynote">priority the gate used</span>
+      </div>
+      <div class="rlist">${a.routes.map((r) => `<a data-r="${esc(r.id)}">
+        <span class="nm">${esc(r.label)}</span>
+        <span class="rt">${r.p ? `<i class="dotp p${r.p[1]}">${r.p}</i>` : ""}<i class="dot ${r.state}"></i></span>
+      </a>`).join("")}</div>`
+  }
+
+  else {
+    const r = n.route
+    $("#imeta").textContent = r.kind
+    h = `<h4>${esc(r.label)} ${badge(r.state)}</h4>
+      <div class="sub">${esc(r.id)}</div>
+      <div class="why">${whyColour(n)}</div>
+      <dl class="kv">
+        <dt>discovered in</dt><dd>${esc(r.src ?? "—")}</dd>
+        <dt>priority</dt><dd>${r.p ? `${r.p} <span class="from">(${r.pFrom})</span>` : "—"}</dd>
+        <dt>gates?</dt><dd>${r.state === "blocks" ? "yes — rolls back" : "no"}</dd>
+      </dl>
+      ${r.findings.length
+        ? `<div class="fhead">${r.findings.length} finding${r.findings.length > 1 ? "s" : ""}</div>` +
+          [...r.findings].sort((x, y) => SEV_ORDER[x.sev] - SEV_ORDER[y.sev]).map(findingHTML).join("")
+        : `<div class="empty">No finding on this one.</div>`}`
+  }
+
   box.innerHTML = h
-  box.querySelectorAll("a[data-r]").forEach((a) => a.onclick = () => {
-    const nd = [...nodeIndex.values()].find((v) => v.n.id === a.dataset.r)
+  box.querySelectorAll("a[data-r]").forEach((el2) => el2.onclick = () => {
+    const nd = [...nodeIndex.values()].find((v) => v.n.id === el2.dataset.r)
     if (nd) pick(nd.n)
+    else {
+      // The route is not on screen (its area is collapsed) — inspect it anyway.
+      const area = D.areas.find((a) => a.routes.some((x) => x.id === el2.dataset.r))
+      const route = area?.routes.find((x) => x.id === el2.dataset.r)
+      if (route) inspect({ type: "route", route })
+    }
   })
   arrive(box)
 }
 
 /* ── filters ── */
 function setChips() {
-  for (const [id, v] of [["#f-all","all"],["#f-open","open"],["#f-fnd","fnd"]]) $(id).setAttribute("aria-pressed", String(filter === v))
+  for (const [id, v] of [["#f-all","all"],["#f-open","blocks"],["#f-fnd","flagged"]]) $(id).setAttribute("aria-pressed", String(filter === v))
 }
-for (const [id, v] of [["#f-all","all"],["#f-open","open"],["#f-fnd","fnd"]]) $(id).onclick = () => { filter = v; setChips(); render() }
+for (const [id, v] of [["#f-all","all"],["#f-open","blocks"],["#f-fnd","flagged"]]) $(id).onclick = () => { filter = v; setChips(); render() }
 
 /* ══════════════════════ the run ══════════════════════ */
 const log = $("#log")

@@ -24,8 +24,34 @@ export const name = "vibeubi-express"
 const METHOD = "(get|post|put|patch|delete|all)"
 const APP_ROUTE = new RegExp(`\\bapp\\.${METHOD}\\(\\s*['"\`]([^'"\`]+)['"\`]`, "g")
 const ROUTER_ROUTE = new RegExp(`\\brouter\\.${METHOD}\\(\\s*['"\`]([^'"\`]+)['"\`]`, "g")
-const MOUNT = /\bapp\.use\(\s*['"`]([^'"`]+)['"`]\s*,\s*(\w+)/g
-const IMPORT = /(?:import\s+(\w+)\s+from|const\s+(\w+)\s*=\s*require\()\s*['"`]([^'"`]+)['"`]/g
+/**
+ * `app.use(path, ...handlers)` — and there can be MIDDLEWARE before the router.
+ *
+ * The first version captured only the identifier immediately after the path,
+ * so the moment this project added a mount guard —
+ * `app.use('/api/chat', verifyToken, chatRoutes)` — it captured `verifyToken`,
+ * failed to match any routes file, and 36 routes lost their prefix:
+ * `api:/google/url` instead of `api:/api/auth/google/url`. Every one of them
+ * then read as an orphan and its real declaration as stale.
+ *
+ * The discoverer broke *because the security fix was applied*, which is the
+ * worst possible time for a registry to go blind. So: capture every identifier
+ * in the call and let the caller match whichever one names a routes file.
+ */
+const MOUNT = /\bapp\.use\(\s*['"`]([^'"`]+)['"`]\s*,\s*([^)]+)\)/g
+/**
+ * `import x from 'f'`, `import x, { y } from 'f'`, `const x = require('f')`.
+ *
+ * The middle form is why this needed fixing: adding a mount guard changed
+ * `import authRoutes from './routes/authRoutes.js'` into
+ * `import authRoutes, { verifyToken } from './routes/authRoutes.js'`, the
+ * default binding stopped being recognised, and five routes lost their prefix.
+ *
+ * Both halves of that outage were caused by the same security edit. A
+ * discoverer that only understands the shapes a codebase had BEFORE it was
+ * hardened will go blind exactly when the hardening lands.
+ */
+const IMPORT = /(?:import\s+(\w+)\s*(?:,\s*\{[^}]*\})?\s+from|const\s+(\w+)\s*=\s*require\()\s*['"`]([^'"`]+)['"`]/g
 
 const isTest = (p) => /\.(test|spec)\.[mc]?[jt]sx?$/.test(p)
 
@@ -63,17 +89,31 @@ export function apply(ctx, config = {}) {
       const id = m[1] ?? m[2]
       if (id) imports.set(id, m[3])
     }
-    const mounts = [...src.matchAll(MOUNT)].map((m) => ({ prefix: m[1], ident: m[2], file: imports.get(m[2]) ?? null }))
+    const mounts = []
+    for (const m of src.matchAll(MOUNT)) {
+      const idents = m[2].split(",").map((x) => x.trim()).filter((x) => /^\w+$/.test(x))
+      // The router is whichever argument was imported from a file; the rest
+      // are middleware. Taking the last importable one matches Express's own
+      // convention of `use(path, ...middleware, router)`.
+      const routers = idents.filter((id) => imports.has(id))
+      const ident = routers[routers.length - 1] ?? idents[idents.length - 1]
+      mounts.push({ prefix: m[1], ident, middleware: idents.filter((x) => x !== ident), file: imports.get(ident) ?? null })
+    }
     return { src, direct, mounts }
   }
 
   ctx.discover("api", async () => {
     const { direct, mounts } = await readEntry()
     const byPath = new Map()
-    const add = (path, method, source) => {
+    const add = (path, method, source, mountedBehind = []) => {
       const clean = path.replace(/\/+$/, "") || "/"
-      const e = byPath.get(clean) ?? { id: `api:${clean}`, kind: "api", path: clean, methods: [], source }
+      const e = byPath.get(clean) ?? { id: `api:${clean}`, kind: "api", path: clean, methods: [], source, mountedBehind }
       if (!e.methods.includes(method)) e.methods.push(method)
+      // A route mounted behind middleware is guarded by it. Reporting these as
+      // ungated would tell people to move guards from the mount onto every
+      // route — which is the worse practice, and the one that let the next
+      // route somebody added start out unguarded.
+      if (mountedBehind.length) e.mountedBehind = [...new Set([...(e.mountedBehind ?? []), ...mountedBehind])]
       byPath.set(clean, e)
     }
 
@@ -88,7 +128,7 @@ export function apply(ctx, config = {}) {
       let src = ""
       try { src = await readFile(file, "utf8") } catch { continue }
       for (const m of src.matchAll(ROUTER_ROUTE)) {
-        add(`${prefix}${m[2] === "/" ? "" : m[2]}` || "/", m[1].toUpperCase(), rel)
+        add(`${prefix}${m[2] === "/" ? "" : m[2]}` || "/", m[1].toUpperCase(), rel, mount?.middleware ?? [])
       }
     }
     return [...byPath.values()]
