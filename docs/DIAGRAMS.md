@@ -171,3 +171,26 @@ Overlap detection compares glyph bounding boxes **sorted by x**, not by DOM
 order. The first version assumed the label was drawn first; when the draw order
 changed it reported 19 overlaps that did not exist. A checker with an assumption
 about the thing it checks is the thing it is supposed to catch.
+
+### Timing is a claim, so it gets measured
+
+A reader looked at the console and said they could not see any difference.
+They were right, and the fix came from measuring rather than guessing.
+
+Instrumented in the browser: `BROKEN` was on screen for **2,131 ms of a
+5,369 ms replay** — and for most of that the reader's eye is on the log. Look a
+second late and the panel is already back to the good build, so the demo
+silently shows nothing.
+
+Three changes, each verified:
+
+| | |
+|---|---|
+| **hold it** | lines inside the broken window now pace at 850ms instead of 150ms. Measured again: **7,250 ms**, asserted `>= 5000`. |
+| **flash it** | the panel border pulses red going into the broken build and green coming out, so the eye is taken there. `prefers-reduced-motion` gets a static outline instead. |
+| **let them do it** | a `broken` / `good` toggle in the panel header. The timed replay is a story; a toggle is a comparison, and a comparison does not depend on looking at the right moment. |
+
+The pixel check matters more than it sounds: comparing `img.src` only proves a
+string changed. The test rasterises both to a canvas and sums the channels —
+a delta of **69,887** is the two builds actually differing, not a data URI
+being swapped for another name for the same picture.

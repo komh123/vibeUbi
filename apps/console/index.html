@@ -179,6 +179,15 @@ button.chip[aria-pressed="true"]{background:var(--teal-dim);border-color:var(--t
 .appbox img{display:block;width:100%;max-width:100%;height:auto;border-radius:2px;
   border:1px solid var(--line-2);transition:opacity .28s var(--ease),filter .28s var(--ease)}
 .appbox img.swapping{opacity:.22;filter:grayscale(1)}
+.appbox.flash{animation:flash .9s var(--ease)}
+@keyframes flash{0%{box-shadow:inset 0 0 0 0 transparent}
+  18%{box-shadow:inset 0 0 0 3px var(--bad)}100%{box-shadow:inset 0 0 0 0 transparent}}
+.appbox.flash-ok{animation:flashok .9s var(--ease)}
+@keyframes flashok{0%{box-shadow:inset 0 0 0 0 transparent}
+  18%{box-shadow:inset 0 0 0 3px var(--ok)}100%{box-shadow:inset 0 0 0 0 transparent}}
+.buildline{border-bottom:1px solid var(--line);padding-top:.35rem;padding-bottom:.45rem}
+.buildline .meta{font-size:.7rem}
+@media(prefers-reduced-motion:reduce){.appbox.flash,.appbox.flash-ok{animation:none;outline:2px solid var(--bad)}}
 .shotnote{margin:0;padding:.55rem .8rem .75rem;font-size:.71rem;color:var(--ink-3);line-height:1.55}
 .shotnote b{color:var(--ink-2);font-weight:400}
 .shotnote code{font-family:"JetBrains Mono",monospace;font-size:.94em;background:var(--panel-2);padding:.04em .28em;border-radius:2px}
@@ -251,7 +260,14 @@ button.chip[aria-pressed="true"]{background:var(--teal-dim);border-color:var(--t
 
     <aside class="side">
     <section class="panel appbox">
-      <div class="ph"><span>The app itself <span class="meta" id="appstate">serving</span></span><span class="meta" id="appbuild"></span></div>
+      <div class="ph">
+        <span>The app itself <span class="meta" id="appstate">serving</span></span>
+        <span class="ctl">
+          <button class="chip" id="ab-broken" aria-pressed="false" title="what shipped">broken</button>
+          <button class="chip" id="ab-good" aria-pressed="true" title="what the gate put back">good</button>
+        </span>
+      </div>
+      <div class="ph buildline"><span class="meta" id="appbuild"></span></div>
       <div class="shot"><img id="appshot" alt="the system-monitor login page as the running service is serving it right now"></div>
       <div class="zoomstrip" title="the build badge, magnified — this is the part that changes">
         <div class="zoomwin"><img id="appzoom" alt="the build badge on that page, magnified"></div>
@@ -782,9 +798,23 @@ function showApp(which) {
       : `The build the gate put back. <code>${D.app.builds.good}</code>, mounted, badge rendering.
          Press <b>Replay a blocked deploy</b> to watch the broken one go up and come back off.`
   }
-  if (REDUCED || !img.src) { set(); return }
+  const box = $(".appbox")
+  const flash = () => {
+    if (REDUCED) return
+    box.classList.remove("flash", "flash-ok")
+    void box.offsetWidth                       // restart the animation
+    box.classList.add(broken ? "flash" : "flash-ok")
+  }
+  const syncAB = () => {
+    $("#ab-broken").setAttribute("aria-pressed", String(broken))
+    $("#ab-good").setAttribute("aria-pressed", String(!broken))
+  }
+  if (REDUCED || !img.src) { set(); syncAB(); return }
   img.classList.add("swapping"); zoom.classList.add("swapping")
-  setTimeout(() => { set(); img.classList.remove("swapping"); zoom.classList.remove("swapping") }, 280)
+  setTimeout(() => {
+    set(); syncAB(); flash()
+    img.classList.remove("swapping"); zoom.classList.remove("swapping")
+  }, 280)
 }
 
 /* ══════════════════════ the run ══════════════════════ */
@@ -867,9 +897,15 @@ async function run(which = "shipped") {
       for (const a of D.areas) { checked.add(`area:${a.name}`) }
       render()
     }
-    await sleep(/^\d\/7/.test(line) ? 340 : 150)
+    // Pacing is a demo decision, and it was wrong: BROKEN was on screen for
+    // 2.1s of a 5.4s replay — measured — while the reader's eye was on the log.
+    // The window where the broken build is live is the whole point, so the
+    // lines inside it get held.
+    const inBrokenWindow = $("#appstate").textContent === "BROKEN"
+    await sleep(/^\d\/7/.test(line) ? 420 : inBrokenWindow ? 850 : 150)
   }
 
+  if (which !== "shipped") await sleep(700)
   if (which === "shipped") {
     setStep(4, "pass", 1); setStep(5, "pass", 1); setStep(6, "pass", 1)
     showApp("good")
@@ -966,6 +1002,8 @@ async function runLive() {
 
 $("#run").onclick = () => (LIVE ? runLive() : run("shipped"))
 $("#runbad").onclick = () => run("rolledback")
+$("#ab-broken").onclick = () => { if (!busy) showApp("broken") }
+$("#ab-good").onclick = () => { if (!busy) showApp("good") }
 
 /* ── boot: show the real thing at rest, before anything is pressed ── */
 $("#sub").textContent = `${D.meta.project} · scanned ${D.meta.at.slice(0,10)} · grade ${D.meta.grade.grade}`
