@@ -5,7 +5,7 @@
  * npm audit on this machine" and "npm audit found nothing" must never look the
  * same in a report.
  */
-import { grade, baselineDiff, textRuleFitness } from "../../kernel/src/index.mjs"
+import { grade, baselineDiff, textRuleFitness, declaredFieldsAreRead, READ_DECLARED_FIELDS } from "../../kernel/src/index.mjs"
 import * as collect from "./collect.mjs"
 import * as rules from "./rules.mjs"
 
@@ -60,6 +60,7 @@ export async function runScan({ root, config = {}, layers, base = "", discovered
         routes: apiRoutes.map((r) => ({ ...r, body: byFile.get(r.source) ?? "" })),
         publicApi: config.publicApi ?? [],
         gateTokens: config.gateTokens ?? [],
+        declared: config.declared ?? [],
       }))
       if (!config.gateTokens?.length) {
         skipped.push("S2 gateTokens not configured — every route will read as ungated until you name your auth helper")
@@ -103,7 +104,43 @@ export async function runScan({ root, config = {}, layers, base = "", discovered
   if (layers.includes("S4")) {
     const live = await collect.listeners(root)
     note(`${live.length} listener(s) / declared port(s) found`)
-    findings.push(...rules.s4Exposure({ listeners: live, declared: config.exposure ?? [] }))
+    /**
+     * Can this scan see the declared listeners at all?
+     *
+     * A k8s Service declared at :80 is invisible from a laptop, and calling
+     * that "stale" asserts something the scan never checked. `reachableFrom`
+     * is the declaration saying where it lives; if none of them are on this
+     * host, say the scan could not look rather than that the thing is gone.
+     */
+    const declaredExposure = config.exposure ?? []
+    const canObserve = declaredExposure.length === 0 ||
+      declaredExposure.some((d) => live.some((l) => `${l.service}:${l.port}` === `${d.service}:${d.port}`)) ||
+      config.observesDeclaredExposure === true
+    findings.push(...rules.s4Exposure({ listeners: live, declared: declaredExposure, canObserve }))
+  }
+
+  /**
+   * Is every field somebody wrote in the registry actually consumed?
+   *
+   * `declaredFieldsAreRead` was written to catch exactly this, was exported,
+   * was unit-tested — and for its whole life had ZERO call sites, which made
+   * it an instance of the defect it detects. It found two the moment it was
+   * wired: `probes` and `testId`, which `adopt` generates for every P0 page
+   * and which nothing in the pipeline ever executes. A P0 page therefore had
+   * its behaviour "declared" and never checked, and the registry said it was
+   * covered.
+   *
+   * Reported, not thrown: the honest state of the product belongs in the
+   * report, where it can be argued with.
+   */
+  const fieldCheck = declaredFieldsAreRead(config.declared ?? [], Object.keys(READ_DECLARED_FIELDS))
+  if (!fieldCheck.ok) {
+    findings.push(rules.finding(
+      "B.declared.unread", "medium", "config.declared",
+      `declared field(s) that nothing in the pipeline consumes: ${fieldCheck.unread.join(", ")}`,
+      `${(config.declared ?? []).length} declared entries carry them`,
+      "a field that is written, reviewed and then ignored looks like a control and is a decoration — everyone downstream believes it is doing something",
+    ))
   }
 
   const baseline = config.baseline ?? []

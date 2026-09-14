@@ -27,6 +27,16 @@ export function mask(value) {
 const f = (rule, severity, where, title, evidence, why) =>
   ({ rule, severity, where, title, evidence, why, verdict: "real", fingerprint: fingerprint(rule, where, evidence) })
 
+/**
+ * The same constructor, exported.
+ *
+ * `run.mjs` had to raise one finding of its own and hand-built the object, with
+ * `message:` where the shape says `title:` — so the report printed "undefined"
+ * next to a real defect. A second way to build the same record is a second way
+ * to get it wrong; there is now one.
+ */
+export const finding = f
+
 /* ══════════════════ S0 · secrets and config ══════════════════ */
 
 /**
@@ -134,8 +144,26 @@ export function s1Aibom({ components = [] }) {
  * `gateTokens` is per project — this rule cannot know what your auth helper is
  * called, and guessing is how a scanner gets a 20% precision score.
  */
-export function s2Routes({ routes, publicApi = [], gateTokens = [] }) {
+export function s2Routes({ routes, publicApi = [], gateTokens = [], declared = [] }) {
   const allowed = new Map(publicApi.map((p) => [p.id, p.reason]))
+  /**
+   * `requiredRole: "guest"` IS somebody saying this route is public.
+   *
+   * This rule used to read only `publicApi`, so on a real project ten routes
+   * that a human had already declared reachable by a guest — /health,
+   * /api/version, the SPA fallback, and every one of the five auth endpoints —
+   * came back as "nobody declared this". Four of them are the LOGIN door: a
+   * route that cannot be behind the gate it issues.
+   *
+   * A rule that flags a route for the thing its own declaration already says
+   * is not strict, it is deaf, and it teaches people that the declaration does
+   * not matter — which removes the whole point of axiom B.
+   *
+   * But `guest` is not the same statement as an allow-list entry: it says WHAT,
+   * and an allow-list entry says WHY. So a guest route is not cleared, it is
+   * re-asked as the narrower question — the one thing actually missing.
+   */
+  const declaredGuest = new Set(declared.filter((d) => d.requiredRole === "guest").map((d) => d.id))
   const out = []
   for (const r of routes) {
     // Guarded in the handler, OR mounted behind a guard. The second was missed
@@ -153,6 +181,13 @@ export function s2Routes({ routes, publicApi = [], gateTokens = [] }) {
         out.push(f("S2.route.public_no_reason", "medium", id, "declared public with no reason", id,
           "a year from now nobody can tell whether this was a decision or an oversight"))
       }
+      continue
+    }
+    if (declaredGuest.has(id)) {
+      out.push(f("S2.route.public_no_reason", "medium", id,
+        `${r.methods?.join("/") ?? "GET"} ${r.path} is declared reachable by a guest, but no reason is recorded`,
+        r.source ?? r.path,
+        "a year from now nobody can tell whether this was a decision or an oversight — move it to publicApi with one line of why"))
       continue
     }
     out.push(f("S2.route.ungated", "high", id,
@@ -474,7 +509,16 @@ export function referencedAssets(html) {
  * A listener reachable from anywhere that requires no auth IS an orphan: it
  * exists, and nobody claimed responsibility for it.
  */
-export function s4Exposure({ listeners, declared = [] }) {
+/**
+ * @param {object} o
+ * @param {boolean} [o.canObserve] whether this scan is standing somewhere the
+ *   declared listeners could be seen at all. Scanning a k8s app from a laptop
+ *   sees none of its Services — and reporting that as `stale` asserts a fact
+ *   ("it is not listening") that the scan never established. Same empty
+ *   observation, opposite fixes, and the wrong one sends someone to delete a
+ *   declaration that was right.
+ */
+export function s4Exposure({ listeners, declared = [], canObserve = true }) {
   const claimed = new Map(declared.map((d) => [`${d.service}:${d.port}`, d]))
   const out = []
   for (const l of listeners) {
@@ -499,10 +543,17 @@ export function s4Exposure({ listeners, declared = [] }) {
     }
   }
   for (const d of declared) {
-    if (!listeners.some((l) => `${l.service}:${l.port}` === `${d.service}:${d.port}`)) {
-      out.push(f("S4.exposure.stale", "low", `${d.service}:${d.port}`, "a declared listener is not listening", `${d.service}:${d.port}`,
-        "either it is down, or the declaration outlived the service"))
-    }
+    if (listeners.some((l) => `${l.service}:${l.port}` === `${d.service}:${d.port}`)) continue
+    out.push(
+      canObserve
+        ? f("S4.exposure.stale", "low", `${d.service}:${d.port}`, "a declared listener is not listening", `${d.service}:${d.port}`,
+            "either it is down, or the declaration outlived the service")
+        // Not a finding about the system — a finding about the scan.
+        : f("S4.exposure.unobservable", "info", `${d.service}:${d.port}`,
+            "this scan cannot see where this listener lives, so nothing is claimed about it",
+            `${d.service}:${d.port}`,
+            "run the scan from somewhere that can reach it, or this row is permanently unmeasured"),
+    )
   }
   return dedupe(out)
 }

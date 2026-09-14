@@ -196,6 +196,24 @@ export function textRuleFitness({ hits, name = "rule" }) {
  * @param {readonly object[]} declared   the registry entries
  * @param {readonly string[]} readFields fields the pipeline actually consumes
  */
+/**
+ * The declared fields this pipeline actually consumes, and WHERE.
+ *
+ * This list is the one thing `declaredFieldsAreRead` compares against, so it
+ * has to be honest rather than aspirational — a field listed here that nothing
+ * reads turns the check into the decoration it exists to detect. Each entry
+ * therefore names its consumer, and `declaredFieldListIsHonest` in the tests
+ * goes red if a consumer disappears.
+ */
+export const READ_DECLARED_FIELDS = Object.freeze({
+  id: "everywhere — it is the join key",
+  kind: "sweep generator, discoverers, adopt",
+  priority: "the gate: which findings are P0 and therefore block",
+  requiredRole: "S2.route.ungated: `guest` means a human declared this public",
+  source: "findings point at the file",
+  area: "the architecture view and adopt's summary",
+})
+
 export function declaredFieldsAreRead(declared, readFields) {
   const present = new Set()
   for (const d of declared) for (const k of Object.keys(d)) present.add(k)
