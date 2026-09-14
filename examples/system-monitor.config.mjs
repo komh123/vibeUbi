@@ -23,7 +23,7 @@ export default {
       buildCommand: "npm run build",
       startCommand: "node server/index.js",
       distDir: "dist",
-      env: { PORT: "3401", JWT_SECRET: "a-real-secret-for-this-test" },
+      env: { PORT: "3401", NODE_ENV: "production", JWT_SECRET: "a-real-secret-for-this-test" },
       startWaitMs: 2500,
     },
   },
