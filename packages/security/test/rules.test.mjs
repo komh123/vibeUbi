@@ -152,3 +152,33 @@ test("a route mounted behind a guard is gated — the rule must not punish the b
   const unmounted = [{ path: "/api/chat/sessions", methods: ["GET"], body: "res.json([])", mountedBehind: ["compression"] }]
   assert.equal(s2Routes({ routes: unmounted, gateTokens: ["verifyToken"] })[0].rule, "S2.route.ungated")
 })
+
+test("REGRESSION: a multi-line template with no interpolation is not XSS", () => {
+  // Real: an eight-line PWA update banner whose first line is a bare backtick.
+  // Line-based reasoning cannot see where a template ends, so the rule flagged
+  // every multi-line template it met.
+  const staticBanner = file("pwa.js", [
+    "banner.innerHTML = `",
+    "  <div style=\"display:flex\">",
+    "    <span>A new version is available.</span>",
+    "    <button id='pwa-update-reload'>Reload</button>",
+    "  </div>`;",
+    "document.body.appendChild(banner)",
+  ])
+  assert.equal(s2Sinks({ files: [staticBanner] }).length, 0)
+
+  const interpolated = file("x.js", [
+    "el.innerHTML = `",
+    "  <b>${userName}</b>`;",
+  ])
+  assert.equal(s2Sinks({ files: [interpolated] }).length, 1)
+})
+
+test("a template that never closes is reported, not cleared", () => {
+  // Unknown must not read as safe.
+  assert.equal(s2Sinks({ files: [file("x.js", ["el.innerHTML = `<b>"])] }).length, 1)
+})
+
+test("innerHTML from a variable is still reported", () => {
+  assert.equal(s2Sinks({ files: [file("x.js", ["el.innerHTML = userHtml;"])] }).length, 1)
+})

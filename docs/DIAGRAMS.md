@@ -142,3 +142,32 @@ Also: the page is authored without a doctype so it can be published as an
 artifact (the host supplies one). Served raw, the browser fell into quirks mode
 — a demo would have discovered live that the local copy lays out differently
 from the published one. `server.mjs` now prepends it.
+
+### The full DOM checklist
+
+43 assertions, run in a real browser against the local server. Not a smoke
+test — the list is the spec.
+
+| group | asserted |
+|---|---|
+| structure | title · doctype + standards mode · 7 rail steps · inline favicon · 4 legend entries |
+| data | embedded JSON parses · route count matches the meta · both runs present · **every** route carries a state · **every** finding carries a rule and a reason |
+| at rest | verdict hidden · 23 nodes · zero label overlaps |
+| blocked replay | rail ends `sweep:fail gate:fail` · verdict `refused` · zero overlaps |
+| shipped replay | all seven `pass` · verdict `clean` · says "fixed, not waived" · zero overlaps |
+| inspector · chain | why-line present · explains mount-level guarding |
+| inspector · area | why-line · priority tally · 25 route rows · every row carries a P badge and a state dot · expanding adds nodes |
+| inspector · route | why-line · names the source file · **shows whether the priority came from `declared` or `severity`** · says whether it gates |
+| filters | all / blocks / flagged toggle correctly · `all` dims nothing |
+| zoom | in and out both change the transform · reset returns `translate(0 0) scale(1)` and clears the inspector |
+| theme | toggles both directions · body background actually changes · **no token resolves empty in either theme** |
+| a11y | nodes are `tabindex=0`, have `role=button` and an `aria-label` · Enter opens the inspector · every button has accessible text |
+| layout | no horizontal scroll · the graph scrolls inside its own box |
+| console | **zero messages** |
+| live server | `/api/where` reports live · `/api/run` streams the real CLI · exit 0 · the page does not monkey-patch `fetch` |
+| reduced motion | emulated for real, not just grepped: renders · replay completes in <6s · rail reaches a terminal state · **nothing stuck part-way faded or mid-translate** · glyph corners settle to `miter` · expanding still works and the new nodes are visible |
+
+Overlap detection compares glyph bounding boxes **sorted by x**, not by DOM
+order. The first version assumed the label was drawn first; when the draw order
+changed it reported 19 overlaps that did not exist. A checker with an assumption
+about the thing it checks is the thing it is supposed to catch.

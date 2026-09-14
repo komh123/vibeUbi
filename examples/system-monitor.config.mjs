@@ -120,7 +120,19 @@ export default {
   ],
   ignored: [],
   publicApi: [],
-  exposure: [],
+  /**
+   * Listeners that are supposed to exist. Anything listening that is NOT here
+   * is an orphan — the network version of an undeclared feature.
+   */
+  exposure: [
+    {
+      service: "k8s/system-monitor", port: 80,
+      authRequired: true,          // every mount behind it now carries verifyToken
+      tls: true,                   // traefik terminates TLS at the ingress
+      reachableFrom: "internet",
+      reason: "the app's own Service, fronted by the traefik ingress at monitor.ko.unieai.com",
+    },
+  ],
   /**
    * ACCEPTED DEBT — a human decision, recorded.
    *
@@ -137,6 +149,14 @@ export default {
    * so it cannot quietly become permanent.
    */
   baseline: [
+    {
+      fingerprint: "c20376cf21ffdd1c987cb2763ed481a1",
+      rule: "S0.secret.history",
+      severity: "high",
+      verdict: "real",
+      reason: "the real JWT_SECRET was hardcoded in an e2e test, committed in 2337891 and pushed to origin/feature/chat-ux-optimization. The literal is removed; only rotation un-leaks it. See docs/SECRET-ROTATION.md.",
+      acceptedAt: Date.parse("2026-09-14"),
+    },
     {
       fingerprint: "b5d658d33b13439db54ce90c9a3f41db",
       rule: "S0.secret.tree",

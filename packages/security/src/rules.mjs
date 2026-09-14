@@ -224,18 +224,28 @@ const SECRET_NAME = /\b(?:password|passwd|secret|secrets|apiKey|api_key|apiSecre
 export const SINK_PATTERNS = [
   {
     id: "inner_html", sev: "high",
-    /** Only when the assigned value is NOT a static literal: `el.innerHTML =
-     *  'Install App'` cannot be XSS, and reporting it is how a rule loses the
-     *  right to gate. */
-    test: (line) => {
+    /**
+     * Only when the assigned value is NOT a static literal.
+     *
+     * `el.innerHTML = 'Install App'` cannot be XSS, and reporting it is how a
+     * rule loses the right to gate. The first version handled that for a
+     * single line and then flagged every MULTI-LINE template — including an
+     * eight-line PWA banner with no interpolation at all, whose first line is
+     * just a bare backtick. Line-based reasoning cannot see where a template
+     * ends, so this one gets the rest of the file.
+     */
+    needsText: true,
+    test: (line, ctx) => {
       const m = /(?:dangerouslySetInnerHTML|\.innerHTML\s*=)\s*(.*)$/.exec(line)
       if (!m) return false
       const rhs = m[1].trim()
-      if (/^['"][^'"]*['"]\s*;?$/.test(rhs)) return false          // a plain literal
-      if (/^`[^`$]*`\s*;?$/.test(rhs)) return false                // a template with no slots
-      return true
+      if (/^['"][^'"]*['"]\s*;?$/.test(rhs)) return false            // a plain quoted literal
+      if (!rhs.startsWith("`")) return true                           // a variable or a call
+      // A template: read to its closing backtick, wherever that is.
+      const body = templateBody(rhs.slice(1), ctx)
+      return body === null ? true : /\$\{/.test(body)                // slots → interpolated
     },
-    why: "unsanitised HTML reaches the DOM from a non-literal value",
+    why: "unsanitised HTML reaches the DOM from a value that is interpolated, not a literal",
   },
   {
     id: "sql_raw", sev: "critical",
@@ -286,6 +296,24 @@ export const SINK_PATTERNS = [
  *   `region` comes from the lexer. A match in a comment or a string is a false
  *   positive, and `sourceScanHit` in the kernel says so by name.
  */
+/**
+ * Everything between here and the template's closing backtick.
+ * `null` when it never closes in the lines we were given — unknown, so the
+ * caller reports rather than clears it.
+ */
+function templateBody(firstLineRest, ctx) {
+  if (firstLineRest.includes("`")) return firstLineRest.slice(0, firstLineRest.indexOf("`"))
+  if (!ctx?.rest) return null
+  let acc = firstLineRest
+  for (const l of ctx.rest) {
+    const i = l.indexOf("`")
+    if (i >= 0) return acc + "\n" + l.slice(0, i)
+    acc += "\n" + l
+    if (acc.length > 8000) return null
+  }
+  return null
+}
+
 export function s2Sinks({ files, skipTests = true }) {
   const out = []
   for (const file of files) {
@@ -294,7 +322,8 @@ export function s2Sinks({ files, skipTests = true }) {
     for (const line of file.lines) {
       if (line.region !== "code") continue
       for (const p of SINK_PATTERNS) {
-        if (p.test(line.text)) {
+        const ctx = p.needsText ? { rest: file.lines.slice(line.n).map((l) => l.text) } : null
+        if (p.test(line.text, ctx)) {
           out.push(f(`S2.sink.${p.id}`, p.sev, `${file.path}:${line.n}`, p.why, line.text.trim().slice(0, 110), p.why))
         }
       }
