@@ -25,7 +25,7 @@
  *   · rollback is not finished when the files move back. It is finished when
  *     the running service is observed serving the old artifact.
  */
-import { execFile } from "node:child_process"
+import { execFile, spawn } from "node:child_process"
 import { mkdir, writeFile, readFile, rm } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
@@ -33,6 +33,7 @@ import { promisify } from "node:util"
 import {
   verdictFor, earlyVerdict, gateCells, deployProof, proofContract,
   prereqVerdict, testRanVerdict, attributedVerdict, budgetVerdict,
+  nodeHeapMb, heapOomMessage,
 } from "../../kernel/src/index.mjs"
 const exec = promisify(execFile)
 
@@ -102,21 +103,85 @@ export async function treeHash(root, exclude = TREE_EXCLUDE) {
   }
 }
 
-async function runStep(id, cmd, args, { cwd, outDir, timeoutMs }) {
-  const t0 = Date.now()
-  let out = "", code = 0, timedOut = false
-  try {
-    const r = await exec(cmd, args, { cwd, timeout: timeoutMs, killSignal: "SIGKILL", maxBuffer: 64 * 1024 * 1024 })
-    out = r.stdout + r.stderr
-  } catch (err) {
-    out = (err.stdout ?? "") + (err.stderr ?? "") + (err.message ?? "")
-    code = err.code ?? 1
-    timedOut = err.killed === true || /ETIMEDOUT/.test(String(err.code))
+/**
+ * What this machine will actually give a sub-step, in MB.
+ *
+ * The I/O half of `nodeHeapMb`, kept apart from it so the formula can be tested
+ * against machine shapes this machine does not have.
+ */
+export async function machineMemory() {
+  const readNum = async (p) => { try { return Number((await readFile(p, "utf8")).trim()) } catch { return NaN } }
+  let cgroupLimitMb = null
+  for (const [path, div] of [["/sys/fs/cgroup/memory.max", 1], ["/sys/fs/cgroup/memory/memory.limit_in_bytes", 1]]) {
+    const v = await readNum(path)
+    // cgroup v2 writes the string "max" when unlimited; v1 writes a number so
+    // large it means the same thing. Both must read as "no fence", not as a
+    // fence of 8 exabytes.
+    if (Number.isFinite(v) && v > 0 && v < 2 ** 53 / 2) { cgroupLimitMb = Math.floor(v / div / 1024 / 1024); break }
   }
-  // Output goes to a FILE, never through a pipe. A noisy suite fills a pipe's
-  // buffer and the child blocks forever, which reads on screen as "slow".
-  await writeFile(join(outDir, `step-${id.replace(/[^\w.-]/g, "_")}.out`), out, "utf8")
-  return { code, out, timedOut, ms: Date.now() - t0 }
+  let availableMb = 0
+  try {
+    const mi = await readFile("/proc/meminfo", "utf8")
+    availableMb = Math.floor(Number(/MemAvailable:\s+(\d+)/.exec(mi)?.[1] ?? 0) / 1024)
+  } catch { /* not linux */ }
+  if (!availableMb) { const os = await import("node:os"); availableMb = Math.floor(os.freemem() / 1024 / 1024) }
+  return { cgroupLimitMb, availableMb }
+}
+
+/**
+ * Run one verify step, with a heap ceiling and a kill that reaches the tree.
+ *
+ * Both of those were missing, and both are the PIPELINE's problem rather than
+ * any project's: a peer session measured node's default old-space at 4144 MB
+ * and its project's `tsc --noEmit` peak at 5318 MB — a guaranteed OOM, and of
+ * its fifteen node sub-steps exactly zero had a ceiling. Every project's peak
+ * crosses 4144 MB eventually.
+ *
+ * Three changes, each for its own reason:
+ *
+ * - `spawn` DETACHED, and the timeout kills the process GROUP. `execFile`'s
+ *   killSignal reaches only the child we hold, so a test runner's workers and
+ *   a tsc server survive their own parent and keep the machine busy.
+ * - stdio goes straight to the file. The old comment claimed output never went
+ *   through a pipe; `execFile` piped it with a 64 MB buffer, so the hazard the
+ *   comment warned about was still there — a noisy suite fills the buffer and
+ *   the child blocks, which reads on screen as "slow".
+ * - a V8 OOM gets `heapOomMessage` instead of the raw stack, because the raw
+ *   stack sends operators to the machine's memory, which is not what ran out.
+ */
+async function runStep(id, cmd, args, { cwd, outDir, timeoutMs, heapMb = null, env = {} }) {
+  const t0 = Date.now()
+  const file = join(outDir, `step-${id.replace(/[^\w.-]/g, "_")}.out`)
+  const { openSync, readFileSync } = await import("node:fs")
+  const fd = openSync(file, "a")
+
+  const nodeOpts = [process.env.NODE_OPTIONS, heapMb ? `--max-old-space-size=${heapMb}` : ""]
+    .filter(Boolean).join(" ")
+
+  const child = spawn(cmd, args, {
+    cwd, detached: true, stdio: ["ignore", fd, fd],
+    env: { ...process.env, ...env, ...(nodeOpts ? { NODE_OPTIONS: nodeOpts } : {}) },
+  })
+
+  let timedOut = false
+  const timer = setTimeout(() => {
+    timedOut = true
+    // The decision (kill the whole tree) lives in the kernel; this is only the
+    // POSIX mechanism for it. A negative pid addresses the group.
+    try { process.kill(-child.pid, "SIGKILL") } catch { try { child.kill("SIGKILL") } catch { /* already gone */ } }
+  }, timeoutMs)
+
+  const code = await new Promise((resolve) => {
+    child.on("error", () => resolve(127))
+    child.on("exit", (c, sig) => resolve(c ?? (sig ? 1 : 0)))
+  })
+  clearTimeout(timer)
+  try { (await import("node:fs")).closeSync(fd) } catch { /* already closed */ }
+
+  let out = ""
+  try { out = readFileSync(file, "utf8") } catch { /* nothing was written */ }
+  const oom = heapOomMessage({ output: out, step: id, heapMb, availableMb: env.__availableMb ?? 0 })
+  return { code, out, timedOut, oom, ms: Date.now() - t0 }
 }
 
 /**
@@ -146,7 +211,16 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
   say("ok", `proof: ${target.proofClaim.source}`)
 
   /* ── budgets are a registry too ──────────────────────────────────────── */
-  const budgets = budgetVerdict({ clocked: SHIP_STEPS.map((s) => s.id), budgets: BUDGET_MS, observed: OBSERVED_MS })
+  /**
+   * A project may set its own budgets, and until now it could not.
+   *
+   * `BUDGET_MS` was a module constant read directly at the call site, so
+   * `config.budgets` was a field anyone could write and nothing would consume —
+   * the same shape as every other defect found this week. It surfaced as a test
+   * that set a 1.5s verify budget and then sat there for the module's 600s.
+   */
+  const budgetMs = { ...BUDGET_MS, ...(config.budgets ?? {}) }
+  const budgets = budgetVerdict({ clocked: SHIP_STEPS.map((s) => s.id), budgets: budgetMs, observed: OBSERVED_MS })
   if (!budgets.ok) say("warn", budgets.reason)
 
   /* ── 1 · verify ──────────────────────────────────────────────────────── */
@@ -155,11 +229,37 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
 
   const checks = config.verify ?? []
   if (checks.length === 0) say("warn", "no verify steps configured — this ship proves nothing about the code")
+
+  /**
+   * One ceiling, decided once, for every node sub-step.
+   *
+   * Without it each step inherits node's default old-space — 4144 MB on the
+   * machine where this was measured — and a project whose type graph outgrows
+   * that gets a guaranteed OOM that looks exactly like a broken test suite.
+   * `config.heapMb` overrides for a project that knows better than the formula.
+   */
+  const mem = await machineMemory()
+  const heap = config.heapMb
+    ? { heapMb: config.heapMb, fenced: !!mem.cgroupLimitMb, why: "set explicitly in this project's config" }
+    : nodeHeapMb({ ...mem, reserveMb: config.reserveMb ?? 2048 })
+  if (checks.length) say("dim", `each node step gets --max-old-space-size=${heap.heapMb} — ${heap.why}`)
+  if (heap.tooSmall) say("warn", heap.why)
+
   for (const c of checks) {
     const [bin, ...args] = c.cmd.split(/\s+/)
-    const r = await runStep(c.name, bin, args, { cwd: root, outDir, timeoutMs: BUDGET_MS.verify })
+    const r = await runStep(c.name, bin, args, {
+      cwd: root, outDir, timeoutMs: budgetMs.verify,
+      heapMb: heap.heapMb, env: { __availableMb: mem.availableMb },
+    })
     if (r.timedOut) { step(0, "verify", "fail"); say("bad", `${c.name} hung past its budget — a hang is a named failure, not a slow day`); return finish("refused", `${c.name} timed out`) }
-    if (r.code !== 0) { step(0, "verify", "fail"); say("bad", `${c.name} failed`); say("dim", tail(r.out)); return finish("refused", `${c.name} failed`) }
+    if (r.code !== 0) {
+      step(0, "verify", "fail")
+      // A V8 OOM is not "the tests failed", and saying so sends people to the
+      // wrong place for an hour. It is also self-locking, which is why the
+      // second run looks identical and the machine gets blamed.
+      if (r.oom) { say("bad", r.oom); return finish("refused", `${c.name} ran out of heap`) }
+      say("bad", `${c.name} failed`); say("dim", tail(r.out)); return finish("refused", `${c.name} failed`)
+    }
     if (c.expectsTests) {
       // Exit 0 is not enough. "No bad news" is not "good news".
       const ran = testRanVerdict(c.name, r.out)

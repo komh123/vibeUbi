@@ -29,6 +29,29 @@
 export function baselineAdmission(finding) {
   const verdict = finding.verdict ?? "real"
 
+  /**
+   * Some findings are not debt, and accepting them is not a decision a team
+   * gets to make.
+   *
+   * "This check could not run" is the clearest case. Written into a baseline it
+   * reads as "we looked at this and accepted it", when the truth is nobody
+   * looked — and from then on the gate is off for that check, permanently,
+   * because a thing that never runs never produces a NEW finding.
+   *
+   * Found by a peer session reviewing the withheld-grade change: the grade
+   * correctly said "—", and baselining the coverage finding still took the
+   * exit code from 1 to 0. Fixing the display is not fixing the gate.
+   */
+  if (finding.admissible === false) {
+    return {
+      admit: false,
+      reason:
+        `"${finding.rule ?? "this finding"}" says a check did not run. That is not debt and cannot be accepted — ` +
+        `a baseline entry asserts somebody looked, and the whole content of this finding is that nobody did. ` +
+        `Restore the check, or stop requesting it; there is no third option that leaves the gate honest.`,
+    }
+  }
+
   if (verdict === "false-positive" || verdict === "correct-behaviour") {
     return {
       admit: false,

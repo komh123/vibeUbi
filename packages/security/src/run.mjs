@@ -152,12 +152,16 @@ export async function runScan({ root, config = {}, layers, base = "", discovered
    */
   const coverage = coverageOf({ layers, skipped })
   for (const gap of coverage.unmeasured) {
-    findings.push(rules.finding(
-      "B.coverage.unmeasured", "high", "scan",
-      `a requested check did not run: ${gap}`,
-      `layers requested: ${layers.join(",")}`,
-      "an unrun check contributes zero findings, which reads exactly like a clean one",
-    ))
+    findings.push({
+      ...rules.finding(
+        "B.coverage.unmeasured", "high", "scan",
+        `a requested check did not run: ${gap}`,
+        `layers requested: ${layers.join(",")}`,
+        "an unrun check contributes zero findings, which reads exactly like a clean one",
+      ),
+      // Not debt. Accepting it would turn the check off for good — see baselineAdmission.
+      admissible: false,
+    })
   }
 
   const baseline = config.baseline ?? []

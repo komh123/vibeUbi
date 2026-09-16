@@ -82,10 +82,22 @@ export function atOrAbove(severity, failOn = DEFAULT_FAIL_ON) {
 export function baselineDiff(findings, baseline, failOn = DEFAULT_FAIL_ON) {
   const known = new Set(baseline.map((b) => b.fingerprint))
   const seen = new Set(findings.map((f) => f.fingerprint))
-  const fresh = findings.filter((f) => !known.has(f.fingerprint))
+  /**
+   * An inadmissible finding is never "known", whatever the baseline says.
+   *
+   * `baselineAdmission` refuses to WRITE one, but a baseline file is a text
+   * file a person can edit, and this is the gate's last line: a finding whose
+   * content is "this check did not run" must keep blocking even if its
+   * fingerprint has been pasted in. Measured before this: grade stayed "—" and
+   * the exit code went 1 → 0, which is the number CI actually reads.
+   */
+  const fresh = findings.filter((f) => f.admissible === false || !known.has(f.fingerprint))
   return {
     new: fresh,
-    known: findings.filter((f) => known.has(f.fingerprint)),
+    // Symmetrical on purpose. Leaving it in `known` as well as `new` would
+    // report the same finding as both accepted debt and a new problem, and the
+    // report reader would reasonably believe the reassuring half.
+    known: findings.filter((f) => f.admissible !== false && known.has(f.fingerprint)),
     resolved: baseline.filter((b) => !seen.has(b.fingerprint)),
     blocking: fresh.filter((f) => atOrAbove(f.severity, failOn)),
   }
