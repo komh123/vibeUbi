@@ -118,29 +118,50 @@ test("a fence too small to honour the floor is flagged, not quietly obeyed", () 
   }
 })
 
-/* ── a ceiling that is not a ceiling ──────────────────────────────────── */
-import { ceilingIsNoop, weightOf, unknownSeverities, atOrAbove as above } from "../src/index.mjs"
+/* ── a ceiling that is not a ceiling, or is worse than none ───────────── */
+import { ceilingEffect, weightOf, unknownSeverities, atOrAbove as above } from "../src/index.mjs"
 import v8 from "node:v8"
 
-test("a ceiling equal to node's own default is reported as doing nothing", () => {
-  // Measured on this machine: heap_size_limit runs ~48 MB above
-  // max-old-space-size, so the default old-space is 4096 and the flag
-  // --max-old-space-size=4096 has always been a no-op. A test that only
-  // asserts the flag is PRESENT cannot see that.
-  const dflt = Math.round(v8.getHeapStatistics().heap_size_limit / 1024 / 1024) - 48
-  assert.ok(dflt > 0)
-  assert.equal(ceilingIsNoop(dflt, dflt), true)
-  assert.equal(ceilingIsNoop(dflt + 4000, dflt), false)
-  assert.equal(ceilingIsNoop(dflt - 4000, dflt), false)
-  assert.equal(ceilingIsNoop(4096, 0), false, "with no measured default, claim nothing")
+const defaultOldSpace = () => Math.round(v8.getHeapStatistics().heap_size_limit / 1024 / 1024) - 48
+
+test("the three effects, and which two mean the flag is not buying anything", () => {
+  const d = defaultOldSpace()
+  assert.ok(d > 0)
+  assert.equal(ceilingEffect(d + 4000, d).effect, "raises")
+  assert.equal(ceilingEffect(d, d).effect, "equals")
+  assert.equal(ceilingEffect(d - 1024, d).effect, "lowers")
+  assert.equal(ceilingEffect(d, d).ineffective, true)
+  assert.equal(ceilingEffect(d - 1024, d).ineffective, true)
+  assert.equal(ceilingEffect(d + 4000, d).ineffective, false)
 })
 
-test("this formula really can land on the default, which is why the check exists", () => {
-  const dflt = Math.round(v8.getHeapStatistics().heap_size_limit / 1024 / 1024) - 48
-  // ~7.5 GB available with the standard 2 GB reserve derives ≈ the default.
-  const r = nodeHeapMb({ availableMb: Math.round(dflt / 0.75) + 2048, reserveMb: 2048 })
-  assert.ok(ceilingIsNoop(r.heapMb, dflt),
-    `derived ${r.heapMb} against a default of ${dflt} — if this stops being true the warning is dead code`)
+test("`lowers` is named separately because it INVERTS the feature", () => {
+  const d = defaultOldSpace()
+  assert.equal(ceilingEffect(d, d).worse, false, "equal is harmless — the flag did nothing")
+  assert.equal(ceilingEffect(d - 1024, d).worse, true,
+    "below the default means the pipeline made an OOM MORE likely than not running at all")
+})
+
+test("with no measured default it claims nothing rather than something cheerful", () => {
+  for (const bad of [0, NaN, -1, undefined]) {
+    const e = ceilingEffect(4096, bad)
+    assert.equal(e.ineffective, false)
+    assert.equal(e.worse, false)
+  }
+})
+
+test("the harmful band is pinned, so a change to the share or clamps must re-measure", () => {
+  // Measured on this machine (default old-space 4096): 6 GB available derives
+  // 3072 — lower than the default, and the first version of this predicate,
+  // which only answered equality, was silent for exactly this row.
+  const d = defaultOldSpace()
+  const at = (gb) => nodeHeapMb({ availableMb: gb * 1024, reserveMb: 2048 }).heapMb
+  const worse = [4, 5, 6, 7, 8, 10, 12, 16, 24].filter((gb) => ceilingEffect(at(gb), d).worse)
+  const raises = [4, 5, 6, 7, 8, 10, 12, 16, 24].filter((gb) => ceilingEffect(at(gb), d).effect === "raises")
+  assert.ok(worse.length > 0, "if nothing is ever worse on this machine the warning is dead code and should be deleted")
+  assert.ok(raises.length > 0, "and if nothing ever raises, the whole formula is doing harm")
+  assert.ok(Math.max(...worse) < Math.min(...raises),
+    `the bands must not interleave: worse at ${worse.join(",")} GB, raises at ${raises.join(",")} GB`)
 })
 
 /* ── an unrecognised severity is not free ─────────────────────────────── */

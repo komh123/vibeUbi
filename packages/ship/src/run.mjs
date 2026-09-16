@@ -33,7 +33,7 @@ import { promisify } from "node:util"
 import {
   verdictFor, earlyVerdict, gateCells, deployProof, proofContract,
   prereqVerdict, testRanVerdict, attributedVerdict, budgetVerdict,
-  nodeHeapMb, heapOomMessage, ceilingIsNoop, HEAP_FLOOR_MB,
+  nodeHeapMb, heapOomMessage, ceilingEffect, HEAP_FLOOR_MB,
 } from "../../kernel/src/index.mjs"
 const exec = promisify(execFile)
 
@@ -283,25 +283,19 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
   {
     const v8 = await import("node:v8")
     const defaultOldSpaceMb = Math.round(v8.getHeapStatistics().heap_size_limit / 1024 / 1024) - 48
-    if (checks.length && ceilingIsNoop(heap.heapMb, defaultOldSpaceMb)) {
-      say("warn", `${heap.heapMb} MB is node's own default on this machine (~${defaultOldSpaceMb} MB), so this flag imposes nothing. ` +
+    const eff = ceilingEffect(heap.heapMb, defaultOldSpaceMb)
+    if (checks.length && eff.worse) {
+      say("warn",
+        `verify was given ${heap.heapMb} MB, and this machine gives node ${defaultOldSpaceMb} MB with no flag at all — ` +
+        `so this ceiling is LOWER than the default. The step is more likely to run out of heap with this pipeline than without it. ` +
+        `Wait for the machine to be quieter, or set heapMb explicitly.`)
+    } else if (checks.length && eff.ineffective) {
+      say("warn",
+        `${heap.heapMb} MB is node's own default on this machine (~${defaultOldSpaceMb} MB), so this flag imposes nothing. ` +
         `The step is running on the default ceiling — raise the container's memory, or set heapMb explicitly, if it needs more.`)
     }
   }
 
-  /**
-   * A fence below our own floor is a refusal, not a warning.
-   *
-   * This printed a warning and then ran the step anyway, which the peer session
-   * that contributed the formula caught: a 100 MB fence derives a 75 MB heap,
-   * node will not run a type-check in that, and the operator gets a confusing
-   * crash instead of a clear "this does not fit here". `tooSmall` was a field
-   * whose only reader printed it — a control that looks like a control, which
-   * is the defect class both of us have now been bitten by five times between us.
-   *
-   * Refusing is also where this belongs: verify is the step that is allowed to
-   * stop the run, because nothing has been mutated yet.
-   */
   /**
    * Checked for EVERY step that will spawn something, not just this one.
    *

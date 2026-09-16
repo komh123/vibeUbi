@@ -19,4 +19,4 @@ export { budgetVerdict, vacuousComparison, MIN_BUDGET_MS, MIN_FACTOR, MAX_FACTOR
 export { baselineAdmission, exemptionScope, checkAssertsOnBehaviour, sourceScanHit, textRuleFitness, declaredFieldsAreRead, READ_DECLARED_FIELDS, NON_CODE_REGIONS } from "./admission.mjs"
 export { createContext, applyAll, capabilityCells } from "./plugin.mjs"
 export { onboardStage, baselinePlan, prunePlan, STAGES } from "./onboard.mjs"
-export { nodeHeapMb, heapOomMessage, killScope, ceilingIsNoop, NON_HEAP_SHARE, HEAP_FLOOR_MB, HEAP_CEILING_MB } from "./heap.mjs"
+export { nodeHeapMb, heapOomMessage, killScope, ceilingEffect, NON_HEAP_SHARE, HEAP_FLOOR_MB, HEAP_CEILING_MB } from "./heap.mjs"

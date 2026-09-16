@@ -177,24 +177,46 @@ export function killScope(platform = process.platform) {
 }
 
 /**
- * Is this ceiling doing anything at all?
+ * Is this ceiling doing anything, and is it doing HARM?
  *
- * A flag whose value equals node's own default is invisible to every test that
- * only asserts the flag is PRESENT — a peer found exactly this in a build
- * script that had carried `--max-old-space-size=4096` for months while running
- * on the default the whole time. This formula can produce the same number
- * honestly: around 7.5 GB available it derives ~4096, and the pipeline would
- * then report a ceiling it did not impose.
+ * The first version of this answered only `heapMb == default` and a peer
+ * measured the band it missed. Theirs, with their fences:
  *
- * Deliberately NOT a field on the return: that shape is pinned by a consumer's
- * types and a shape change costs them a bump. A predicate the caller runs is
- * the same information at no blast radius.
+ *      8 GB available -> 1536 MB     14 GB -> 3840 MB     16 GB -> 4608 MB
  *
- * The default is not a constant — V8 sizes old-space from the machine — so the
- * caller measures it (`v8.getHeapStatistics().heap_size_limit` minus the ~48 MB
- * of other spaces) and passes it in.
+ * Mine, on this machine, with a 4096 MB default old-space:
+ *
+ *      6 GB available -> 3072 MB   LOWER than the default, and the predicate
+ *                                  said nothing
+ *
+ * Equality is the harmless case: the flag did nothing. BELOW is the case that
+ * inverts the feature — the pipeline LOWERS the ceiling while announcing it has
+ * given the step N MB, so a user on a moderately loaded machine gets a feature
+ * that makes an OOM MORE likely than not having it. A predicate that speaks
+ * only at the single point where they are equal is silent across the whole
+ * harmful range.
+ *
+ * `defaultOldSpaceMb` must be MEASURED by the caller, never hardcoded: V8 sizes
+ * old-space from machine memory, so a constant 4096 would itself be exactly the
+ * cap-shaped number this function exists to find.
+ *
+ * Not a refusal. A busy machine is a busy machine, not a broken one, and a
+ * refusal there would be the too-wide kind that reads as "nothing to deploy".
+ *
+ * @returns {{effect:"raises"|"equals"|"lowers", ineffective:boolean, worse:boolean, heapMb:number, defaultOldSpaceMb:number}}
  */
-export function ceilingIsNoop(heapMb, defaultOldSpaceMb, toleranceMb = 64) {
-  if (!Number.isFinite(defaultOldSpaceMb) || defaultOldSpaceMb <= 0) return false
-  return Math.abs(heapMb - defaultOldSpaceMb) <= toleranceMb
+export function ceilingEffect(heapMb, defaultOldSpaceMb, toleranceMb = 64) {
+  if (!Number.isFinite(defaultOldSpaceMb) || defaultOldSpaceMb <= 0) {
+    // Nothing measured, so claim nothing — the honest answer, not a cheerful one.
+    return { effect: "raises", ineffective: false, worse: false, heapMb, defaultOldSpaceMb: 0 }
+  }
+  const delta = heapMb - defaultOldSpaceMb
+  const effect = Math.abs(delta) <= toleranceMb ? "equals" : delta > 0 ? "raises" : "lowers"
+  return {
+    effect,
+    ineffective: effect !== "raises",   // equals or lowers: the flag is not buying anything
+    worse: effect === "lowers",         // and this half actively takes something away
+    heapMb,
+    defaultOldSpaceMb,
+  }
 }

@@ -93,9 +93,26 @@ export function heapOomMessage(o: {
   availableMb?: number
 }): string | null
 
-/** True when this ceiling equals node's own default, i.e. the flag does
- *  nothing. Not a field on HeapDecision: that shape is pinned by a consumer. */
-export function ceilingIsNoop(heapMb: number, defaultOldSpaceMb: number, toleranceMb?: number): boolean
+/**
+ * Is this ceiling doing anything, and is it doing harm?
+ *
+ * `equals` is harmless (the flag did nothing); `lowers` inverts the feature —
+ * the pipeline reduced the ceiling while announcing it gave the step N MB.
+ * `defaultOldSpaceMb` must be measured by the caller; V8 sizes old-space from
+ * machine memory, so a hardcoded constant would be the very thing this finds.
+ * Not a field on HeapDecision: that shape is pinned by a consumer's types.
+ */
+export function ceilingEffect(
+  heapMb: number,
+  defaultOldSpaceMb: number,
+  toleranceMb?: number,
+): {
+  effect: "raises" | "equals" | "lowers"
+  ineffective: boolean
+  worse: boolean
+  heapMb: number
+  defaultOldSpaceMb: number
+}
 
 export function killScope(platform?: string): { strategy: "process-group" | "taskkill"; why: string }
 
