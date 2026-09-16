@@ -93,6 +93,10 @@ export function heapOomMessage(o: {
   availableMb?: number
 }): string | null
 
+/** True when this ceiling equals node's own default, i.e. the flag does
+ *  nothing. Not a field on HeapDecision: that shape is pinned by a consumer. */
+export function ceilingIsNoop(heapMb: number, defaultOldSpaceMb: number, toleranceMb?: number): boolean
+
 export function killScope(platform?: string): { strategy: "process-group" | "taskkill"; why: string }
 
 /* ── proof ────────────────────────────────────────────────────────────── */
@@ -131,6 +135,9 @@ export const SEVERITIES: readonly string[]
 export const DEFAULT_FAIL_ON: readonly string[]
 
 export function score(findings: readonly Finding[]): number
+/** An unrecognised severity weighs as `high`, never as zero. */
+export function weightOf(severity: string): number
+export function unknownSeverities(findings: readonly Finding[]): string[]
 
 /** A grade is a claim about coverage, so `grade` is "—" and `score` null when
  *  a requested check could not run. */

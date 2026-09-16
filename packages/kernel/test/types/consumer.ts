@@ -47,3 +47,40 @@ if (d.reason === "fenced") {
 }
 
 void mb; void why; void invented; void unnarrowed
+
+/* ── the SECOND shadow ────────────────────────────────────────────────────
+ * The consumer deleted its hand-written .d.ts and then kept a local alias with
+ * every `numbers` field optional — written for the same reason the .d.ts had
+ * them optional, since the branches differ. That re-disabled the narrowing it
+ * had just bought, one level up, and tsc went green and said nothing.
+ *
+ * The first version of this pin asserted the ALIASING is a type error. It is
+ * not, and finding that out is the point: excess-property checks only fire on
+ * object literals, and every field of the alias is optional, so the union
+ * assigns to it cleanly. TypeScript has no complaint to make. THAT is why the
+ * second shadow was silent — it is not a mistake the compiler can see.
+ *
+ * So what is pinned here is what the alias destroys.
+ */
+type AllOptionalAlias = {
+  heapMb: number
+  numbers: { cgroupLimitMb?: number; availableMb?: number; floorMb?: number; budgetMb?: number }
+}
+
+declare const real: HeapDecision
+
+// Legal, and silent. Left un-suppressed on purpose: if a future TypeScript ever
+// does reject this, the unused-directive error would tell us the hazard is gone.
+const aliased: AllOptionalAlias = real
+
+// Gone: there is no discriminant left, so nothing can be narrowed.
+// @ts-expect-error `reason` does not survive the alias — this is the whole loss.
+const stillNarrows = aliased.reason
+
+// And this is the consequence that printed "(0 MB)": through the alias, reading
+// a field that exists on NO branch is `number | undefined` rather than an
+// error, so `?? 0` looks like prudence instead of a bug.
+const invented2: number | undefined = aliased.numbers.budgetMb
+const looksPrudent: number = aliased.numbers.budgetMb ?? 0
+
+void aliased; void stillNarrows; void invented2; void looksPrudent

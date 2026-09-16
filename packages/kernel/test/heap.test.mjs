@@ -117,3 +117,49 @@ test("a fence too small to honour the floor is flagged, not quietly obeyed", () 
     assert.ok(r.heapMb < mb, "still under the fence — the property holds even in the flagged case")
   }
 })
+
+/* ── a ceiling that is not a ceiling ──────────────────────────────────── */
+import { ceilingIsNoop, weightOf, unknownSeverities, atOrAbove as above } from "../src/index.mjs"
+import v8 from "node:v8"
+
+test("a ceiling equal to node's own default is reported as doing nothing", () => {
+  // Measured on this machine: heap_size_limit runs ~48 MB above
+  // max-old-space-size, so the default old-space is 4096 and the flag
+  // --max-old-space-size=4096 has always been a no-op. A test that only
+  // asserts the flag is PRESENT cannot see that.
+  const dflt = Math.round(v8.getHeapStatistics().heap_size_limit / 1024 / 1024) - 48
+  assert.ok(dflt > 0)
+  assert.equal(ceilingIsNoop(dflt, dflt), true)
+  assert.equal(ceilingIsNoop(dflt + 4000, dflt), false)
+  assert.equal(ceilingIsNoop(dflt - 4000, dflt), false)
+  assert.equal(ceilingIsNoop(4096, 0), false, "with no measured default, claim nothing")
+})
+
+test("this formula really can land on the default, which is why the check exists", () => {
+  const dflt = Math.round(v8.getHeapStatistics().heap_size_limit / 1024 / 1024) - 48
+  // ~7.5 GB available with the standard 2 GB reserve derives ≈ the default.
+  const r = nodeHeapMb({ availableMb: Math.round(dflt / 0.75) + 2048, reserveMb: 2048 })
+  assert.ok(ceilingIsNoop(r.heapMb, dflt),
+    `derived ${r.heapMb} against a default of ${dflt} — if this stops being true the warning is dead code`)
+})
+
+/* ── an unrecognised severity is not free ─────────────────────────────── */
+test("a misspelled severity weighs as high, not as zero", () => {
+  assert.equal(weightOf("HIGH"), weightOf("high"), "case was already handled")
+  assert.equal(weightOf(" high "), weightOf("high"), "so is whitespace")
+  assert.equal(weightOf("sev-1"), weightOf("high"),
+    "an unknown severity used to cost nothing and appear in the report like any other row")
+  assert.equal(weightOf(undefined), weightOf("high"))
+})
+
+test("and it blocks, so a typo cannot be the quietest way to disable a gate", () => {
+  assert.equal(above("sev-1"), true)
+  assert.equal(above("Critical!"), true)
+  assert.equal(above("low"), false, "the fallback must not make everything block")
+  assert.equal(above("info"), false)
+})
+
+test("unknown severities are listed, so the rule that spelled it wrong can be found", () => {
+  const out = unknownSeverities([{ severity: "high" }, { severity: "sev-1" }, { severity: "SEV-1" }, { severity: "low" }])
+  assert.deepEqual(out, ["sev-1"])
+})

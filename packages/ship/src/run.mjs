@@ -33,7 +33,7 @@ import { promisify } from "node:util"
 import {
   verdictFor, earlyVerdict, gateCells, deployProof, proofContract,
   prereqVerdict, testRanVerdict, attributedVerdict, budgetVerdict,
-  nodeHeapMb, heapOomMessage, HEAP_FLOOR_MB,
+  nodeHeapMb, heapOomMessage, ceilingIsNoop, HEAP_FLOOR_MB,
 } from "../../kernel/src/index.mjs"
 const exec = promisify(execFile)
 
@@ -271,6 +271,23 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
   }
   const heap = heapFor("verify")
   if (checks.length) say("dim", `each node step gets --max-old-space-size=${heap.heapMb} — ${heap.why}`)
+  /**
+   * Say so when the ceiling is not actually a ceiling.
+   *
+   * V8 sizes old-space from the machine, so the formula can land on the default
+   * — around 7.5 GB available it derives ~4096, which on this machine IS the
+   * default. Reporting "each node step gets a 4096 MB ceiling" while imposing
+   * nothing is the same lie as a build script that has carried that flag for
+   * months. The number is not wrong; the claim about it would be.
+   */
+  {
+    const v8 = await import("node:v8")
+    const defaultOldSpaceMb = Math.round(v8.getHeapStatistics().heap_size_limit / 1024 / 1024) - 48
+    if (checks.length && ceilingIsNoop(heap.heapMb, defaultOldSpaceMb)) {
+      say("warn", `${heap.heapMb} MB is node's own default on this machine (~${defaultOldSpaceMb} MB), so this flag imposes nothing. ` +
+        `The step is running on the default ceiling — raise the container's memory, or set heapMb explicitly, if it needs more.`)
+    }
+  }
 
   /**
    * A fence below our own floor is a refusal, not a warning.

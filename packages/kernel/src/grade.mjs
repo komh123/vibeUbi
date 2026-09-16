@@ -16,9 +16,34 @@ export const SEVERITIES = ["critical", "high", "medium", "low", "info"]
 const WEIGHT = { critical: 25, high: 10, medium: 4, low: 1, info: 0 }
 const BANDS = [["A", 90], ["B", 75], ["C", 60], ["D", 40]]
 
+/**
+ * A severity this scorer does not recognise is NOT free.
+ *
+ * `WEIGHT[...] ?? 0` meant a finding whose severity was misspelled, or came
+ * from a rule using a different vocabulary, cost exactly nothing and did not
+ * block — silently, while appearing in the report like any other row. A peer
+ * session made the general version of this point today: a defensive fallback is
+ * the thing that hides the defect, because it turns "this value is not what I
+ * expect" into a plausible number nobody questions.
+ *
+ * Unknown weighs as `high`. Not as `critical`, which would make a typo louder
+ * than a real critical; not as zero, which is what it was.
+ */
 export function score(findings) {
-  const s = findings.reduce((acc, f) => acc - (WEIGHT[String(f.severity).toLowerCase()] ?? 0), 100)
+  const s = findings.reduce((acc, f) => acc - weightOf(f.severity), 100)
   return Math.max(0, s)
+}
+
+export function weightOf(severity) {
+  const w = WEIGHT[String(severity).toLowerCase().trim()]
+  return w ?? WEIGHT.high
+}
+
+/** Severities that no rule in this run spelled the way the scorer expects. */
+export function unknownSeverities(findings) {
+  return [...new Set(findings
+    .map((f) => String(f.severity ?? "").toLowerCase().trim())
+    .filter((s) => !(s in WEIGHT)))]
 }
 
 /**
@@ -69,7 +94,10 @@ export function coverageOf({ layers = [], skipped = [] }) {
 export const DEFAULT_FAIL_ON = ["critical", "high"]
 
 export function atOrAbove(severity, failOn = DEFAULT_FAIL_ON) {
-  const i = SEVERITIES.indexOf(String(severity).toLowerCase())
+  // Same rule as `weightOf`: unrecognised reads as `high`, so a typo cannot be
+  // the quietest possible way to disable a gate.
+  const raw = String(severity).toLowerCase().trim()
+  const i = SEVERITIES.includes(raw) ? SEVERITIES.indexOf(raw) : SEVERITIES.indexOf("high")
   const floor = Math.max(...failOn.map((s) => SEVERITIES.indexOf(String(s).toLowerCase())).filter((x) => x >= 0))
   return i >= 0 && i <= floor
 }

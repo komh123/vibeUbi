@@ -7,8 +7,21 @@
  * `ship` runs a project's type-check and unit suites as node sub-processes. On
  * a peer session's real project, measured rather than read from docs:
  *
- *     node's default old-space limit        4144 MB   (v8.getHeapStatistics)
+ *     node's default old-space limit        4096 MB
+ *     what v8.getHeapStatistics reports     4144 MB   (old-space + ~48)
  *     `tsc --noEmit` cold peak RSS          5318 MB   (3m52s, 0 type errors)
+ *
+ * The first two lines were one line saying 4144, and the difference is not
+ * pedantry. Measured here across the flag:
+ *
+ *     (default)                 4144        --max-old-space-size=4096   4144
+ *     --max-old-space-size=2048 2096        --max-old-space-size=4144   4192
+ *
+ * `heap_size_limit` runs ~48 MB above `max-old-space-size`, so the DEFAULT
+ * old-space is 4096 — which means `--max-old-space-size=4096` is a no-op that
+ * has always looked like a cap. Calling 4144 "the default old-space" invites
+ * "then set 4097"; calling 4096 the default tells you the flag never did
+ * anything. Same failure, and the description decides what someone does next.
  *
  * 5318 > 4144, so that step is a GUARANTEED out-of-memory, not a flake. Of the
  * fifteen node sub-steps in that pipeline, exactly zero had a heap ceiling, and
@@ -161,4 +174,27 @@ export function killScope(platform = process.platform) {
   return platform === "win32"
     ? { strategy: "taskkill", why: "Windows has no POSIX process groups; /T /F is what reaches the tree" }
     : { strategy: "process-group", why: "spawn detached, then kill the negative pid so the whole tree goes, not just the child we hold" }
+}
+
+/**
+ * Is this ceiling doing anything at all?
+ *
+ * A flag whose value equals node's own default is invisible to every test that
+ * only asserts the flag is PRESENT — a peer found exactly this in a build
+ * script that had carried `--max-old-space-size=4096` for months while running
+ * on the default the whole time. This formula can produce the same number
+ * honestly: around 7.5 GB available it derives ~4096, and the pipeline would
+ * then report a ceiling it did not impose.
+ *
+ * Deliberately NOT a field on the return: that shape is pinned by a consumer's
+ * types and a shape change costs them a bump. A predicate the caller runs is
+ * the same information at no blast radius.
+ *
+ * The default is not a constant — V8 sizes old-space from the machine — so the
+ * caller measures it (`v8.getHeapStatistics().heap_size_limit` minus the ~48 MB
+ * of other spaces) and passes it in.
+ */
+export function ceilingIsNoop(heapMb, defaultOldSpaceMb, toleranceMb = 64) {
+  if (!Number.isFinite(defaultOldSpaceMb) || defaultOldSpaceMb <= 0) return false
+  return Math.abs(heapMb - defaultOldSpaceMb) <= toleranceMb
 }
