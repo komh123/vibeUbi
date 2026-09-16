@@ -8,6 +8,7 @@
 import { grade, coverageOf, baselineDiff, textRuleFitness, declaredFieldsAreRead, READ_DECLARED_FIELDS } from "../../kernel/src/index.mjs"
 import * as collect from "./collect.mjs"
 import * as rules from "./rules.mjs"
+import { runCanaries } from "./canary.mjs"
 
 export async function runScan({ root, config = {}, layers, base = "", discovered = [], note = () => {} }) {
   const findings = []
@@ -150,6 +151,19 @@ export async function runScan({ root, config = {}, layers, base = "", discovered
    * that discovered nothing returned A/100/"clean". Same shape as every other
    * defect found this week: written down, believed, consumed by nobody.
    */
+  /**
+   * Before trusting any rule's silence, make it speak once.
+   *
+   * A dead scanner and a clean project produce the same report. This hands each
+   * rule a sample it must flag, and a rule that stays quiet is folded into
+   * `skipped` — so it travels the path already built for "this check did not
+   * run": the grade is withheld, it blocks, and it cannot be accepted as debt.
+   * Deliberately not a finding: it is not the project's problem.
+   */
+  const canaries = runCanaries(layers)
+  for (const d of canaries.dead) skipped.push(`${d.rule} — cannot be shown to work: ${d.why}`)
+  note(`${canaries.checked.length} rule(s) proved they still fire`)
+
   const coverage = coverageOf({ layers, skipped })
   for (const gap of coverage.unmeasured) {
     findings.push({

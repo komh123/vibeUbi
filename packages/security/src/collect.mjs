@@ -30,6 +30,22 @@ const SKIP = new Set([
   ".next", ".next-new", ".next-prev", ".vibeubi", ".vibeship",
 ])
 
+/**
+ * Files whose entire content is deliberate examples.
+ *
+ * `canary.mjs` holds one sample per rule, each built to MATCH that rule — so a
+ * scanner run over this repository flags its own bait and reports a fake key
+ * and an unsanitised sink as real findings. That is the scanner working
+ * correctly on a file whose purpose is to be caught, which is the same
+ * situation as a planted fixture in a test, and `s2Sinks` already skips those
+ * for the same reason.
+ *
+ * Named as a path rather than a pattern so it cannot quietly grow: an
+ * exemption that matches "anything with canary in the name" is the wide kind
+ * that turns off real checks sharing the surface.
+ */
+const DELIBERATE_EXAMPLES = new Set(["packages/security/src/canary.mjs"])
+
 /** A line this long is minified: not something a person wrote or can fix. */
 const MINIFIED_LINE = 500
 const CODE_EXT = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"])
@@ -92,6 +108,7 @@ export function lex(text) {
 export async function codeFiles(root, files) {
   const out = []
   for (const file of files) {
+    if (DELIBERATE_EXAMPLES.has(file.path)) continue
     if (!CODE_EXT.has(extname(file.path))) continue
     try {
       const text = await readFile(file.abs, "utf8")
@@ -109,6 +126,7 @@ export async function scannableFiles(root, files) {
   const out = []
   for (const file of files) {
     if (!ok.test(file.path)) continue
+    if (DELIBERATE_EXAMPLES.has(file.path)) continue
     try { out.push({ path: file.path, text: await readFile(file.abs, "utf8") }) } catch { /* skip */ }
   }
   return out
