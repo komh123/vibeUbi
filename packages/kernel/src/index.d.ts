@@ -285,3 +285,39 @@ export const REAP_MAX_AGE_MS: number
 export const MIN_BUDGET_MS: number
 export const MIN_FACTOR: number
 export const MAX_FACTOR: number
+
+/* ── gaps only a human can close ──────────────────────────────────────── */
+
+export interface ManualGap {
+  id: string
+  why: string
+  owner: string
+  acceptedAt: number
+  runbook?: string
+  probeId?: string
+  probe?: () => unknown
+}
+
+/** Refuses a gap with no probe: a gap nobody can check is a comment, and a
+ *  comment in a gate reads as coverage. */
+export function manualGapAdmission(gap: Partial<ManualGap>): { ok: true } | { ok: false; reason: string }
+
+/** `null` / `{unreachable}` are NOT `{open:false}` — collapsing them is how
+ *  "we could not look" becomes "it is fixed". */
+export function manualGapVerdict(o: {
+  gap: Partial<ManualGap>
+  observed: { open: boolean } | { unreachable: string } | null | undefined
+  now?: number
+}): {
+  id?: string
+  owner?: string
+  days: number | null
+  runbook: string | null
+  state: "open" | "closed" | "unmeasured"
+  blocks: boolean
+  reason: string
+}
+
+export function manualGapReport(
+  verdicts: readonly { state: string; blocks: boolean; days?: number | null }[],
+): { open: number; closed: number; unmeasured: number; blocks: boolean; oldestDays: number | null; verdicts: readonly unknown[] }
