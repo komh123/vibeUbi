@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "es2022",
+    "allowJs": false
+  },
+  "include": ["packages/kernel/src/index.d.ts", "packages/kernel/test/types/*.ts"]
+}
