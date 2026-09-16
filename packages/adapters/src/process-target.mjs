@@ -59,7 +59,7 @@ export function rollbackMoves(p) {
  * belong. A build must never be able to destroy the thing you would roll back
  * to.
  */
-export async function build({ root, cmd, env = {}, distDir = "dist" }) {
+export async function build({ root, cmd, env = {}, distDir = "dist", heapMb = null, timeoutMs = 900_000 }) {
   const p = distPaths(root, distDir)
   await rm(p.next, { recursive: true, force: true })
 
@@ -70,7 +70,21 @@ export async function build({ root, cmd, env = {}, distDir = "dist" }) {
 
   const [bin, ...args] = cmd.split(/\s+/)
   try {
-    await run(bin, args, { cwd: root, env: { ...process.env, ...env, VIBEUBI_OUT: p.next }, maxBuffer: 64 * 1024 * 1024 })
+    /**
+     * The build gets the same three guards `verify` had and this did not:
+     * a heap ceiling, a clock, and a kill that reaches the whole tree.
+     *
+     * It was the only spawning step in the pipeline without them, which is
+     * backwards — a Next.js or Vite build is the step most likely to exhaust a
+     * heap, and a bundler that hangs holds the machine with no budget to stop it.
+     * `execFile`'s killSignal reaches the child we hold; a bundler's workers
+     * outlive it.
+     */
+    const nodeOpts = [process.env.NODE_OPTIONS, heapMb ? `--max-old-space-size=${heapMb}` : ""].filter(Boolean).join(" ")
+    await spawnFenced(bin, args, {
+      cwd: root, timeoutMs,
+      env: { ...process.env, ...env, VIBEUBI_OUT: p.next, ...(nodeOpts ? { NODE_OPTIONS: nodeOpts } : {}) },
+    })
   } catch (err) {
     // A failed build must not leave the live artifact in whatever half-state
     // the tool stopped at.
@@ -87,6 +101,34 @@ export async function build({ root, cmd, env = {}, distDir = "dist" }) {
     await rm(snapshot, { recursive: true, force: true })
   }
   return p
+}
+
+/**
+ * Spawn with a clock and a kill that reaches the process group.
+ *
+ * The decision ("the kill must reach the tree") lives in the kernel's
+ * `killScope`; this is only the POSIX mechanism for it. A negative pid
+ * addresses the group, which is why the spawn has to be detached.
+ */
+async function spawnFenced(bin, args, { cwd, env, timeoutMs }) {
+  return await new Promise((resolve, reject) => {
+    const child = spawn(bin, args, { cwd, env, detached: true, stdio: ["ignore", "pipe", "pipe"] })
+    let out = ""
+    const take = (d) => { out += d; if (out.length > 4 * 1024 * 1024) out = out.slice(-2 * 1024 * 1024) }
+    child.stdout?.on("data", take); child.stderr?.on("data", take)
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      try { process.kill(-child.pid, "SIGKILL") } catch { try { child.kill("SIGKILL") } catch { /* gone */ } }
+    }, timeoutMs)
+    child.on("error", (e) => { clearTimeout(timer); reject(e) })
+    child.on("exit", (code, sig) => {
+      clearTimeout(timer)
+      if (timedOut) return reject(new Error(`the build passed its ${Math.round(timeoutMs / 1000)}s budget and its process tree was killed. Output tail: ${out.slice(-600)}`))
+      if (code === 0) return resolve({ out })
+      reject(new Error(`build exited ${code ?? sig}: ${out.slice(-1200)}`))
+    })
+  })
 }
 
 export async function swap({ root, distDir = "dist" }) {

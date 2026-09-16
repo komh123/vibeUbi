@@ -55,14 +55,14 @@ test("every branch says WHY, because the caller has to print it", () => {
 })
 
 test("heapOomMessage returns null for anything that is not a V8 OOM", () => {
-  assert.equal(heapOomMessage({ output: "Killed", step: "tsc", heapMb: 8192 }), null,
+  assert.equal(heapOomMessage({ output: "Killed", forStep: "tsc", heapMb: 8192 }), null,
     "exit 137 is a cgroup kill and needs a different message — falling through is the point")
-  assert.equal(heapOomMessage({ output: "1 test failed", step: "unit", heapMb: 4096 }), null)
+  assert.equal(heapOomMessage({ output: "1 test failed", forStep: "unit", heapMb: 4096 }), null)
 })
 
 test("heapOomMessage fires on both of V8's phrasings, and keeps the self-lock line", () => {
   for (const out of ["FATAL ERROR: JavaScript heap out of memory", "Ineffective mark-compacts near heap limit Allocation failed"]) {
-    const m = heapOomMessage({ output: out, step: "tsc --noEmit", heapMb: 8192, availableMb: 64_000 })
+    const m = heapOomMessage({ output: out, forStep: "tsc --noEmit", heapMb: 8192, availableMb: 64_000 })
     assert.match(m, /SELF-LOCKS/, "without this the operator reruns, sees the same failure, and blames the machine")
     assert.match(m, /NOT the machine running out of memory/)
     assert.match(m, /tourniquet/)

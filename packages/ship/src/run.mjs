@@ -180,7 +180,7 @@ async function runStep(id, cmd, args, { cwd, outDir, timeoutMs, heapMb = null, e
 
   let out = ""
   try { out = readFileSync(file, "utf8") } catch { /* nothing was written */ }
-  const oom = heapOomMessage({ output: out, step: id, heapMb, availableMb: env.__availableMb ?? 0 })
+  const oom = heapOomMessage({ output: out, forStep: id, heapMb, availableMb: env.__availableMb ?? 0 })
   return { code, out, timedOut, oom, ms: Date.now() - t0 }
 }
 
@@ -247,9 +247,29 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
    * that knows its own limit should be able to say so.
    */
   const mem = { ...(await machineMemory()), ...(config.memory ?? {}) }
-  const heap = config.heapMb
-    ? { heapMb: config.heapMb, fenced: !!mem.cgroupLimitMb, why: "set explicitly in this project's config" }
-    : nodeHeapMb({ ...mem, reserveMb: config.reserveMb ?? 2048 })
+  /**
+   * The ceiling is decided PER STEP, even though today every step shares one
+   * machine-wide fence.
+   *
+   * A peer session warned that a refusal checked at a single call site lets a
+   * more tightly fenced later step slip past the door — and looking for that
+   * found something worse in this tree: `build` spawned the project's build
+   * command with NO ceiling at all, no timeout and no tree kill, while `verify`
+   * had all three. A Next.js or Vite build is the single step most likely to
+   * exhaust a heap, so the one step that most needed the guard was the one
+   * without it.
+   *
+   * `config.heapMb` may be a number (all steps) or a map keyed by step id, so
+   * a project that really does fence one step tighter gets the refusal too
+   * rather than silently getting a heap its fence will kill.
+   */
+  const heapFor = (stepId) => {
+    const override = typeof config.heapMb === "object" ? config.heapMb?.[stepId] : config.heapMb
+    if (override) return { heapMb: override, fenced: !!mem.cgroupLimitMb, reason: "configured", numbers: { heapMb: override }, why: `set explicitly for ${stepId} in this project's config` }
+    const fence = config.fences?.[stepId] ?? mem.cgroupLimitMb
+    return nodeHeapMb({ cgroupLimitMb: fence, availableMb: mem.availableMb, reserveMb: config.reserveMb ?? 2048 })
+  }
+  const heap = heapFor("verify")
   if (checks.length) say("dim", `each node step gets --max-old-space-size=${heap.heapMb} — ${heap.why}`)
 
   /**
@@ -265,11 +285,22 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
    * Refusing is also where this belongs: verify is the step that is allowed to
    * stop the run, because nothing has been mutated yet.
    */
-  if (heap.tooSmall && checks.length) {
+  /**
+   * Checked for EVERY step that will spawn something, not just this one.
+   *
+   * Refusing here rather than at each step is deliberate: verify is the last
+   * point at which nothing has been mutated, so a fence that cannot host the
+   * build is better reported now than after the swap.
+   */
+  const spawning = ["verify", "build", "sweep"]
+  for (const id of spawning) {
+    if (id === "verify" && checks.length === 0) continue
+    const h = heapFor(id)
+    if (!h.tooSmall) continue
     step(0, "verify", "fail")
-    say("bad", heap.why)
+    say("bad", `${id}: ${h.why}`)
     say("dim", `raise the memory limit on this container, or set heapMb explicitly if you know this step fits in less than ${HEAP_FLOOR_MB} MB`)
-    return finish("refused", `the memory fence (${heap.numbers?.cgroupLimitMb} MB) is below this pipeline's floor`)
+    return finish("refused", `the memory fence for ${id} (${h.numbers?.cgroupLimitMb} MB) is below this pipeline's floor`)
   }
 
   for (const c of checks) {
@@ -312,7 +343,9 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
   say("head", "2/7  build into a scratch directory")
   let artifactId = ""
   try {
-    const b = await target.build?.()
+    const bh = heapFor("build")
+    say("dim", `build gets --max-old-space-size=${bh.heapMb}`)
+    const b = await target.build?.({ heapMb: bh.heapMb, timeoutMs: budgetMs.build })
     if (b?.skipped) say("warn", `build skipped: ${b.skipped}`)
     artifactId = await target.artifactId()
   } catch (err) {

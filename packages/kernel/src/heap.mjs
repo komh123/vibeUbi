@@ -122,11 +122,21 @@ const V8_OOM = /JavaScript heap out of memory|Ineffective mark-compacts near hea
  * re-runs, sees an identical failure, and concludes the machine is broken —
  * which is exactly what happened, for two cycles, to the session that found this.
  */
-export function heapOomMessage({ output = "", step = "this step", heapMb, availableMb = 0 }) {
+/**
+ * `forStep`, not `step`, on purpose.
+ *
+ * A peer consuming this kernel found that its own budget gate scans source for
+ * `step: "X"` to list timed steps, and an option bag using that field name made
+ * an unrelated call look like a timeout registration — the gate then went red
+ * on correct behaviour, which is the kind of gate the next person deletes. A
+ * shared kernel's option bags should avoid the common words (`step`, `name`,
+ * `id`) that consumers' scanners key on. Cheap insurance.
+ */
+export function heapOomMessage({ output = "", forStep = "this step", heapMb, availableMb = 0 }) {
   if (!V8_OOM.test(String(output))) return null
   const availableGb = Math.floor(availableMb / 1024)
   return [
-    `"${step}" hit V8's heap ceiling (this step was given ${heapMb} MB; the machine had ${availableGb} GB available). ` +
+    `"${forStep}" hit V8's heap ceiling (this step was given ${heapMb} MB; the machine had ${availableGb} GB available). ` +
       `This is NOT the machine running out of memory — the ceiling it hit is node's own.`,
     `It also SELF-LOCKS: an incremental cache cannot be written during an OOM, so the next run is cold again and OOMs again.`,
     `Two ways out: (1) give this step more (see the fence share and nodeHeapMb), ` +
