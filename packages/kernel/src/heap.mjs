@@ -45,7 +45,13 @@ export const HEAP_CEILING_MB = 16384
  * @param {number|null} [o.cgroupLimitMb] the fence this step runs inside, if any
  * @param {number} [o.availableMb]        what the machine has free right now
  * @param {number} [o.reserveMb]          leave this much for everything else
- * @returns {{heapMb:number, fenced:boolean, why:string, tooSmall?:boolean}}
+ * @returns {{heapMb:number, fenced:boolean, reason:string, numbers:object, why:string, tooSmall?:boolean}}
+ *   `reason` is a machine-readable code and `numbers` carries everything a
+ *   sentence needs, because `why` is English prose and a consumer whose
+ *   operator-facing strings are in another language must be able to render its
+ *   own sentence without re-deriving the arithmetic. Proposed by the peer
+ *   session that has the second implementation of this formula, whose tree is
+ *   zh-TW throughout; a shared kernel should not own one language's words.
  */
 export function nodeHeapMb({ cgroupLimitMb = null, availableMb = 0, reserveMb = 0 }) {
   const clamp = (n) => Math.max(HEAP_FLOOR_MB, Math.min(HEAP_CEILING_MB, Math.floor(n)))
@@ -69,6 +75,8 @@ export function nodeHeapMb({ cgroupLimitMb = null, availableMb = 0, reserveMb = 
         heapMb: under,
         fenced: true,
         tooSmall: true,
+        reason: "fence-below-floor",
+        numbers: { cgroupLimitMb, floorMb: HEAP_FLOOR_MB, derivedMb: under },
         why:
           `the fence is ${cgroupLimitMb} MB, which is below this pipeline's ${HEAP_FLOOR_MB} MB floor. ` +
           `Using ${under} MB because a heap at or above the fence gets the process cgroup-killed (exit 137) ` +
@@ -78,6 +86,8 @@ export function nodeHeapMb({ cgroupLimitMb = null, availableMb = 0, reserveMb = 
     return {
       heapMb: clamped,
       fenced: true,
+      reason: "fenced",
+      numbers: { cgroupLimitMb, nonHeapShare: NON_HEAP_SHARE, heapMb: clamped },
       why:
         `inside a ${cgroupLimitMb} MB fence; ${Math.round(NON_HEAP_SHARE * 100)}% left for everything that is not V8 heap. ` +
         `Kept strictly under the fence so an overrun is V8's legible message, not exit 137.`,
@@ -88,6 +98,8 @@ export function nodeHeapMb({ cgroupLimitMb = null, availableMb = 0, reserveMb = 
   return {
     heapMb: clamp(usable * UNFENCED_SHARE),
     fenced: false,
+    reason: "unfenced",
+    numbers: { availableMb, reserveMb, usableMb: usable, share: UNFENCED_SHARE, floorMb: HEAP_FLOOR_MB, ceilingMb: HEAP_CEILING_MB },
     why:
       `no fence; ${availableMb} MB available minus ${reserveMb} MB reserved, ` +
       `at ${Math.round(UNFENCED_SHARE * 100)}%, clamped to [${HEAP_FLOOR_MB}, ${HEAP_CEILING_MB}] MB. ` +

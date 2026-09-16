@@ -58,3 +58,49 @@ setInterval(() => {}, 1e9)
     assert.match(done?.reason ?? "", /timed out/)
   } finally { await rm(root, { recursive: true, force: true }) }
 })
+
+test("a fence below the floor refuses BEFORE running a single step", async () => {
+  const root = await mkdtemp(join(tmpdir(), "vibeubi-tiny-"))
+  try {
+    const marker = join(root, "it-ran")
+    let done = null
+    await ship({
+      root, discovered: [],
+      config: {
+        base: "http://127.0.0.1:1",
+        // 512 MB fence: the formula derives 384 MB, which will not run a
+        // type-check. Warning and proceeding hands the operator a confusing
+        // crash instead of a clear "this does not fit here".
+        memory: { cgroupLimitMb: 512, availableMb: 512 },
+        verify: [{ name: "must-not-run", cmd: `${process.execPath} -e require('fs').writeFileSync(${JSON.stringify(marker)},'x')` }],
+      },
+      target: { proofClaim: { external: true, carriesArtifactId: true, source: "test" }, async proof() { return {} } },
+      emit: (e) => { if (e.kind === "done") done = e },
+    })
+    assert.equal(done?.outcome, "refused")
+    assert.match(done.reason, /below this pipeline's floor/)
+    const ran = await readFile(marker, "utf8").then(() => true).catch(() => false)
+    assert.equal(ran, false, "the step ran anyway — `tooSmall` is a field whose reader only printed it")
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test("a normal machine is not refused", async () => {
+  const root = await mkdtemp(join(tmpdir(), "vibeubi-ok-"))
+  try {
+    const marker = join(root, "it-ran")
+    let done = null
+    await ship({
+      root, discovered: [],
+      config: {
+        base: "http://127.0.0.1:1",
+        memory: { cgroupLimitMb: 16_384, availableMb: 16_384 },
+        verify: [{ name: "runs", cmd: `${process.execPath} -e require('fs').writeFileSync(${JSON.stringify(marker)},'x')` }],
+      },
+      target: { proofClaim: { external: true, carriesArtifactId: true, source: "test" }, async proof() { return {} } },
+      emit: (e) => { if (e.kind === "done") done = e },
+    })
+    assert.ok(await readFile(marker, "utf8").then(() => true).catch(() => false),
+      "the refusal is too wide — it stopped a machine that was fine")
+    assert.doesNotMatch(done?.reason ?? "", /floor/)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})

@@ -91,3 +91,29 @@ test("and pasting its fingerprint into the baseline by hand does not silence it 
   assert.equal(d.blocking.length, 1, "grade said '—' and the exit code still went 1 → 0; the exit code is what CI reads")
   assert.equal(d.known.length, 0)
 })
+
+/* ── reason codes, and the refusal policy ──────────────────────────────── */
+test("every branch carries a machine-readable reason and the numbers behind it", () => {
+  const cases = [
+    [nodeHeapMb({ cgroupLimitMb: 8192 }), "fenced"],
+    [nodeHeapMb({ cgroupLimitMb: 900 }), "fence-below-floor"],
+    [nodeHeapMb({ availableMb: 12_000, reserveMb: 2048 }), "unfenced"],
+  ]
+  for (const [r, code] of cases) {
+    assert.equal(r.reason, code)
+    assert.ok(Object.keys(r.numbers).length >= 2,
+      "a consumer that renders its own sentence must not have to re-derive the arithmetic")
+    for (const v of Object.values(r.numbers)) assert.equal(typeof v, "number")
+  }
+})
+
+test("a fence too small to honour the floor is flagged, not quietly obeyed", () => {
+  // The peer's catch: 100 MB fence -> 75 MB heap, which will not run node at
+  // all. The kernel reports; the POLICY (refuse) belongs to the caller, and
+  // ship now refuses rather than warning and running it anyway.
+  for (const mb of [100, 256, 512, 1000, 2000]) {
+    const r = nodeHeapMb({ cgroupLimitMb: mb })
+    assert.equal(r.tooSmall, true, `${mb} MB fence should be flagged`)
+    assert.ok(r.heapMb < mb, "still under the fence — the property holds even in the flagged case")
+  }
+})

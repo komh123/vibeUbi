@@ -33,7 +33,7 @@ import { promisify } from "node:util"
 import {
   verdictFor, earlyVerdict, gateCells, deployProof, proofContract,
   prereqVerdict, testRanVerdict, attributedVerdict, budgetVerdict,
-  nodeHeapMb, heapOomMessage,
+  nodeHeapMb, heapOomMessage, HEAP_FLOOR_MB,
 } from "../../kernel/src/index.mjs"
 const exec = promisify(execFile)
 
@@ -238,12 +238,39 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
    * that gets a guaranteed OOM that looks exactly like a broken test suite.
    * `config.heapMb` overrides for a project that knows better than the formula.
    */
-  const mem = await machineMemory()
+  /**
+   * `config.memory` overrides what we read off the machine.
+   *
+   * Not test plumbing: in CI the cgroup files frequently describe the HOST and
+   * not the container the step is actually confined to, so the number read here
+   * can be an order of magnitude wrong in the dangerous direction. A project
+   * that knows its own limit should be able to say so.
+   */
+  const mem = { ...(await machineMemory()), ...(config.memory ?? {}) }
   const heap = config.heapMb
     ? { heapMb: config.heapMb, fenced: !!mem.cgroupLimitMb, why: "set explicitly in this project's config" }
     : nodeHeapMb({ ...mem, reserveMb: config.reserveMb ?? 2048 })
   if (checks.length) say("dim", `each node step gets --max-old-space-size=${heap.heapMb} — ${heap.why}`)
-  if (heap.tooSmall) say("warn", heap.why)
+
+  /**
+   * A fence below our own floor is a refusal, not a warning.
+   *
+   * This printed a warning and then ran the step anyway, which the peer session
+   * that contributed the formula caught: a 100 MB fence derives a 75 MB heap,
+   * node will not run a type-check in that, and the operator gets a confusing
+   * crash instead of a clear "this does not fit here". `tooSmall` was a field
+   * whose only reader printed it — a control that looks like a control, which
+   * is the defect class both of us have now been bitten by five times between us.
+   *
+   * Refusing is also where this belongs: verify is the step that is allowed to
+   * stop the run, because nothing has been mutated yet.
+   */
+  if (heap.tooSmall && checks.length) {
+    step(0, "verify", "fail")
+    say("bad", heap.why)
+    say("dim", `raise the memory limit on this container, or set heapMb explicitly if you know this step fits in less than ${HEAP_FLOOR_MB} MB`)
+    return finish("refused", `the memory fence (${heap.numbers?.cgroupLimitMb} MB) is below this pipeline's floor`)
+  }
 
   for (const c of checks) {
     const [bin, ...args] = c.cmd.split(/\s+/)
