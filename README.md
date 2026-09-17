@@ -195,6 +195,25 @@ Fine for a private repo. Worth revisiting before any public release — not for
 legal reasons, but because the first page of results for the name belongs to
 someone else.
 
+## Runtimes it is actually tested on
+
+| | tests | typecheck | smoke | CLI |
+| --- | --- | --- | --- | --- |
+| **Node 18.19** | 267 pass | ✓ | 5/5 | ✓ |
+| **Node 22.22** | 267 pass | ✓ | 5/5 | ✓ |
+| **Node 24.21** | 267 pass | ✓ | 5/5 | ✓ |
+
+`engines` says `>=18.17`. Three versions run is not the same as "every version
+works" — 20 is untested, and so is anything newer than 24.21. What the three
+buy is the range's ends plus one point inside it, which is where the two
+portability defects found so far actually lived: `node --test <directory>` walks
+directories on 18 and does not on 22 (the whole suite was 5/5 red on 22 until a
+glob replaced it), and Node 24's default test reporter is no longer TAP, so
+`--test-reporter=tap` is needed to get comparable counts.
+
+No API removed in 20/22/24 is used: no `url.parse`, no `util.isArray`, no
+`new Buffer()`, no `process.binding`.
+
 ## What belongs here, and what belongs in your project
 
 This repository is **the architecture and the flow**. It is deliberately not a
