@@ -103,8 +103,12 @@ export async function runScan({ root, config = {}, layers, base = "", discovered
 
   /* ── S4 ── */
   if (layers.includes("S4")) {
-    const live = await collect.listeners(root)
+    const seen = await collect.listeners(root)
+    const live = seen.listeners
     note(`${live.length} listener(s) / declared port(s) found`)
+    // Without `ss` the only listeners visible are the declared ones, so the
+    // orphan rule cannot fire at all — a coverage hole, not a clean machine.
+    if (!seen.live) skipped.push(`S4.exposure.orphan — ${seen.why}`)
     /**
      * Can this scan see the declared listeners at all?
      *

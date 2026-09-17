@@ -170,6 +170,16 @@ export async function npmAudit(root) {
     const { stdout } = await run("npm", ["audit", "--json", "--audit-level=low"],
       { cwd: root, maxBuffer: 64 * 1024 * 1024 })
     return parseAudit(stdout)
+    /**
+     * Output present and nothing extracted is a PARSER failure, not an empty
+     * machine — and the two are indistinguishable downstream, because both
+     * produce an empty list. This is the check that would have caught the
+     * column bug above on the day it was written.
+     */
+    if (rows.length > 0 && out.length === 0) {
+      live = false
+      why = `\`ss -ltnp\` returned ${rows.length} row(s) and none could be parsed — the parser is broken, not the machine empty`
+    }
   } catch (err) {
     // npm audit exits non-zero when it finds things; the JSON is still on stdout.
     if (err.stdout) { try { return parseAudit(err.stdout) } catch { /* fall through */ } }
@@ -197,17 +207,63 @@ function parseAudit(stdout) {
  * The union is the point: a port in a manifest that is not listening and a
  * port listening that is in no manifest are both worth knowing.
  */
+/**
+ * Every listener on this machine, plus what the manifests say should exist.
+ *
+ * `live` says whether this machine could be OBSERVED at all, and it has to be
+ * reported because without it the two sources collapse. `ss` sees what is
+ * ACTUALLY listening; the manifests see what was DECLARED to listen. If `ss`
+ * cannot run you are left with only declared ports — so `S4.exposure.orphan`,
+ * whose entire job is to find a listener nobody declared, becomes structurally
+ * unable to fire. It reports zero, which reads exactly like a machine with
+ * nothing undeclared on it.
+ *
+ * The canary does not catch this: it proves the RULE still fires, not that the
+ * collector found anything for it to fire on. A peer hit the same shape from
+ * the other side — copying a weaker validation onto a wider source — and the
+ * lesson is the same either way: a guard that cannot see its wider input is
+ * not a guard, and it looks like a pass.
+ */
 export async function listeners(root) {
   const out = []
+  let live = false
+  let why
   try {
     const { stdout } = await run("ss", ["-ltnp"], { maxBuffer: 8 * 1024 * 1024 })
-    for (const line of stdout.split("\n").slice(1)) {
-      const m = /^\S+\s+\S+\s+\S+\s+\S+\s+(\S+):(\d+)\s/.exec(line)
+    live = true
+    /**
+     * `ss -ltnp` columns:  State  Recv-Q  Send-Q  Local:Port  Peer:Port  Process
+     *
+     * The first version skipped FOUR fields and captured the fifth — which is
+     * the PEER address, `0.0.0.0:*`, where `(\d+)` can never match a `*`. So it
+     * matched nothing, on every machine, forever. Measured here: 49 real
+     * listeners, 0 parsed, and `S4.exposure.orphan` — the rule whose entire job
+     * is to find a listener nobody declared — had never once fired on real data.
+     *
+     * Three is the right number of fields to skip.
+     */
+    const rows = stdout.split("\n").slice(1).filter((l) => l.trim())
+    for (const line of rows) {
+      const m = /^\S+\s+\S+\s+\S+\s+(\S+):(\d+)\s/.exec(line)
       if (!m) continue
       const proc = /users:\(\("([^"]+)"/.exec(line)?.[1]
       out.push({ service: proc ?? "unknown", bind: m[1].replace(/^\[|\]$/g, ""), port: Number(m[2]), process: proc, source: "ss" })
     }
-  } catch { /* no ss (mac, container) — the manifests still contribute */ }
+    /**
+     * Output present and nothing extracted is a PARSER failure, not an empty
+     * machine — and downstream the two are indistinguishable, because both
+     * produce an empty list. This is the check that would have caught the
+     * column bug above on the day it was written, instead of never.
+     */
+    if (rows.length > 0 && out.length === 0) {
+      live = false
+      why = `\`ss -ltnp\` returned ${rows.length} row(s) and none could be parsed — the parser is broken, not the machine empty`
+    }
+  } catch (err) {
+    // The manifests still contribute, but they can only ever confirm what was
+    // already declared, so the orphan rule cannot fire. Say so.
+    why = `\`ss -ltnp\` could not run here (${err.code ?? err.message}), so nothing was observed actually listening — only what the manifests declare`
+  }
 
   for (const rel of ["docker-compose.yml", "docker-compose.yaml", "compose.yml"]) {
     const p = join(root, rel)
@@ -236,7 +292,8 @@ export async function listeners(root) {
     }
   }
   const seen = new Set()
-  return out.filter((l) => { const k = `${l.service}:${l.port}:${l.bind}`; return !seen.has(k) && seen.add(k) })
+  const deduped = out.filter((l) => { const k = `${l.service}:${l.port}:${l.bind}`; return !seen.has(k) && seen.add(k) })
+  return { listeners: deduped, live, why }
 }
 
 export async function dockerAndCompose(root, files) {
