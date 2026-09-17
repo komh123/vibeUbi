@@ -187,6 +187,65 @@ const COMMANDS = {
     process.exit(r.blocking.length > 0 ? 1 : 0)
   },
 
+  /**
+   * `probe` — drive the skill step on its own.
+   *
+   * Without this the step is only reachable through a whole ship, which is
+   * minutes of build and tests before the agent can see whether the order is
+   * even right. Two halves: `--order` writes what to check, `--judge` reads
+   * what came back. The judging is identical to the one inside ship, because
+   * it is the same kernel function — a second implementation of the verdict is
+   * how the standalone path and the pipeline start disagreeing.
+   */
+  async probe() {
+    const { config, ctx } = await boot()
+    const { probeOrder, orderVerdict, verdictFor, gateCells } = await import("../packages/kernel/src/index.mjs")
+    const { readFile, writeFile, mkdir } = await import("node:fs/promises")
+    const cfg = config.probe ?? {}
+    const out = join(ROOT, ".vibeubi"); await mkdir(out, { recursive: true })
+    const orderPath = val("order-file", join(out, "probe-order.json"))
+    const resultPath = val("result-file", join(out, "probe-result.json"))
+
+    say(`\n${C.bold}vibeubi probe${C.off} ${C.dim}${ROOT}${C.off}\n`)
+
+    if (!flag("judge")) {
+      const discovered = await discoverAll(ctx)
+      const artifactId = val("artifact", "") ||
+        (await (ctx.__registry.target?.previousArtifactId?.({ base: config.base }) ?? null)) || ""
+      if (!artifactId) {
+        // Refused rather than defaulted: an order with no artifact produces a
+        // result that cannot be tied to a deploy, and that result would then be
+        // accepted by a later ship it knows nothing about.
+        bad("no artifact id — pass --artifact <id>, or point base at a running service that echoes one")
+        process.exit(2)
+      }
+      const order = probeOrder({
+        discovered, declared: config.declared ?? [], artifactId,
+        base: config.base, skill: cfg.skill ?? "dom-test", only: (val("only", "") || (cfg.only ?? ["P0"]).join(",")).split(","),
+      })
+      await writeFile(orderPath, JSON.stringify(order, null, 2), "utf8")
+      ok(`${order.items.length} item(s) for ${C.bold}${order.skill}${C.off} · artifact ${artifactId}`)
+      for (const i of order.items) say(`  ${C.dim}${i.priority}${C.off}  ${i.id}${i.testId ? C.dim + "  [" + i.testId + "]" + C.off : ""}`)
+      note(`order  ${relativeish(orderPath)}`)
+      note(`write the result to ${relativeish(resultPath)}, then: vibeubi probe --judge`)
+      return
+    }
+
+    const order = JSON.parse(await readFile(orderPath, "utf8"))
+    const result = await readFile(resultPath, "utf8").then(JSON.parse).catch(() => null)
+    const judged = orderVerdict({ order, result, noiseIsFailure: cfg.noiseIsFailure ?? true })
+    const verdict = verdictFor(gateCells({ cells: judged.cells, degraded: [] }))
+
+    say(`  ${judged.covered}/${judged.ordered} ordered item(s) reported on\n`)
+    for (const c of judged.cells) {
+      const mark = c.status === "pass" ? C.green + "✓" : C.red + "✗"
+      say(`  ${mark}${C.off} ${C.dim}${c.priority}${C.off} ${c.feature}${c.volunteered ? C.dim + " (volunteered)" + C.off : ""}`)
+      if (c.status !== "pass") say(`      ${C.dim}${c.reason}${C.off}`)
+    }
+    say(`\n  ${verdict.ship ? C.green + "would ship" : C.red + "would ROLL BACK"}${C.off} — ${verdict.reason}`)
+    process.exit(verdict.ship ? 0 : 1)
+  },
+
   async adopt() {
     const { config, ctx } = await boot()
     const { adopt, writeDeclared } = await import("../packages/registry/src/adopt.mjs")
@@ -407,6 +466,7 @@ ${C.bold}vibeubi${C.off} — the gate that remembers so you do not have to
   ${C.bold}scan${C.off}      S0–S4 security layers  --layer S0,S1,S2,S4 [--base URL]
   ${C.bold}adopt${C.off}     claim every orphan  [--dry-run] [--only area=x]
   ${C.bold}ship${C.off}      verify → build → swap → prove → sweep → gate → report
+  ${C.bold}probe${C.off}     order the skill step, or judge what it returned  [--judge] [--artifact ID]
   ${C.bold}rollback${C.off}  put the previous build back, and prove it
   ${C.bold}init${C.off}      probe the project and write a config  [--dry-run] [--force]
   ${C.bold}guard${C.off}     --action <a>   refuse a narrowing action

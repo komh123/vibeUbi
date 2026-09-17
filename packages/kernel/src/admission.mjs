@@ -235,6 +235,12 @@ export const READ_DECLARED_FIELDS = Object.freeze({
   requiredRole: "S2.route.ungated: `guest` means a human declared this public",
   source: "findings point at the file",
   area: "the architecture view and adopt's summary",
+  // Both were written by `adopt` and executed by NOTHING until the probe step
+  // existed — which is the finding this list surfaced, and the reason it exists.
+  // They stay here only as long as `probeOrder` actually carries them into the
+  // order; `declaredFieldListIsHonest` fails if that consumer disappears.
+  testId: "probeOrder: the handle the skill locates the page by",
+  probes: "probeOrder: the per-feature assertions handed to the skill",
 })
 
 export function declaredFieldsAreRead(declared, readFields) {

@@ -102,11 +102,24 @@ test("the unread-field check is actually WIRED — it had zero call sites for it
     "declaredFieldsAreRead is exported and tested but called by nothing — it is an instance of the defect it detects")
 })
 
-test("the check reports the fields adopt writes and nothing runs", () => {
-  const declared = [{ id: "page:/login", kind: "page", priority: "P0", testId: "x", probes: [{}] }]
+test("a field nobody consumes is reported, whatever it is called", () => {
+  // This test used to assert that `testId` and `probes` were unread, which was
+  // TRUE — adopt wrote them for every P0 page and nothing executed them. That
+  // was the finding this guard surfaced on the day it was first wired. The
+  // probe step is now their consumer, so that instance is gone and the test
+  // went red, correctly. Pinned to the MECHANISM instead of to one instance,
+  // which is what it should have been.
+  const declared = [{ id: "page:/login", kind: "page", priority: "P0", inventedByNobody: 1 }]
   const r = declaredFieldsAreRead(declared, Object.keys(READ_DECLARED_FIELDS))
   assert.equal(r.ok, false)
-  assert.deepEqual(r.unread.sort(), ["probes", "testId"])
+  assert.deepEqual(r.unread, ["inventedByNobody"])
+  assert.match(r.reason, /looks like a control and is a decoration/)
+})
+
+test("and the fields that DO have a consumer are silent", () => {
+  const declared = [{ id: "page:/login", kind: "page", priority: "P0", testId: "app-page-login", probes: [{}] }]
+  assert.equal(declaredFieldsAreRead(declared, Object.keys(READ_DECLARED_FIELDS)).ok, true,
+    "testId/probes are consumed by probeOrder now — if this goes red, the probe step stopped carrying them")
 })
 
 /* ── coverage ─────────────────────────────────────────────────────────────
