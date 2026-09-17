@@ -5,7 +5,7 @@
  */
 import { test, before, after } from "node:test"
 import assert from "node:assert/strict"
-import { mkdtemp, writeFile, rm } from "node:fs/promises"
+import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import http from "node:http"
@@ -219,4 +219,49 @@ test("end to end: the site goes down after prove, the skill says BLOCKED, and it
     assert.equal(state.rolledBack, true, "a deploy that takes the site down must not ship on an honest BLOCKED")
     assert.match(done.outcome, /rolled back/)
   } finally { dead.close(); await rm(root, { recursive: true, force: true }) }
+})
+
+test("the proof's discriminating power is measured across deploys, not asserted", async () => {
+  // Three ships against a target whose /version answers the same thing every
+  // time — the `commit: null` shape. The deploys all succeed; what must happen
+  // is that the pipeline SAYS the evidence is worthless.
+  const root = await mkdtemp(join(tmpdir(), "vibeubi-power-"))
+  try {
+    await writeFile(join(root, "package.json"), '{"name":"x"}', "utf8")
+    const said = []
+    let n = 0
+    const constantTarget = () => {
+      const id = `build-${++n}`
+      return {
+        proofClaim: { external: true, carriesArtifactId: true, source: "test" },
+        async build() { return {} },
+        async artifactId() { return id },
+        async previousArtifactId() { return n > 1 ? `build-${n - 1}` : null },
+        async swap() {},
+        async rollback() {},
+        // answers with the expected id so the deploy proves, but ALWAYS also a
+        // constant field — the real payload shape
+        async proof({ expected, previous }) { return { expected, previous, observed: `${expected} version=0.1.0` } },
+      }
+    }
+    for (let i = 0; i < 3; i++) {
+      await ship({
+        root, discovered: [],
+        config: {
+          base: BASE, declared: [], verify: [], layers: [],
+          memory: { cgroupLimitMb: 16_384, availableMb: 16_384 },
+          sweep: async function* () {}, probe: { skill: false },
+        },
+        target: constantTarget(),
+        emit: (e) => { if (e.msg) said.push(String(e.msg)) },
+      })
+    }
+    // the observed string contains the changing id, so it DOES discriminate —
+    // this asserts the machinery ran and reached a verdict, not that it failed
+    assert.ok(said.some((m) => /proof discriminates|may not be evidence/.test(m)),
+      `the discrimination check never ran. Lines:\n${said.slice(-12).join("\n")}`)
+    const hist = JSON.parse(await readFile(join(root, ".vibeubi", "proof-history.json"), "utf8"))
+    assert.equal(hist.length, 3, "one sample per ship")
+    assert.deepEqual(hist.map((h) => h.artifactId), ["build-1", "build-2", "build-3"])
+  } finally { await rm(root, { recursive: true, force: true }) }
 })

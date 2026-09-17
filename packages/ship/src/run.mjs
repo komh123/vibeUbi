@@ -34,6 +34,7 @@ import {
   verdictFor, earlyVerdict, gateCells, deployProof, proofContract,
   prereqVerdict, testRanVerdict, attributedVerdict, budgetVerdict,
   nodeHeapMb, heapOomMessage, ceilingEffect, HEAP_FLOOR_MB,
+  proofDiscrimination, trimProofHistory,
   probeOrder, orderVerdict,
 } from "../../kernel/src/index.mjs"
 const exec = promisify(execFile)
@@ -394,9 +395,8 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
   /* ── 4 · prove — the only evidence accepted ──────────────────────────── */
   step(3, "prove", "run")
   say("head", "4/7  prove — from OUTSIDE the deployed process")
-  const proof = deployProof(
-    await readyObservation({ target, config, expected: artifactId, previous: previousId, say }),
-  )
+  const proofObserved = await readyObservation({ target, config, expected: artifactId, previous: previousId, say })
+  const proof = deployProof(proofObserved)
   if (!proof.ok) {
     step(3, "prove", "fail")
     say("bad", proof.reason)
@@ -407,6 +407,39 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
     return finish(r.ok ? "rolled back" : "rollback unproven", proof.reason)
   }
   say("ok", `the running service serves ${artifactId}`)
+
+  /**
+   * Record what the proof SAID, and ask whether it can tell builds apart.
+   *
+   * `proofContract` checks the shape of the claim; this checks the field. A
+   * peer's live endpoint carries both `commit: null` (same answer for every
+   * build, for ever) and `buildId` (identifies the artifact) behind one
+   * declared `versionPath` — so a shape check says yes and the yes is true of
+   * one of them.
+   *
+   * It needs cross-deploy memory, which is the one thing this pipeline already
+   * has: it looks at the running service every single ship.
+   */
+  try {
+    const { readFile: rf, writeFile: wf } = await import("node:fs/promises")
+    const histPath = join(root, ".vibeubi", "proof-history.json")
+    const prior = await rf(histPath, "utf8").then(JSON.parse).catch(() => [])
+    const observedNow = typeof proofObserved?.observed === "string" && proofObserved.observed.trim()
+      ? proofObserved.observed.trim().slice(0, 200) : null
+    const history = trimProofHistory([...prior, { artifactId, observed: observedNow, at: Date.now() }])
+    await wf(histPath, JSON.stringify(history, null, 2), "utf8")
+
+    const power = proofDiscrimination(history)
+    if (power.verdict === "no-power" || power.verdict === "identifies-something-else") {
+      // Not a refusal of THIS deploy — the deploy is fine and the evidence for
+      // it is not. Said loudly, every time, because a proof that cannot tell
+      // builds apart makes every future green tick meaningless.
+      say("warn", `the deploy proof may not be evidence: ${power.reason}`)
+    } else if (power.ok) {
+      say("dim", `proof discriminates: ${power.reason}`)
+    }
+  } catch { /* history is an aid, never a gate — a broken file must not stop a ship */ }
+
   step(3, "prove", "pass")
 
   /* ── 5 · sweep ───────────────────────────────────────────────────────── */

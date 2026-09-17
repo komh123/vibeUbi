@@ -109,6 +109,40 @@ different, and *we do not know*. Collapsing the third into either of the other
 two is how a check that never ran reads as a check that passed. `sameObserved`
 in the kernel is that comparison; use it rather than `!==`.
 
+### 4. "Would this check pass even if the thing it checks were broken?"
+
+Two shapes have shown up repeatedly, and the second was the harder one.
+
+**Inputs from one source.** The probe result's `artifactId` was copied out of
+the order, so comparing them compared a file to itself. *A check whose inputs
+come from one source has one source, however many fields it compares.* The fix
+is always a second, independent observation — go and look, do not accept what
+you were told.
+
+**Shape instead of power.** `proofContract` asks whether a proof CAN carry an
+artifact id. One live endpoint answered with both `commit: null` — the same
+value for every build, for ever — and `buildId`, which identifies the build.
+Same contract, same shape, and the "yes" was true of one field.
+
+So check the *discriminating power*, which is observable without trusting
+anyone, in **two** directions:
+
+| direction | catches |
+| --- | --- |
+| different artifacts must give different values | `commit: null`, `version: "0.1.0"` — no power |
+| the SAME artifact must give the same value | `loadedAt` — changes every deploy, so it passes the first direction, and a **rollback** gives it a new value for an old build. It identifies process start, not artifact |
+
+`proofDiscrimination` in the kernel. The second direction is the one that is
+easy to miss, and it is the one a rollback needs.
+
+### A contract is only understood after it has been violated once
+
+Said by the peer who asked for `itemsAreIndependent`, then broke it while
+honouring the word they had asked for. "Independent" has an obvious reading —
+"navigates itself" — that is wrong, and neither of us saw it until a second item
+existed. Where a contract has an obvious-but-wrong reading, write the wrong one
+down next to the right one.
+
 ### Killing processes
 
 Never match on a command line. `pgrep -f X` and `pkill -f X` match the shell

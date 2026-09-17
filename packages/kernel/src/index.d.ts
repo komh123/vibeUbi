@@ -480,3 +480,32 @@ export function orderVerdict(o: {
   unverified: number
   verified: number
 }
+
+/* ── does this proof actually tell builds apart? ──────────────────────── */
+
+/** One (artifact, what the proof said) pair. `observed` is null when nothing
+ *  could be read — never "", see sameObserved. */
+export interface ProofSample {
+  artifactId: string
+  observed: string | null
+  at: number
+}
+
+/**
+ * `proofContract` asks whether a proof CAN carry an id — a question about
+ * shape. This asks whether it DOES tell builds apart, in two directions:
+ *
+ *   1. different artifacts must produce different values, or the field is
+ *      `commit: null` — the same answer for every build
+ *   2. the SAME artifact must produce the same value, or the field is
+ *      `loadedAt` — it changes on every deploy, passes (1), and gives a
+ *      rollback a NEW timestamp for an OLD build
+ */
+export function proofDiscrimination(
+  samples?: readonly ProofSample[],
+  opts?: { minArtifacts?: number },
+): { known: boolean; ok: boolean; verdict: "unmeasured" | "no-power" | "identifies-something-else" | "discriminating"; reason: string }
+
+/** Bounded history that keeps the FIRST and last sighting of every artifact —
+ *  the older sample is the only one direction 2 can use. */
+export function trimProofHistory(samples?: readonly ProofSample[], max?: number): ProofSample[]
