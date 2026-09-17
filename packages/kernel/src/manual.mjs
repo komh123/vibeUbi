@@ -27,10 +27,29 @@
  *   - the probe cannot run          UNMEASURED, not "fine". Same treatment as any
  *                                   other check that did not run: it blocks, and
  *                                   the grade is withheld.
- *   - the probe says it is CLOSED   Reported as done, with a prompt to delete the
- *                                   declaration. A stale gap is a standing claim
- *                                   that something is broken when it is not, and
- *                                   it teaches people to ignore the list.
+ *   - the probe says it is CLOSED   PROMOTED, not deleted. See below.
+ *
+ * DELETING A CLOSED GAP WAS WRONG, and the peer who first used this caught it
+ * on their first run. The probe is usually the gap's ONLY reader, so deleting
+ * the declaration deletes the reader — and the day the property regresses,
+ * nobody finds out. That is not hypothetical: their gap had been CLOSED for ten
+ * days and neither side knew, because the check that would have said so had no
+ * caller. The same information vacuum, in the other direction.
+ *
+ * So a closed gap changes category rather than disappearing: from "somebody has
+ * to go and do a thing" to "this must not go back". The severity inverts with
+ * it — an OPEN gap does not block, because a pipeline should not stop every
+ * deploy over something it cannot fix; a REGRESSED one does, because a safety
+ * property that was fixed and then broke again is a different event from one
+ * that was never fixed.
+ *
+ * WHERE THE READER LIVES IS PART OF THE DECLARATION. The same peer tried to
+ * attach theirs to the deploy pipeline and stopped: the pipeline has no live
+ * sandbox, so the probe would be `unreachable`, and "unreachable blocks" would
+ * then block every deploy — and the third person to be blocked deletes the
+ * check. A gate that is red from the first run is a gate that gets removed. So
+ * a gap names the VANTAGE that can see it, and a run somewhere else reports
+ * "not checked here" instead of a failure it has no standing to claim.
  */
 
 /** A manual gap must say who owns it and when it was accepted — a gap with no
@@ -38,6 +57,12 @@
 export function manualGapAdmission(gap) {
   const faults = []
   if (!String(gap?.id ?? "").trim()) faults.push("no id")
+  if (!String(gap?.vantage ?? "").trim()) {
+    faults.push(
+      "no vantage — the run that can actually observe this must be named, or a run that cannot see it " +
+      "reports `unreachable`, blocks, and gets deleted by the third person it stops",
+    )
+  }
   if (!String(gap?.why ?? "").trim()) faults.push("no reason — a gap with no written why cannot be judged later by anyone but its author")
   if (!String(gap?.owner ?? "").trim()) faults.push("no owner — a gap that belongs to everyone belongs to nobody")
   if (!Number.isFinite(gap?.acceptedAt)) faults.push("no date — without one nothing can say how long this has stood")
@@ -64,9 +89,17 @@ export function manualGapAdmission(gap) {
  *   look" becomes "it is fixed".
  * @param {number} o.now
  */
-export function manualGapVerdict({ gap, observed, now = Date.now() }) {
+export function manualGapVerdict({ gap, observed, at = null, now = Date.now() }) {
   const days = Number.isFinite(gap?.acceptedAt) ? Math.floor((now - gap.acceptedAt) / 86_400_000) : null
-  const base = { id: gap?.id, owner: gap?.owner, days, runbook: gap?.runbook ?? null }
+  const base = { id: gap?.id, owner: gap?.owner, days, runbook: gap?.runbook ?? null, vantage: gap?.vantage ?? null }
+
+  // Silence from the wrong place is not evidence, and it is not a failure either.
+  if (gap?.vantage && at && at !== gap.vantage) {
+    return {
+      ...base, state: "not-here", blocks: false,
+      reason: `"${gap?.id}" can only be observed from ${gap.vantage}; this run is ${at}, so nothing is claimed either way.`,
+    }
+  }
 
   if (observed === null || observed === undefined) {
     return {
@@ -91,10 +124,51 @@ export function manualGapVerdict({ gap, observed, now = Date.now() }) {
   }
   return {
     ...base, state: "closed", blocks: false,
+    promoteTo: "regression",
     reason:
-      `"${gap?.id}" is no longer present — it was fixed. Delete the declaration: a gap that is listed and not real ` +
-      `is a standing claim that something is broken, and a list with those in it is a list people stop reading.`,
+      `"${gap?.id}" is no longer present — it was fixed. Move it out of the open list, but do NOT delete it: ` +
+      `this probe is usually the only thing watching that property, and deleting the declaration deletes the ` +
+      `watcher. Promote it to a regression guard, where the same observation becomes "this must not come back".`,
   }
+}
+
+/**
+ * A property that was fixed and must not come back.
+ *
+ * The severity is inverted from a manual gap on purpose. An open gap does not
+ * block: the pipeline cannot close it and should not stop every deploy over it.
+ * A REGRESSION blocks, because "it was fixed and broke again" is a different
+ * event from "it was never fixed" — somebody's change undid a decision, and
+ * nobody is going to notice from the fact that a list got one row shorter.
+ *
+ * `unmeasured` blocks too, and here that is not over-strict: this guard exists
+ * because the property was once false, so "we could not check" has to be read
+ * as "we do not know that it is still true".
+ */
+export function regressionVerdict({ guard, observed, at = null, now = Date.now() }) {
+  const days = Number.isFinite(guard?.closedAt) ? Math.floor((now - guard.closedAt) / 86_400_000) : null
+  const base = { id: guard?.id, owner: guard?.owner, days, vantage: guard?.vantage ?? null }
+
+  if (guard?.vantage && at && at !== guard.vantage) {
+    return { ...base, state: "not-here", blocks: false, reason: `"${guard?.id}" is only observable from ${guard.vantage}; this run is ${at}.` }
+  }
+  if (observed === null || observed === undefined || observed?.unreachable) {
+    return {
+      ...base, state: "unmeasured", blocks: true,
+      reason:
+        `could not confirm "${guard?.id}" is still closed${observed?.unreachable ? `: ${observed.unreachable}` : ""}. ` +
+        `This property was false once, so not knowing is not the same as it being fine.`,
+    }
+  }
+  if (observed.open) {
+    return {
+      ...base, state: "regressed", blocks: true,
+      reason:
+        `"${guard?.id}" was fixed ${days} day(s) ago and is OPEN again. Something undid it, and the only reason ` +
+        `anyone knows is that this probe outlived the gap it was written for.`,
+    }
+  }
+  return { ...base, state: "holding", blocks: false, reason: `"${guard?.id}" is still closed (${days} day(s)).` }
 }
 
 /** The whole set, so a report can say "3 open, 1 fixed, 1 we could not check". */

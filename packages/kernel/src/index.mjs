@@ -20,4 +20,4 @@ export { baselineAdmission, exemptionScope, checkAssertsOnBehaviour, sourceScanH
 export { createContext, applyAll, capabilityCells } from "./plugin.mjs"
 export { onboardStage, baselinePlan, prunePlan, STAGES } from "./onboard.mjs"
 export { nodeHeapMb, heapOomMessage, killScope, ceilingEffect, NON_HEAP_SHARE, HEAP_FLOOR_MB, HEAP_CEILING_MB } from "./heap.mjs"
-export { manualGapAdmission, manualGapVerdict, manualGapReport } from "./manual.mjs"
+export { manualGapAdmission, manualGapVerdict, manualGapReport, regressionVerdict } from "./manual.mjs"

@@ -293,9 +293,22 @@ export interface ManualGap {
   why: string
   owner: string
   acceptedAt: number
+  /** The run that can actually observe this. A run elsewhere reports
+   *  "not-here" rather than a failure it has no standing to claim — a gate
+   *  that is red from the first run is a gate the third person deletes. */
+  vantage: string
   runbook?: string
   probeId?: string
   probe?: () => unknown
+}
+
+/** A closed gap is PROMOTED to one of these, never deleted: the probe is
+ *  usually the property's only reader. */
+export interface RegressionGuard {
+  id: string
+  owner: string
+  closedAt: number
+  vantage?: string
 }
 
 /** Refuses a gap with no probe: a gap nobody can check is a comment, and a
@@ -313,7 +326,31 @@ export function manualGapVerdict(o: {
   owner?: string
   days: number | null
   runbook: string | null
-  state: "open" | "closed" | "unmeasured"
+  vantage: string | null
+  state: "open" | "closed" | "unmeasured" | "not-here"
+  blocks: boolean
+  /** Present on "closed": move it to a regression guard rather than deleting. */
+  promoteTo?: "regression"
+  reason: string
+}
+
+/**
+ * A property that was fixed and must not come back. Severity is inverted from
+ * a manual gap: open does not block, REGRESSED does — "it was fixed and broke
+ * again" is a different event from "it was never fixed". `unmeasured` blocks
+ * too, because this guard exists precisely because the property was once false.
+ */
+export function regressionVerdict(o: {
+  guard: Partial<RegressionGuard>
+  observed: { open: boolean } | { unreachable: string } | null | undefined
+  at?: string | null
+  now?: number
+}): {
+  id?: string
+  owner?: string
+  days: number | null
+  vantage: string | null
+  state: "holding" | "regressed" | "unmeasured" | "not-here"
   blocks: boolean
   reason: string
 }
