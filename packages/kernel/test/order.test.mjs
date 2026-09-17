@@ -112,7 +112,7 @@ test("a FAIL still rolls back — positive evidence is the thing that does", () 
   assert.equal(verdictFor(j.cells).ship, false)
 })
 
-test("PASS_WITH_NOISE does not roll back by default — measured, not guessed", () => {
+test("PASS_WITH_NOISE fails by default, now that the skill has resolved its own contradiction", () => {
   // I defaulted to strict with no data, following dom-test's checklist table
   // over its scenario.js. The peer then measured: ~1 run in 4 on their app
   // produces net::ERR_NETWORK_CHANGED from an SSE stream cut by navigation —
@@ -120,11 +120,16 @@ test("PASS_WITH_NOISE does not roll back by default — measured, not guessed", 
   // about every fourth deploy. The real fix is the skill separating actionable
   // red from transport noise; until then this knob turns a skill's ambiguity
   // into a deploy decision, so it defaults off.
-  const loose = orderVerdict({ order: ORDER, result: res([{ id: "page:/login-page", verdict: "PASS_WITH_NOISE" }]) })
-  assert.equal(cellFor(loose).status, "pass")
-  assert.equal(cellFor(loose).skillVerdict, "PASS_WITH_NOISE", "still recorded as its own state, not flattened")
-  const strict = orderVerdict({ order: ORDER, result: res([{ id: "page:/login-page", verdict: "PASS_WITH_NOISE" }]), noiseIsFailure: true })
+  // This default moved twice: strict on the table, loose on a peer's measured
+  // ~1-in-4 noise rate, and strict again once `scenario.js` stopped reporting
+  // "PASS (with noise)". A default whose only justification was "the skill
+  // cannot decide" has none once the skill decides. The noise measurement is
+  // now an argument for fixing the SKILL, not for softening the gate.
+  const strict = orderVerdict({ order: ORDER, result: res([{ id: "page:/login-page", verdict: "PASS_WITH_NOISE" }]) })
   assert.equal(cellFor(strict).status, "fail")
+  assert.equal(cellFor(strict).skillVerdict, "PASS_WITH_NOISE", "recorded as its own state, so the report says WHY")
+  const loose = orderVerdict({ order: ORDER, result: res([{ id: "page:/login-page", verdict: "PASS_WITH_NOISE" }]), noiseIsFailure: false })
+  assert.equal(cellFor(loose).status, "pass")
 })
 
 test("an unrecognised verdict is not a pass", () => {

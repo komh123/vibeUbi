@@ -47,6 +47,24 @@ npx vibeubi init | adopt | orphans | why <id> | viz
   process carries the new artifact id.
 - A narrowed run (`--only`, `--without`) is never a full run. Say which.
 
+## Where a change belongs
+
+This repository is the architecture and the flow. Before adding anything, ask:
+
+> **Would this be true for a project I have never seen?**
+
+Yes → here. True only because of how one codebase is built → it belongs with
+that codebase, and putting it here makes the library look general while being
+specific.
+
+Things that have had to move out: a config carrying one project's absolute
+paths, leaked-key fingerprints and accepted debt (that is their file, not an
+example), and a console demo built from one project's recorded run (a good way
+to show the pipeline, a bad thing to ship as if any project could use it).
+
+`examples/example.config.mjs` is the template: every value a placeholder, every
+field annotated with WHY it exists rather than what someone put there.
+
 ## Two questions that have found more defects here than any tool
 
 Both came out of a week of cross-checking with another session's tree. Between
@@ -163,7 +181,6 @@ packages/registry    discovery + declaration + the orphan rule
 packages/security    S0–S7, including the agent/MCP surface
 packages/adapters    per-stack plugins (DSH/cordis shape: name + apply)
 packages/viz         registry → diagram IR (archify, mermaid, neutral)
-apps/console         a browser UI that triggers a run and watches it
 skills/ commands/    harness packaging
 docs/                ARCHITECTURE, SECURITY, COMMANDS, PLUGINS, PORTING
 ```

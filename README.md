@@ -149,7 +149,6 @@ packages/registry    discovery + declaration + the orphan rule
 packages/security    S0–S7 rule catalogue
 packages/adapters    per-stack plugins
 packages/viz         registry → diagram IR (archify · mermaid · neutral)
-apps/console         a browser UI that triggers a run and watches it
 bin/vibeubi.mjs     the CLI every harness can fall back to
 ```
 
@@ -183,8 +182,6 @@ MIT.
 | [`docs/INIT.md`](docs/INIT.md) | what `ubi init` works out on its own, and the one field it refuses to invent |
 | [`docs/PORTING.md`](docs/PORTING.md) | wiring a new project, and the porting checklist |
 | [`docs/DIAGRAMS.md`](docs/DIAGRAMS.md) | archify and any other diagram skill |
-| [`apps/console/index.html`](apps/console/index.html) | **the interactive console** — pan/zoom the architecture graph, click a node for its provenance, press **Run the gate** and watch each area get judged. `node apps/console/server.mjs` makes the button spawn the real CLI. |
-| [`apps/console/report.html`](apps/console/report.html) | the static scan report for the system-monitor run |
 
 ## A note on the name
 
@@ -198,28 +195,66 @@ Fine for a private repo. Worth revisiting before any public release — not for
 legal reasons, but because the first page of results for the name belongs to
 someone else.
 
+## What belongs here, and what belongs in your project
+
+This repository is **the architecture and the flow**. It is deliberately not a
+package that tries to fit every codebase, because the interesting part of
+adopting it is exactly the part that differs: an agent probing a project,
+guessing at the wiring, being told it guessed wrong, and trying again. That
+loop belongs to the project, not to the library.
+
+| here | in your project |
+| --- | --- |
+| the kernel — what "passed", "rolled back", "proved" mean | your `vibeubi.config.mjs` |
+| the pipeline and its steps | your declarations: priority, role, probes |
+| adapters for a stack — Express, Next.js, k8s | your `gateTokens`, your `versionPath` |
+| the rules, and what they refuse to gate on | your accepted debt, with reasons and dates |
+| the contracts: proof, admission, skill step | anything that names your hosts, routes or secrets |
+
+Two consequences worth stating plainly, because both were violated before this
+line was drawn:
+
+- **A finding about somebody's codebase is not an example.** A config carrying
+  real absolute paths, real leaked-key fingerprints and real accepted debt is
+  that project's file that happens to be sitting in a library. It moved out.
+- **A demo built from one project's recorded run is not a feature.** It is a
+  good way to show what the pipeline does and a bad thing to ship as though any
+  project could use it. It moved out too.
+
+`examples/example.config.mjs` is a template. Every value in it is a placeholder,
+and it is annotated with *why* each field exists rather than what one project
+happened to put there.
+
+When you improve something, the question that decides where it goes is: **would
+this be true for a project I have never seen?** If yes, it belongs here. If it
+is true because of how one codebase is built, it belongs with that codebase.
+
 ## Proven on a project it had never seen
 
-`examples/system-monitor.config.mjs` points VibeUbi at an **Express + React +
-k8s** app — a completely different stack from the Next.js one it was extracted
-from. Zero files were written into that repository (`--config` keeps the config
-outside it).
+VibeUbi was pointed at an **Express + React + k8s** application — a completely
+different stack from the Next.js one it was extracted from — with a config kept
+OUTSIDE that repository, so zero files were written into it.
 
 ```bash
-npx vibeubi scan --root ../system-monitor --config examples/system-monitor.config.mjs --layer S0,S2,S4
+npx vibeubi scan --root ../their-project --config ./their-project.config.mjs --layer S0,S2,S4
 ```
 
 First run, nothing declared by hand:
 
-- **66 API routes and 7 pages discovered** — including routes that only exist as
+- **66 API routes and 7 pages discovered** — including routes that exist only as
   `router.get('/x')` joined to the prefix its router is mounted at. Counting
   those halves separately gets the registry wrong in both directions.
-- **61 of 66 routes have no auth gate**, including `POST /api/processes/:pid/kill`,
-  behind a public TLS ingress.
-- `verifyToken` is written, exported and documented in that codebase — and
+- **61 of 66 routes had no auth gate**, several of them destructive, behind a
+  public TLS ingress.
+- The project's own auth helper was written, exported and documented — and
   referenced **exactly once, inside its own doc comment.** Zero call sites.
-- A private key in the working tree **and in git history**.
+- A private key in the working tree **and in git history**, so deleting the file
+  would not have un-leaked it.
 - Grade **F**.
+
+*(The findings are summarised without naming the codebase or its routes. They
+belong to that team, and a public repository is not where another project's
+unpatched exposure gets listed.)*
 
 It also caught VibeUbi lying about itself: the Express adapter returned
 `{external: true, carriesArtifactId: true}` unconditionally while putting

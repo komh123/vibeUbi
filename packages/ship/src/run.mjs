@@ -554,7 +554,7 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
       }
       if (!liveness.ok) say("bad", `base is not serving at probe time: ${liveness.unreachable ?? `HTTP ${liveness.status}`}`)
 
-      const judged = orderVerdict({ order, result, liveness, noiseIsFailure: probeCfg.noiseIsFailure ?? false })
+      const judged = orderVerdict({ order, result, liveness, noiseIsFailure: probeCfg.noiseIsFailure ?? true })
       for (const c of judged.cells) emit({ kind: "cell", cell: c })
       // The number that stops this step being decoration: an operator who reads
       // "shipped" has to also read how much of it was actually verified.

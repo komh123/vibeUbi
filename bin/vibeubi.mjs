@@ -281,7 +281,7 @@ const COMMANDS = {
       .then((r) => ({ ok: r.status < 500, status: r.status }))
       .catch((e) => ({ ok: false, unreachable: e.cause?.code ?? e.message }))
     if (!liveness.ok) bad(`base is not serving: ${liveness.unreachable ?? `HTTP ${liveness.status}`}`)
-    const judged = orderVerdict({ order, result, liveness, noiseIsFailure: cfg.noiseIsFailure ?? false })
+    const judged = orderVerdict({ order, result, liveness, noiseIsFailure: cfg.noiseIsFailure ?? true })
     const verdict = verdictFor(gateCells({ cells: judged.cells, degraded: [] }))
 
     say(`  ${judged.covered}/${judged.ordered} ordered item(s) reported on\n`)

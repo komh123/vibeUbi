@@ -275,17 +275,21 @@ export function skillResultAdmission({ order, result }) {
  *   that is precisely what the manual tester would have noticed". Its
  *   `scenario.js` is looser and reports "PASS (with noise)".
  *
- *   The two halves of the skill disagree, and I defaulted to the stricter one
- *   with no data. The peer then measured: on their app roughly one run in four
- *   produces `net::ERR_NETWORK_CHANGED` from an SSE stream cut by navigation —
- *   noise nobody can act on. Strict-by-default would therefore have rolled back
- *   a good deploy about every fourth deploy.
+ *   The two halves of the skill DISAGREED, and this default has moved twice on
+ *   that. Strict first, on the table. Then loose, because a peer measured that
+ *   ~1 run in 4 on their app produces `net::ERR_NETWORK_CHANGED` from an SSE
+ *   stream cut by navigation — noise nobody can act on — so strict would roll
+ *   back a good deploy about every fourth deploy.
  *
- *   So the default is now loose, and `PASS_WITH_NOISE` is still recorded as its
- *   own state rather than flattened into a pass. The real fix is not this knob:
- *   the skill needs to separate actionable red from transport noise, and until
- *   it does, `noiseIsFailure: true` turns a skill's ambiguity into a deploy
- *   decision.
+ *   The contradiction has since been RESOLVED in the skill, strict, and
+ *   `scenario.js` no longer reports "PASS (with noise)" at the top level. So
+ *   this follows it: a default whose only justification was "the skill cannot
+ *   decide" has no justification once the skill decides.
+ *
+ *   The noise measurement does not go away and is not an argument for loosening
+ *   the gate — it is the argument for the work the skill now records as open:
+ *   separating an ACTIONABLE red from transport noise. A consumer that softens
+ *   instead is choosing to be wrong quietly rather than loudly.
  */
 /**
  * @param {{ok:boolean, status?:number, unreachable?:string}|null} [o.liveness]
@@ -311,7 +315,7 @@ export function skillResultAdmission({ order, result }) {
  *   Same move as `deployProof`, which does not ask the deploy script whether it
  *   worked. Go and look.
  */
-export function orderVerdict({ order, result, noiseIsFailure = false, unmeasuredBlocks = false, liveness = null }) {
+export function orderVerdict({ order, result, noiseIsFailure = true, unmeasuredBlocks = false, liveness = null }) {
   /**
    * `blocked` is not a new state — `verdictFor` already has it, and its comment
    * already says what this needs: "a dependency is unavailable — not caused by

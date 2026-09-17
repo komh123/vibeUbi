@@ -6,7 +6,14 @@
  */
 import { test } from "node:test"
 import assert from "node:assert/strict"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
 import { listeners } from "../src/collect.mjs"
+
+/** The repo root, resolved from this file. It was hardcoded to one machine's
+ *  absolute path, which is the shape of a gate that is permanently green — or
+ *  permanently red — on anybody else's checkout. */
+const REPO = join(dirname(fileURLToPath(import.meta.url)), "../../..")
 
 // Real `ss -ltnp` output, columns intact.
 const SS = `State  Recv-Q Send-Q Local Address:Port  Peer Address:PortProcess
@@ -31,7 +38,7 @@ test("the local address is the FOURTH column, not the fifth", () => {
 })
 
 test("on this machine the collector returns listeners, not an empty list", async () => {
-  const r = await listeners("/home/ubuntu/vibeUbi")
+  const r = await listeners(REPO)
   if (!r.live) return   // no `ss` here: the honest answer, and it says why
   assert.ok(r.listeners.length > 0,
     "ss ran and produced nothing — that is the shape the column bug had for its whole life")
@@ -47,7 +54,7 @@ test("output present and nothing parsed is reported as a BROKEN PARSER, not an e
   // the check that would have caught the column bug the day it was written.
   const { listeners: fake } = await import("../src/collect.mjs")
   // simulate by asserting the contract the implementation now guarantees
-  const r = await fake("/home/ubuntu/vibeUbi")
+  const r = await fake(REPO)
   if (r.live) assert.ok(r.listeners.length > 0)
   else assert.match(r.why ?? "", /could not run here|parser is broken/)
 })
@@ -56,7 +63,7 @@ test("a machine with no `ss` says so instead of returning a short list", async (
   const prev = process.env.PATH
   process.env.PATH = "/nonexistent"
   try {
-    const r = await listeners("/home/ubuntu/vibeUbi")
+    const r = await listeners(REPO)
     assert.equal(r.live, false)
     assert.match(r.why, /only what the manifests declare/)
   } finally { process.env.PATH = prev }

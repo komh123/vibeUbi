@@ -60,49 +60,20 @@ That sentence is the entire difference between this and a generated diagram.
 
 ## The console
 
-`apps/console/index.html` is a browser UI that triggers a run and watches it
+The browser console that produced these screenshots is a demo and ships separately
 fill in live — the same IR, rendered as an instrument rather than a document.
 It has a deliberate second button, **"Run with a planted regression"**, because
 *a gate you have never seen refuse is a gate you do not know works.*
 
 ## The console
 
-`apps/console/index.html` is the interactive half of all this. Two ways to open it:
+The interactive console that produced the screenshots in this document is a
+DEMO built from one project's recorded run, so it lives outside this repository
+— see "What belongs here" in the README. What ships here is the IR and the
+exporters: `vibeubi viz --format ir|archify|mermaid` gives any diagramming tool
+the same structure the gate judges, so the picture and the verdict cannot
+disagree.
 
-```bash
-# static — replays the recorded run that ships with the repo
-open apps/console/index.html
-
-# live — the Run button spawns the real CLI and streams it back
-node apps/console/server.mjs --root ../system-monitor --config examples/system-monitor.config.mjs
-```
-
-What you can do with it:
-
-| | |
-|---|---|
-| **drag / wheel** | pan and zoom the graph |
-| **click an area** | expand it into its routes, springing out one at a time |
-| **click a route** | the inspector names the file it was discovered in and every finding on it |
-| **hover** | lights the edge from the entry point to that node |
-| **filter chips** | all · ungated · has findings |
-| **Run the gate** | the 18 areas are judged one at a time and coloured **as each verdict lands** — not in a batch at the end, because that is how the pipeline actually behaves |
-
-### Two rules the server obeys
-
-1. **It binds to `127.0.0.1`.** Put it on `0.0.0.0` and it stops being a console
-   and starts being an S4 finding.
-2. **It can start `ubi` and nothing else** — a fixed map of four commands, not a
-   filter over a string the page sent. A console that can be talked into running
-   an arbitrary command is a remote shell with a nice font.
-
-### Motion
-
-Everything moves on one interruptible spring integrator. Status glyphs are two
-polylines of three points on a 24×24 grid, so any glyph morphs into any other;
-joins go round while moving and back to **miter at rest**, so corners stay sharp
-when nothing is happening. Log lines arrive with weight — a spring settle, not a
-fade. `prefers-reduced-motion` turns all of it off and the page still works.
 
 ## DOM verification
 

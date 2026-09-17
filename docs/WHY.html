@@ -781,102 +781,12 @@ vibeubi viz --format mermaid &gt; coverage.mmd            <i># 零相依備援</
 
 <!-- ═══════════════════ VII ═══════════════════ -->
 
-<section>
-  <div class="sec-head"><div class="sec-mark">VII</div><h2>開源給什麼，賣什麼</h2></div>
 
-  <p class="wide">先講清楚定價的邏輯：<strong>這個東西的價值不在「跑一次檢查」，
-  在「那份記錄活得比寫程式的人久」。</strong>跑檢查是一次性的、客戶自己也能跑；
-  記錄的累積與共享才是他們離不開的東西。所以<em>凡是跑得完就結束的，開源；
-  凡是會累積、會跨時間、會跨人的，收費。</em></p>
-
-  <div class="sell">
-
-    <div class="sell-row">
-      <div class="kicker">開源 · MIT · 免費</div>
-      <h4>判決核心（kernel）</h4>
-      <p class="pitch">那十幾個純函式：什麼叫通過、什麼叫回滾、什麼叫「這個紅不該算在你頭上」、
-      什麼叫「部署真的生效了」。小到可以一口氣讀完，每條規則旁邊都寫著它是被哪次事故打出來的。</p>
-      <p class="pay"><b>為什麼不能賣</b>
-      一個閘門要拿到「可以自動回滾我的正式環境」這種權力，前提是別人能檢查它怎麼判的。
-      「你不能看我的判斷邏輯，但請把回滾權交給我」——沒有任何團隊會答應。
-      <strong>把核心開源不是慷慨，是這個產品能存在的必要條件。</strong></p>
-    </div>
-
-    <div class="sell-row">
-      <div class="kicker">開源 · 免費</div>
-      <h4>發現器、宣告格式、各技術棧 adapter</h4>
-      <p class="pitch">從 Next.js / FastAPI / Django / Rails 的專案裡找出「有哪些功能、哪些對外埠」的那些程式，
-      以及宣告檔的格式。</p>
-      <p class="pay"><b>為什麼不能賣</b>
-      如果 adapter 只有你寫，這個工具永遠只支援三個框架，第四個框架的人直接走人。
-      adapter 生態必須是社群的——而且每多一個 adapter，你的付費層就多一批可服務的客戶，
-      成本是零。<strong>這是標準的「開源當通路」。</strong></p>
-    </div>
-
-    <div class="sell-row">
-      <div class="kicker">收費 · 這是主要收入</div>
-      <h4>名冊（託管的歷史記錄）</h4>
-      <p class="pitch">每一次部署的完整記錄放在雲端、可查詢、不可竄改：跑了哪幾層、哪幾層被跳過、
-      跳過的理由是誰寫的、哪個紅被判定為「不是這次造成的」、誰批准了哪一筆資安債、
-      那筆債從那天到今天已經活了幾天。</p>
-      <p class="pay"><b>客戶為什麼付錢</b>
-      三個具體場景，每一個都是本地檔案做不到的：<br>
-      <strong>① 稽核。</strong>SOC 2 / ISO 27001 的稽核員要看「你怎麼證明每次上線都做過檢查」。
-      本地一個 markdown 檔不算證據，一份帶時間戳、有簽章、改不掉的外部記錄才算。<br>
-      <strong>② 人走了。</strong>當初決定「這條 route 可以公開，因為 webhook 有簽章驗證」的人已經離職，
-      而那個理由如果只活在他的 commit message 裡，半年後沒人敢動它，也沒人敢留它。<br>
-      <strong>③ 債會自己浮上來。</strong>「這筆資安債你們接受了 340 天了」——
-      這句話只有在有歷史的系統裡說得出來，而它正是讓債真的被還掉的東西。</p>
-    </div>
-
-    <div class="sell-row">
-      <div class="kicker">收費 · 最容易開始賣</div>
-      <h4>託管的瀏覽器與掃描機群</h4>
-      <p class="pitch">真實瀏覽器層、DAST、ZAP、trivy、semgrep 都要機器、要並行、要維護。
-      你把它變成「丟一個 URL 過來，20 分鐘後給你一張完整的矩陣」。</p>
-      <p class="pay"><b>客戶為什麼付錢</b>
-      因為第 VI 節那個 46 分鐘的問題，客戶自架是解不掉的——他們沒有那台機器，
-      也不想為了每天跑幾次的東西養一批 Playwright worker 和 ZAP 容器。
-      <strong>而你手上有一個明確的、可以拿來報價的數字：從 46 分鐘壓到 8 分鐘。</strong>
-      這是最不需要解釋就能賣掉的一項。</p>
-    </div>
-
-    <div class="sell-row">
-      <div class="kicker">收費 · 最像「產品」的一項</div>
-      <h4>漂移警報</h4>
-      <p class="pitch">在 PR 上自動留言：「這個 PR 加了 3 個功能，3 個沒有人認領」、
-      「新增了一個 0.0.0.0 上不需要 auth 的監聽埠」、「這個測試檔沒有被任何閘門叫到」。</p>
-      <p class="pay"><b>客戶為什麼付錢</b>
-      因為 orphan 檢查只有在<em>會跑</em>的時候有用，而「記得去跑」正是這整套東西要消滅的東西——
-      <strong>一個需要你記得去開的「消除靠記得」工具，是自我矛盾的。</strong>
-      託管版把它變成一個自動發生的習慣，而習慣是會續約的。</p>
-    </div>
-
-    <div class="sell-row">
-      <div class="kicker">收費 · 企業版</div>
-      <h4>艦隊視圖</h4>
-      <p class="pitch">N 個專案的 feature × layer 覆蓋矩陣、曝露面地圖、資安等第疊在一起看。
-      哪個團隊的 P0 沒有 probes、哪個服務對公網開著不需要 auth 的埠、哪個專案的資安債最老。</p>
-      <p class="pay"><b>客戶為什麼付錢</b>
-      買這個的不是寫程式的人，是要對一整個組織負責的人（CTO、資安長）。
-      他們現在唯一能拿到的答案是「每個團隊自己報上來的」，而那正是靠記得。
-      <strong>而且這張圖是<em>可驗證</em>的，不是模型生成的</strong>——registry 本身就是結構化資料，
-      不需要 AI 去猜 codebase 長什麼樣。這是跟所有「AI 生成架構圖」產品最大的差別。</p>
-    </div>
-
-  </div>
-
-  <div class="callout">
-    <h4>一句話的定價邏輯</h4>
-    <p><strong>開源的部分讓他們相信這個判決是公正的；收費的部分讓那份記錄活得比人久。</strong>
-    前者不收費是因為收了就沒人敢用，後者能收費是因為它一旦累積起來就換不掉。</p>
-  </div>
-</section>
 
 <!-- ═══════════════════ VIII ═══════════════════ -->
 
 <section>
-  <div class="sec-head"><div class="sec-mark">VIII</div><h2>名字：VibeUbi 已建好，但撞名很嚴重</h2></div>
+  <div class="sec-head"><div class="sec-mark">VII</div><h2>名字：VibeUbi 已建好，但撞名很嚴重</h2></div>
 
   <p class="wide">你指定的名字我照做了 —— <code>github.com/komh123/VibeUbi</code> 已建立、private、
   43 個檔案、46+5 測試全綠。<strong>但我必須把查到的東西講清楚，因為你上一輪特別要求過要確認沒人用。</strong></p>
