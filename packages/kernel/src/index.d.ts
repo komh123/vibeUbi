@@ -388,6 +388,9 @@ export interface ProbeOrder {
   artifactId: string
   base: string
   at: "probe"
+  /** Stated, not inferred: the sequence is not stable across registry edits, so
+   *  an item that depends on the previous one breaks on an unrelated change. */
+  contract: { itemsAreIndependent: true; why: string }
   items: {
     id: string
     /** resolved from base + id, so nobody has to know to strip `page:` */
@@ -427,7 +430,15 @@ export function skillResultAdmission(o: {
 
 export function orderVerdict(o: {
   order: ProbeOrder
-  result: { skill: string; artifactId: string; observed: { id: string; verdict: string; why?: string; evidence?: unknown }[] }
+  result: {
+    skill: string
+    /** the build this result CLAIMS to be about — usually copied from the order */
+    artifactId: string
+    /** the build the skill actually READ off the running site. The claim above
+     *  is equal by construction when a runner copies it; only this is evidence. */
+    observedArtifact?: string
+    observed: { id: string; verdict: string; why?: string; evidence?: unknown }[]
+  }
   /** default false: measured at ~1 noisy run in 4 on a real app, so strict
    *  would roll back a good deploy about every fourth deploy. */
   noiseIsFailure?: boolean
@@ -438,7 +449,7 @@ export function orderVerdict(o: {
    *  claim about it. Without it, "the deploy took the site down" and "the test
    *  account's password expired" produce the same word and need opposite
    *  handling. `null` is reported as "no look taken", never assumed alive. */
-  liveness?: { ok: boolean; status?: number; unreachable?: string } | null
+  liveness?: { ok: boolean; status?: number; unreachable?: string; artifact?: string } | null
 }): {
   cells: { feature: string; layer: string; priority: string; status: string; reason: string; skillVerdict?: string; volunteered?: boolean }[]
   ordered: number

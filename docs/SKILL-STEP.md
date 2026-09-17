@@ -200,12 +200,74 @@ vibeubi probe --judge --declared ./pages.json --base https://app.test --artifact
 
 `pages.json` is just a list of `{ id, priority, testId?, probes? }`.
 
-## Where the artifact id comes from
+## Where the artifact id comes from — and why copying it is not enough
 
-**Copy it from the order you were handed** — `order.artifactId`. The result is
-refused if it names a different one, and that check is free as long as the
-runner reads the order first. A peer's runner did exactly that and never felt
-the check.
+The result carries **two** ids and only one of them is evidence:
+
+```json
+{ "artifactId": "<copied from the order>",
+  "observedArtifact": "<READ off the running site>" }
+```
+
+`artifactId` is the claim. Copy it from the order — that part is free.
+
+`observedArtifact` is what the skill actually read from the deployed app while
+testing it, and it is the one that matters. This documentation used to
+recommend only the copy, and a peer measured what that check is worth:
+
+> The result's id is copied from the order, so the two are **equal by
+> construction** and the comparison cannot fail. It catches yesterday's FILE.
+> It misses today's file about yesterday's BUILD.
+
+That second case is not hypothetical — it is precisely what a run before the
+swap produces, since the site is still serving the previous artifact at that
+moment. The test is real, it passes, and it is about the wrong build.
+
+**A check whose inputs come from one source has one source, however many fields
+it compares.**
+
+Missing `observedArtifact` is not a refusal — a skill that cannot read the
+artifact off the site is a real situation — but it is named, as a P0 `blocked`
+cell, so a claim-vs-claim comparison never reads as if it were evidence.
+
+vibeUbi also takes its own read at judge time. If the site is serving a
+different artifact than the one being deployed, something replaced it between
+`prove` and `probe`, and that is a `fail`.
+
+## Items are independent
+
+The order says so explicitly, in `contract.itemsAreIndependent`, because the
+sequence is **not stable**: it sorts by priority then id, so editing any
+declaration's `priority` can reorder it. A peer's runner logged in during one
+item and the next item then found no password field — a failure produced
+entirely by an unrelated registry edit.
+
+Each item must set up and tear down its own state. `dom-test` says the same in
+its own words — *"one scenario, one context… never let scenario 2 depend on the
+state scenario 1 left behind"* — and an order that does not repeat it is relying
+on the skill's author having read that line.
+
+## What the step costs
+
+Measured by a peer on a real app, two P0 pages:
+
+| | |
+| --- | --- |
+| writing the order | 0s |
+| judging the result | 0s |
+| `dom-test`, light (load + probe + errors/overflow) | **9s** |
+| `dom-test`, full (5 invariants + contrast in both themes + reload) | **~2.5 min** |
+
+**This step costs nothing; the skill's thoroughness costs everything.** That is
+the knob to turn, and it is the skill's, not vibeUbi's.
+
+### `unmeasuredBlocks` has no correct use inside ship
+
+The obvious idea — run the step strictly before the swap, loosely after — is
+wrong, and the peer who proposed it retracted it after asking the right
+question: *what is `base` pointing at in that moment?* Before the swap the site
+is still serving the **previous** artifact, so a strict pre-swap pass judges the
+build you are replacing. It needs a staging instance to mean anything.
 
 ## Using a different skill
 

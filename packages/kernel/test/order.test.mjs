@@ -241,3 +241,60 @@ test("a site that is down does not turn a PASS into a fail — only absences", (
   assert.equal(j.cells.find((c) => c.feature === "page:/login-page").status, "pass")
   assert.equal(verdictFor(j.cells).ship, false, "but the base being down still blocks")
 })
+
+/* ── the check that was vacuous by construction ───────────────────────── */
+
+test("a copied artifactId is NOT evidence — the check it satisfies has one source", () => {
+  // A peer measured this on the flow I had recommended in the docs: a runner
+  // reads the order and writes `artifactId: order.artifactId`, so the two are
+  // equal by construction and the comparison cannot fail. It catches
+  // yesterday's FILE and misses today's file about yesterday's BUILD.
+  const copied = { skill: "dom-test", artifactId: ORDER.artifactId, observed: [{ id: "page:/login-page", verdict: "PASS" }] }
+  const j = orderVerdict({ order: ORDER, liveness: UP, result: copied })
+  const cell = cellFor(j, "probe:artifact")
+  assert.ok(cell, "a claim-vs-claim comparison must not read as if it were evidence")
+  assert.equal(cell.status, "blocked")
+  assert.match(cell.reason, /equal by construction/)
+})
+
+test("an artifact the skill actually READ off the site is evidence, and silences it", () => {
+  const real = { skill: "dom-test", artifactId: ORDER.artifactId, observedArtifact: ORDER.artifactId, observed: [{ id: "page:/login-page", verdict: "PASS" }] }
+  const j = orderVerdict({ order: ORDER, liveness: UP, result: real })
+  assert.equal(cellFor(j, "probe:artifact"), undefined)
+  assert.equal(verdictFor(j.cells).ship, true)
+})
+
+test("THE CASE THE COPIED ID MISSED: correct in form, about the wrong build", () => {
+  // Exactly what a pre-swap run produces: the site is still serving the
+  // previous artifact, so the test is real, passes, and is about the old build
+  // — while the id copied out of the order says it is about the new one.
+  const wrongBuild = { skill: "dom-test", artifactId: ORDER.artifactId, observedArtifact: "the-previous-build", observed: [{ id: "page:/login-page", verdict: "PASS" }] }
+  const r = skillResultAdmission({ order: ORDER, result: wrongBuild })
+  assert.equal(r.ok, false)
+  assert.match(r.reason, /correct in form and about the wrong thing/)
+  assert.equal(verdictFor(orderVerdict({ order: ORDER, liveness: UP, result: wrongBuild }).cells).ship, false)
+})
+
+test("our OWN read at judge time catches the site drifting after prove", () => {
+  const good = { skill: "dom-test", artifactId: ORDER.artifactId, observedArtifact: ORDER.artifactId, observed: [{ id: "page:/login-page", verdict: "PASS" }] }
+  const j = orderVerdict({ order: ORDER, liveness: { ok: true, status: 200, artifact: "something-else" }, result: good })
+  const cell = cellFor(j, "probe:artifact")
+  assert.equal(cell.status, "fail")
+  assert.match(cell.reason, /Something replaced it between prove and probe/)
+  assert.equal(verdictFor(j.cells).ship, false)
+})
+
+test("neither synthetic cell is counted as one of the ordered items", () => {
+  const j = orderVerdict({ order: ORDER, result: { skill: "dom-test", artifactId: ORDER.artifactId, observed: [{ id: "page:/login-page", verdict: "PASS" }] } })
+  assert.equal(j.ordered, 1)
+  assert.equal(j.verified, 1)
+  assert.equal(j.unverified, 0, "probe:liveness and probe:artifact must not inflate the unverified count")
+})
+
+test("the order states that items are independent, because the sequence is not stable", () => {
+  // A peer's runner logged in on one item and the next found no password field.
+  // It surfaced only because the sort changed when a declaration did — the
+  // order sorts by priority then id, so any registry edit can reorder it.
+  assert.equal(ORDER.contract.itemsAreIndependent, true)
+  assert.match(ORDER.contract.why, /not stable across registry edits/)
+})

@@ -110,7 +110,30 @@ export function probeOrder({ discovered = [], declared = [], artifactId, base, s
     .filter((i) => only.includes(i.priority))
     .sort((a, b) => a.priority.localeCompare(b.priority) || a.id.localeCompare(b.id))
 
-  return { skill, artifactId, base, at: "probe", items }
+  return {
+    skill, artifactId, base, at: "probe",
+    /**
+     * Said out loud because a peer's runner broke on the alternative.
+     *
+     * Their harness logged in during one item and the NEXT item then found no
+     * password field — and it only surfaced because the order's sort changed
+     * when a declaration did. The order sorts by priority then id, so the
+     * sequence is not stable across registry edits, and a skill that silently
+     * depends on order will break on an unrelated change to somebody's
+     * `priority` field.
+     *
+     * So the contract is stated rather than left to be inferred: each item must
+     * stand on its own. `dom-test` says the same thing in its own words — "one
+     * scenario, one context… never let scenario 2 depend on the state scenario
+     * 1 left behind" — and an order that does not repeat it is relying on the
+     * skill's author having read that line.
+     */
+    contract: {
+      itemsAreIndependent: true,
+      why: "the sequence is not stable across registry edits — it sorts by priority then id, so a change to any declaration can reorder it. Each item must set up and tear down its own state.",
+    },
+    items,
+  }
 }
 
 /**
@@ -141,12 +164,34 @@ export function skillResultAdmission({ order, result }) {
   if (result.skill !== order.skill) {
     faults.push(`the result is from "${result.skill}" and the order was for "${order.skill}" — a swapped skill silently answering a different question`)
   }
+
+  /**
+   * `artifactId` is the CLAIMED build; `observedArtifact` is the one the skill
+   * actually read off the running site. Only the second is evidence.
+   *
+   * The first version had only the claim, and a peer measured that it is
+   * vacuous under the flow I had recommended in the docs: a runner reads the
+   * order and writes `artifactId: order.artifactId`, so the two are equal BY
+   * CONSTRUCTION and the comparison cannot fail. It catches yesterday's file
+   * (stale id) and misses today's file about yesterday's BUILD (copied id,
+   * stale observation) — which is exactly what a pre-swap run produces, since
+   * the site is still serving the previous artifact at that moment.
+   *
+   * I wrote that flow into the documentation. A check whose inputs come from
+   * one source is a check with one source, however many fields it compares.
+   */
   if (!result.artifactId) {
     faults.push("the result does not name an artifact, so nothing ties it to a deploy")
   } else if (result.artifactId !== order.artifactId) {
     faults.push(
       `the result was produced against ${result.artifactId} and this deploy is ${order.artifactId}. ` +
       `A stale green file is how a gate passes on evidence about a build nobody is running.`,
+    )
+  }
+  if (result.observedArtifact && result.observedArtifact !== order.artifactId) {
+    faults.push(
+      `the skill READ ${result.observedArtifact} off the running site while this deploy is ${order.artifactId}. ` +
+      `The test ran, and it ran against a different build — a result that is correct in form and about the wrong thing.`,
     )
   }
   if (!Array.isArray(result.observed)) faults.push("`observed` is missing or not a list")
@@ -262,12 +307,33 @@ export function orderVerdict({ order, result, noiseIsFailure = false, unmeasured
   const byId = new Map(result.observed.map((o) => [o.id, o]))
   const cells = []
 
+  if (!result.observedArtifact) {
+    // Not a refusal: a skill that cannot read the artifact off the site is a
+    // real situation. But the claim-vs-claim comparison it leaves behind is not
+    // evidence, and saying nothing would let it read as if it were.
+    cells.push({
+      feature: "probe:artifact", layer: "probe", priority: "P0", status: "blocked",
+      reason:
+        `the skill did not report which artifact it actually observed, so the only tie between this result and this deploy ` +
+        `is an id copied out of the order — equal by construction, and not evidence that the test ran against ${order.artifactId}.`,
+    })
+  }
+
   if (liveness == null) {
     // Not "assume it is up". A judgement made without looking is the thing this
     // parameter exists to replace, so it is named rather than silently defaulted.
     cells.push({
       feature: "probe:liveness", layer: "probe", priority: "P0", status: "blocked",
       reason: "no independent look at the base was taken before judging, so a failure of the test side cannot be told from a failure of the deploy",
+    })
+  } else if (liveness.ok && liveness.artifact && liveness.artifact !== order.artifactId) {
+    // Our own look, at judge time: the site is serving something else now. The
+    // skill's report may be perfectly true and about a build that is gone.
+    cells.push({
+      feature: "probe:artifact", layer: "probe", priority: "P0", status: "fail",
+      reason:
+        `the site is serving ${liveness.artifact} at probe time and this deploy is ${order.artifactId}. ` +
+        `Something replaced it between prove and probe.`,
     })
   } else if (!liveness.ok) {
     cells.push({
@@ -320,7 +386,7 @@ export function orderVerdict({ order, result, noiseIsFailure = false, unmeasured
   }
 
   const ordered = order.items.length
-  const unverified = cells.filter((c) => c.status === "blocked" && !c.volunteered && c.feature !== "probe:liveness").length
+  const unverified = cells.filter((c) => c.status === "blocked" && !c.volunteered && c.feature !== "probe:liveness" && c.feature !== "probe:artifact").length
   return {
     cells,
     ordered,
@@ -328,6 +394,6 @@ export function orderVerdict({ order, result, noiseIsFailure = false, unmeasured
     unverified,
     // The number a report has to print. "shipped, 3 of 4 P0 pages unverified"
     // is a sentence somebody acts on; silence is how this step becomes decoration.
-    verified: ordered - unverified - cells.filter((c) => c.status === "fail" && !c.volunteered && c.feature !== "probe:liveness").length,
+    verified: ordered - unverified - cells.filter((c) => c.status === "fail" && !c.volunteered && c.feature !== "probe:liveness" && c.feature !== "probe:artifact").length,
   }
 }

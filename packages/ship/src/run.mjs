@@ -509,6 +509,16 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
       const liveness = await fetch(config.base, { redirect: "manual" })
         .then((r) => ({ ok: r.status < 500, status: r.status }))
         .catch((e) => ({ ok: false, unreachable: e.cause?.code ?? e.message }))
+      // And which artifact is it serving NOW? `prove` established this minutes
+      // ago; anything else here means something replaced it in between, and the
+      // skill's report — however true — is about a build that is gone.
+      if (liveness.ok) {
+        try {
+          const seen = await target.proof({ base: config.base, expected: artifactId, previous: previousId })
+          if (typeof seen?.observed === "string" && seen.observed.includes(artifactId)) liveness.artifact = artifactId
+          else if (typeof seen?.observed === "string" && seen.observed.trim()) liveness.artifact = seen.observed.trim().slice(0, 120)
+        } catch { /* the adapter could not look; the null case is already named */ }
+      }
       if (!liveness.ok) say("bad", `base is not serving at probe time: ${liveness.unreachable ?? `HTTP ${liveness.status}`}`)
 
       const judged = orderVerdict({ order, result, liveness, noiseIsFailure: probeCfg.noiseIsFailure ?? false })
