@@ -195,21 +195,40 @@ Fine for a private repo. Worth revisiting before any public release — not for
 legal reasons, but because the first page of results for the name belongs to
 someone else.
 
-## Runtimes it is actually tested on
+## Runtimes
 
-| | tests | typecheck | smoke | CLI |
-| --- | --- | --- | --- | --- |
-| **Node 18.19** | 267 pass | ✓ | 5/5 | ✓ |
-| **Node 22.22** | 267 pass | ✓ | 5/5 | ✓ |
-| **Node 24.21** | 267 pass | ✓ | 5/5 | ✓ |
+```
+engines: ">=22.0.0"
+```
 
-`engines` says `>=18.17`. Three versions run is not the same as "every version
-works" — 20 is untested, and so is anything newer than 24.21. What the three
-buy is the range's ends plus one point inside it, which is where the two
-portability defects found so far actually lived: `node --test <directory>` walks
-directories on 18 and does not on 22 (the whole suite was 5/5 red on 22 until a
-glob replaced it), and Node 24's default test reporter is no longer TAP, so
-`--test-reporter=tap` is needed to get comparable counts.
+| | status on 2026-09-17 | tests | typecheck | smoke | CLI |
+| --- | --- | --- | --- | --- | --- |
+| Node 18.19 | **EOL 2025-04-30** | 267 pass | ✓ | 5/5 | ✓ |
+| Node 20 | **EOL 2026-04-30** | not run | | | |
+| **Node 22.22** | supported to 2027-04-30 | 267 pass | ✓ | 5/5 | ✓ |
+| **Node 24.21** | supported to 2028-04-30 | 267 pass | ✓ | 5/5 | ✓ |
+
+The floor is 22 and not 18, even though everything passes on 18, because **a
+security gate should not declare support for a runtime that stopped receiving
+security fixes seventeen months ago.** 20 went end-of-life in April 2026 as well.
+
+The floor is 22 and not 24 for the opposite reason: 24 enters maintenance on
+2026-10-20 and 26 becomes LTS eight days later, so a 24 floor would be pinned to
+a version on its way out while excluding every team on a currently supported
+LTS. VibeUbi runs other people's pipelines; raising the floor costs them and
+buys nothing here.
+
+`engines` is a declaration, and this project's own rule is that a declaration
+nobody checks is a decoration — `>=18.17` claimed 19, 20, 21, 23 and 25, none of
+which has ever been run. `>=22.0.0` with 22 and 24 verified is a claim about the
+range's ends with nothing invented in between.
+
+Two runtime differences have actually bitten, both invisible to reading the code:
+
+- `node --test <directory>` walks directories on 18 and does not on 22. The
+  whole suite was 5/5 red on 22 until a shell glob replaced it.
+- **Node 24's default test reporter is no longer TAP**, so a first run there
+  looks like it produced no counts at all. `--test-reporter=tap` restores them.
 
 No API removed in 20/22/24 is used: no `url.parse`, no `util.isArray`, no
 `new Buffer()`, no `process.binding`.
