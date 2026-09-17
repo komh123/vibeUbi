@@ -31,6 +31,8 @@
  * performance skill: same order, same result shape, same judging.
  */
 
+import { sameObserved } from "./proof.mjs"
+
 /** Verdicts a skill may report. Names taken from dom-test's own checklist
  *  table, plus `scenario.js`'s fifth state, so a skill that already speaks
  *  that vocabulary needs no translation layer. */
@@ -129,8 +131,38 @@ export function probeOrder({ discovered = [], declared = [], artifactId, base, s
      * skill's author having read that line.
      */
     contract: {
+      /**
+       * A FRESH SESSION, not just its own navigation.
+       *
+       * The peer who asked for this contract then broke it while honouring the
+       * word: their runner gave every item its own `goto` and shared one
+       * browser context, so logging in during one item made the next one — the
+       * login page — redirect away and fail to find a form. "Independent" read
+       * as "navigates itself"; it means cookies, storage and auth state too.
+       *
+       * Worth spelling out because the natural implementation shares a context,
+       * and sharing is completely invisible when you test one item at a time.
+       */
       itemsAreIndependent: true,
-      why: "the sequence is not stable across registry edits — it sorts by priority then id, so a change to any declaration can reorder it. Each item must set up and tear down its own state.",
+      why:
+        "each item gets a FRESH SESSION — its own cookies, storage and auth state — not just its own navigation. " +
+        "The sequence is not stable across registry edits either: it sorts by priority then id, so a change to any " +
+        "declaration's priority can reorder it, and an item that depends on the previous one breaks on an unrelated edit.",
+
+      /**
+       * What to do with `discovered: false`, which the same peer worked out by
+       * walking it: the flag is a BRANCH, not a note.
+       *
+       *   loads and passes   discovery under-reported — a finding about the SCANNER
+       *   404 or fails       the declaration outlived the page — about the REGISTRY
+       *
+       * Neither is "this deploy is broken", both need saying, and only the skill
+       * can tell them apart because only the skill has the url and actually
+       * opened it. Without this sentence the natural thing is to ignore the flag
+       * and test normally — which files a finding about the scanner against the
+       * page.
+       */
+      undiscovered: "for an item with `discovered: false`, answer IS IT THERE before IS IT GOOD: if the url loads and probes pass, discovery under-reported (a finding about the scanner); if it 404s or fails, the declaration is stale (a finding about the registry). Neither is a fault of this deploy.",
     },
     items,
   }
@@ -188,7 +220,11 @@ export function skillResultAdmission({ order, result }) {
       `A stale green file is how a gate passes on evidence about a build nobody is running.`,
     )
   }
-  if (result.observedArtifact && result.observedArtifact !== order.artifactId) {
+  // `sameObserved` rather than `!==`, so "both sides unreadable" can never read
+  // as agreement — the rule that unifies the `?? 0` score, the empty-string
+  // version field, and a /version endpoint answering "unknown".
+  const artifactMatch = sameObserved(result.observedArtifact, order.artifactId, { what: "artifact" })
+  if (artifactMatch.known && !artifactMatch.same) {
     faults.push(
       `the skill READ ${result.observedArtifact} off the running site while this deploy is ${order.artifactId}. ` +
       `The test ran, and it ran against a different build — a result that is correct in form and about the wrong thing.`,

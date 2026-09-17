@@ -234,7 +234,7 @@ vibeUbi also takes its own read at judge time. If the site is serving a
 different artifact than the one being deployed, something replaced it between
 `prove` and `probe`, and that is a `fail`.
 
-## Items are independent
+## Items are independent — a fresh SESSION, not just a navigation
 
 The order says so explicitly, in `contract.itemsAreIndependent`, because the
 sequence is **not stable**: it sorts by priority then id, so editing any
@@ -242,10 +242,36 @@ declaration's `priority` can reorder it. A peer's runner logged in during one
 item and the next item then found no password field — a failure produced
 entirely by an unrelated registry edit.
 
-Each item must set up and tear down its own state. `dom-test` says the same in
-its own words — *"one scenario, one context… never let scenario 2 depend on the
-state scenario 1 left behind"* — and an order that does not repeat it is relying
-on the skill's author having read that line.
+Each item gets its own **cookies, storage and auth state**. The peer who asked
+for this contract then broke it while honouring the word: their runner gave
+every item its own `goto` and shared one browser context, so a login in one item
+made the login page redirect away in the next and it failed to find a form.
+
+**"Independent" read as "navigates itself". It means a fresh session.** The
+natural implementation shares a context, and sharing is completely invisible
+when you test one item at a time.
+
+`dom-test` says the same in its own words — *"one scenario, one context… never
+let scenario 2 depend on the state scenario 1 left behind"* — and an order that
+does not repeat it is relying on the skill's author having read that line.
+
+## `discovered: false` is a branch, not a note
+
+An item carries `discovered: false` when it is declared and the discoverer did
+not find it. The skill should answer **is it there** before **is it good**:
+
+| the url | what it means | the finding is about |
+| --- | --- | --- |
+| loads, probes pass | discovery under-reported | the **scanner** |
+| 404s, or fails | the declaration outlived the page | the **registry** |
+
+Neither is a fault of this deploy, both need saying, and **only the skill can
+tell them apart** — it is the one holding the url that actually opened it.
+
+Without this, the natural thing is to ignore the flag and test normally, which
+files a finding about the scanner against the page. Walked for real: a declared
+page the discoverer had been made to miss returned HTTP 200 and passed its
+probes → "discovery under-reported; the page is there."
 
 ## What the step costs
 
@@ -260,6 +286,13 @@ Measured by a peer on a real app, two P0 pages:
 
 **This step costs nothing; the skill's thoroughness costs everything.** That is
 the knob to turn, and it is the skill's, not vibeUbi's.
+
+### Bumping the pin while a ship is running
+
+Don't. Editing `package.json` changes the working tree, and `swap` refuses on
+tree drift between `verify` and `swap` — by design, because the tree IS the
+deployment and a proof taken before the edit was about a different tree. A peer
+lost forty minutes to exactly this. **Let the ship finish, then bump.**
 
 ### `unmeasuredBlocks` has no correct use inside ship
 

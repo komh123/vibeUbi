@@ -127,6 +127,18 @@ export function deployProof(o: {
   unreachable?: string
 }): DeployProof
 
+/**
+ * Compare two INDEPENDENT observations, with a third answer that must exist:
+ * same, different, and WE DO NOT KNOW. "Unreadable" needs a representation that
+ * is not equal to any real value — `null` has one, `""` and `0` and `false` do
+ * not, and two unreadable values are two absences rather than a match.
+ */
+export function sameObserved(
+  a: unknown,
+  b: unknown,
+  opts?: { what?: string },
+): { known: boolean; same: boolean; reason: string }
+
 export function proofContract(claim: {
   external: boolean
   carriesArtifactId: boolean
@@ -390,7 +402,17 @@ export interface ProbeOrder {
   at: "probe"
   /** Stated, not inferred: the sequence is not stable across registry edits, so
    *  an item that depends on the previous one breaks on an unrelated change. */
-  contract: { itemsAreIndependent: true; why: string }
+  contract: {
+    /** a FRESH SESSION per item — cookies, storage, auth — not just its own
+     *  navigation. The natural implementation shares a browser context, and
+     *  that sharing is invisible when testing one item at a time. */
+    itemsAreIndependent: true
+    why: string
+    /** what to do with `discovered: false`: answer "is it there" before "is it
+     *  good". Loads and passes → the scanner under-reported. 404s → the
+     *  declaration is stale. Neither is a fault of this deploy. */
+    undiscovered: string
+  }
   items: {
     id: string
     /** resolved from base + id, so nobody has to know to strip `page:` */

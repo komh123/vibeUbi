@@ -7,7 +7,7 @@
  * gate nobody will hand rollback authority to.
  */
 export { verdictFor, earlyVerdict, gateCells } from "./verdict.mjs"
-export { deployProof, proofContract } from "./proof.mjs"
+export { deployProof, proofContract, sameObserved } from "./proof.mjs"
 export { testRanVerdict } from "./test-ran.mjs"
 export { attributedVerdict, needsAttribution, retrySelector, cellKey } from "./attribution.mjs"
 export { prereqVerdict } from "./prereq.mjs"

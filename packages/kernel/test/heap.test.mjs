@@ -184,3 +184,38 @@ test("unknown severities are listed, so the rule that spelled it wrong can be fo
   const out = unknownSeverities([{ severity: "high" }, { severity: "sev-1" }, { severity: "SEV-1" }, { severity: "low" }])
   assert.deepEqual(out, ["sev-1"])
 })
+
+/* ── two unreadable values are two absences, not a match ──────────────── */
+import { sameObserved } from "../src/index.mjs"
+
+test("`unreadable` needs a representation equal to no real value", () => {
+  // A peer's generalisation of three defects at three type levels: `?? 0` on a
+  // score, an empty-string version field, and a /version endpoint answering
+  // "unknown". null has such a representation; "", 0 and false do not.
+  assert.deepEqual(
+    { known: sameObserved("", "").known, same: sameObserved("", "").same },
+    { known: false, same: false },
+    "two empty strings compare equal — a field NEITHER side could read would report agreement",
+  )
+  assert.equal(sameObserved(null, "x").known, false)
+  assert.equal(sameObserved("x", undefined).known, false)
+  assert.equal(sameObserved("  ", "  ").known, false, "whitespace is not a reading either")
+})
+
+test("but a real zero is a real value, and must not be treated as absent", () => {
+  const r = sameObserved(0, 0, { what: "count" })
+  assert.equal(r.known, true)
+  assert.equal(r.same, true, "the CALLER must use null for unreadable; 0 is data")
+})
+
+test("it says which side could not be read, because the two fixes differ", () => {
+  assert.match(sameObserved(null, "x").reason, /the first side could not be read/)
+  assert.match(sameObserved("x", null).reason, /the second side could not be read/)
+  assert.match(sameObserved(null, null).reason, /neither side could be read/)
+})
+
+test("same and different are still plainly answered", () => {
+  assert.equal(sameObserved("a", "a").same, true)
+  assert.equal(sameObserved("a", "b").same, false)
+  assert.equal(sameObserved("a", "b").known, true)
+})

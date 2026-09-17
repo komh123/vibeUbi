@@ -90,3 +90,38 @@ export function proofContract(claim) {
     reason: `this proof cannot prove a deploy: ${faults.join("; ")}${claim.source ? ` (${claim.source})` : ""}`,
   }
 }
+
+/**
+ * Compare two INDEPENDENT observations — and refuse to call "both unreadable"
+ * a match.
+ *
+ * THE RULE, in a peer's words, which generalise mine:
+ *
+ *     "unreadable" must have a representation that is not equal to any real
+ *     value.
+ *
+ * `null` has one. The empty string does not — two empty strings compare equal,
+ * so a field NEITHER side could read reports agreement. `0` does not. `false`
+ * does not. Three defects across this week were the same thing at three
+ * different type levels: `WEIGHT[severity] ?? 0` on a score, an empty-string
+ * version field, and a `/version` endpoint answering `"unknown"`.
+ *
+ * Anywhere two sources are compared, the third answer has to exist: **same**,
+ * **different**, and **we do not know**. Collapsing the third into either of
+ * the first two is how a check that never ran reads as a check that passed.
+ */
+export function sameObserved(a, b, { what = "value" } = {}) {
+  const read = (v) => (v === null || v === undefined || (typeof v === "string" && v.trim() === "") ? null : v)
+  const x = read(a), y = read(b)
+  if (x === null || y === null) {
+    return {
+      known: false, same: false,
+      reason:
+        `${what}: ${x === null && y === null ? "neither side could be read" : x === null ? "the first side could not be read" : "the second side could not be read"}, ` +
+        `so nothing is known. Two unreadable values are not a match — they are two absences.`,
+    }
+  }
+  return x === y
+    ? { known: true, same: true, reason: `${what}: both sides read ${String(x).slice(0, 80)}` }
+    : { known: true, same: false, reason: `${what}: ${String(x).slice(0, 80)} vs ${String(y).slice(0, 80)}` }
+}

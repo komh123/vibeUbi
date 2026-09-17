@@ -298,3 +298,24 @@ test("the order states that items are independent, because the sequence is not s
   assert.equal(ORDER.contract.itemsAreIndependent, true)
   assert.match(ORDER.contract.why, /not stable across registry edits/)
 })
+
+test("the independence contract says SESSION, not navigation", () => {
+  // The peer who asked for this contract then broke it while honouring the
+  // word: every item got its own `goto`, all sharing one browser context, so a
+  // login in one item made the login page redirect away in the next. Sharing a
+  // context is invisible when you test one item at a time.
+  assert.match(ORDER.contract.why, /FRESH SESSION/)
+  assert.match(ORDER.contract.why, /cookies, storage and auth state/)
+  assert.match(ORDER.contract.why, /not just its own navigation/)
+})
+
+test("`discovered: false` is a BRANCH the order explains, not a flag it drops", () => {
+  const blind = probeOrder({ discovered: [], declared: DECLARED, artifactId: "a", base: "http://x" })
+  assert.equal(blind.items[0].discovered, false)
+  // Without this, the natural thing is to ignore the flag and test normally —
+  // filing a finding about the SCANNER against the page.
+  assert.match(blind.contract.undiscovered, /IS IT THERE before IS IT GOOD/)
+  assert.match(blind.contract.undiscovered, /about the scanner/)
+  assert.match(blind.contract.undiscovered, /about the registry/)
+  assert.match(blind.contract.undiscovered, /Neither is a fault of this deploy/)
+})

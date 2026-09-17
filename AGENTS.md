@@ -88,6 +88,27 @@ is in DERIVING from it.** The author of a new metric reaches for the widest
 negation to hand. Where a distinction is load-bearing, export the predicate so
 the derivation cannot be re-made downstream — see `isObservation`.
 
+### 3. "What does *unreadable* look like, and is it equal to anything real?"
+
+From a peer, generalising three defects that turned out to be one:
+
+> **"Unreadable" must have a representation that is not equal to any real
+> value.**
+
+`null` has one. `""` does not — two empty strings compare equal, so a field
+NEITHER side could read reports agreement. Nor does `0`, nor `false`.
+
+| the defect | the type level |
+| --- | --- |
+| `WEIGHT[severity] ?? 0` — a misspelled severity scored zero and did not block | a number |
+| a version field returning `""` — both sides unreadable read as "same build" | a string |
+| a `/version` endpoint answering `"unknown"` | a value that looks like data |
+
+Anywhere two sources are compared, **three answers must exist**: same,
+different, and *we do not know*. Collapsing the third into either of the other
+two is how a check that never ran reads as a check that passed. `sameObserved`
+in the kernel is that comparison; use it rather than `!==`.
+
 ### Killing processes
 
 Never match on a command line. `pgrep -f X` and `pkill -f X` match the shell
