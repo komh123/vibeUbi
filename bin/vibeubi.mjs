@@ -17,6 +17,7 @@ import {
 import { toIR, toMermaid, toArchify } from "../packages/viz/src/archify.mjs"
 
 const argv = process.argv.slice(2)
+const { SHIP_STEPS } = await import("../packages/ship/src/run.mjs")
 const cmd = argv[0] ?? "help"
 const flag = (n) => argv.includes(`--${n}`)
 const val = (n, d) => { const i = argv.indexOf(`--${n}`); return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[i + 1] : d }
@@ -76,9 +77,12 @@ const COMMANDS = {
     for (const d of loaded.disabled) bad(`${d.owner} — ${d.why}`)
 
     say(`\n${C.bold}steps${C.off}`)
-    for (const s of ["verify", "build", "swap", "prove", "sweep", "gate", "report"]) {
-      const mutates = s === "swap" || s === "gate"
-      say(`  ${mutates ? C.yellow + "mutates" + C.off : C.dim + "reads  " + C.off}  ${s}`)
+    // Both the list AND the property come from SHIP_STEPS. The first version
+    // of this fix derived the list and left `mutates` hardcoded, so `probe`
+    // printed "reads" while its definition said it mutates — the number right
+    // and the field next to it still saying the old thing.
+    for (const s of SHIP_STEPS) {
+      say(`  ${s.mutates ? C.yellow + "mutates" + C.off : C.dim + "reads  " + C.off}  ${s.id}`)
     }
 
     say(`\n${C.bold}proof${C.off}`)

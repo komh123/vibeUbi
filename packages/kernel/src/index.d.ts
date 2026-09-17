@@ -377,3 +377,46 @@ export function regressionVerdict(o: {
 export function manualGapReport(
   verdicts: readonly { state: string; blocks: boolean; days?: number | null }[],
 ): { open: number; closed: number; unmeasured: number; blocks: boolean; oldestDays: number | null; verdicts: readonly unknown[] }
+
+/* ── the step vibeUbi orders and an agent fulfils ─────────────────────── */
+
+export const SKILL_VERDICTS: readonly ["PASS", "PASS_WITH_NOISE", "FAIL", "BLOCKED", "NOT_EXERCISED"]
+export const FREE_INVARIANTS: readonly { id: string; why: string }[]
+
+export interface ProbeOrder {
+  skill: string
+  artifactId: string
+  base: string
+  at: "probe"
+  items: { id: string; priority: string; testId: string | null; probes: unknown[]; invariants: string[] }[]
+}
+
+/** Derived from the registry, ordered by priority: if the expensive step is cut
+ *  short it must be cut at the least important end, and what was not reached
+ *  has to be NAMED rather than absent. */
+export function probeOrder(o: {
+  discovered?: readonly { id: string; kind: string }[]
+  declared?: readonly Record<string, unknown>[]
+  artifactId: string
+  base: string
+  skill?: string
+  only?: readonly string[]
+}): ProbeOrder
+
+/** A result file is a REPORT — the class of evidence this product refuses — so
+ *  it must name the artifact it was produced against, or yesterday's green file
+ *  passes today's ship. */
+export function skillResultAdmission(o: {
+  order: ProbeOrder
+  result: unknown
+}): { ok: true } | { ok: false; reason: string }
+
+export function orderVerdict(o: {
+  order: ProbeOrder
+  result: { skill: string; artifactId: string; observed: { id: string; verdict: string; why?: string; evidence?: unknown }[] }
+  noiseIsFailure?: boolean
+}): {
+  cells: { feature: string; layer: string; priority: string; status: string; reason: string; skillVerdict?: string; volunteered?: boolean }[]
+  ordered: number
+  covered: number
+}

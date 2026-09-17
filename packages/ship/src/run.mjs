@@ -34,6 +34,7 @@ import {
   verdictFor, earlyVerdict, gateCells, deployProof, proofContract,
   prereqVerdict, testRanVerdict, attributedVerdict, budgetVerdict,
   nodeHeapMb, heapOomMessage, ceilingEffect, HEAP_FLOOR_MB,
+  probeOrder, orderVerdict,
 } from "../../kernel/src/index.mjs"
 const exec = promisify(execFile)
 
@@ -44,15 +45,16 @@ export const SHIP_STEPS = [
   { id: "prove",   mutates: false, what: "observe, from OUTSIDE the process, that the running service serves the new artifact" },
   { id: "sweep",   mutates: false, what: "the layers, against the running site" },
   { id: "gate",    mutates: true,  what: "any P0 red or errored layer → roll back, and prove the rollback" },
+  { id: "probe",   mutates: true,  what: "hand a SKILL the registry's P0 pages, judge what it reports, roll back on a P0 red" },
   { id: "report",  mutates: false, what: "write the evidence" },
 ]
 
 /** Budgets: at least 5 minutes, and 6×–40× the worst observed time. */
 /** Measured on real runs. Re-measure rather than widen: a budget you raise
  *  because something got slow stops being a limit. */
-export const OBSERVED_MS = { verify: 60_000, build: 90_000, swap: 20_000, prove: 15_000, sweep: 60_000, gate: 30_000, report: 8_000 }
+export const OBSERVED_MS = { verify: 60_000, build: 90_000, swap: 20_000, prove: 15_000, sweep: 60_000, gate: 30_000, probe: 120_000, report: 8_000 }
 /** At least 5 minutes, at least 6x the worst observed, no more than 40x. */
-export const BUDGET_MS   = { verify: 600_000, build: 900_000, swap: 300_000, prove: 300_000, sweep: 600_000, gate: 300_000, report: 300_000 }
+export const BUDGET_MS   = { verify: 600_000, build: 900_000, swap: 300_000, prove: 300_000, sweep: 600_000, gate: 300_000, probe: 1_800_000, report: 300_000 }
 
 /**
  * The content hash of the tree right now.
@@ -401,7 +403,7 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
     say("warn", "rolling back — the deploy could not be shown to have happened")
     const r = await rollbackAndProve({ target, config, artifactId, previousId, say })
     step(5, "gate", r.ok ? "pass" : "fail")
-    step(4, "sweep", "unreached"); step(6, "report", "pass")
+    step(4, "sweep", "unreached"); step(6, "probe", "unreached"); step(7, "report", "pass")
     return finish(r.ok ? "rolled back" : "rollback unproven", proof.reason)
   }
   say("ok", `the running service serves ${artifactId}`)
@@ -423,7 +425,7 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
 
   /* ── 6 · gate ────────────────────────────────────────────────────────── */
   step(5, "gate", "run")
-  say("head", "6/7  gate")
+  say("head", "6/8  gate")
   const all = gateCells({ cells, degraded: (pre.degraded ?? []).map((d) => d.layer) })
   let verdict = verdictFor(all)
 
@@ -441,18 +443,93 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
   if (!verdict.ship) {
     say("bad", verdict.reason)
     const r = await rollbackAndProve({ target, config, artifactId, previousId, say })
-    step(5, "gate", r.ok ? "pass" : "fail"); step(6, "report", "pass")
+    step(5, "gate", r.ok ? "pass" : "fail"); step(6, "probe", "unreached"); step(7, "report", "pass")
     await writeReport(outDir, { artifactId, previousId, cells: all, verdict, outcome: r.ok ? "rolled back" : "rollback unproven" })
     return finish(r.ok ? "rolled back" : "rollback unproven", verdict.reason)
   }
   say("ok", verdict.reason)
   step(5, "gate", "pass")
 
-  /* ── 7 · report ──────────────────────────────────────────────────────── */
-  step(6, "report", "run")
+  /* ── 7 · probe — a SKILL checks what the registry says matters ───────── */
+  /**
+   * Deliberately AFTER the gate, and deliberately mutating.
+   *
+   * After, because this is the expensive step — a real browser over N pages —
+   * and there is no reason to pay for it on a deploy that already failed for a
+   * cheaper reason. Mutating, because a P0 red here rolls back for exactly the
+   * same justification as a P0 red in the gate: undoing the deploy undoes the
+   * problem. A step that could find a broken login page and then ship it anyway
+   * would be a report, not a gate.
+   *
+   * The SKILL is a slot. `dom-test` is the default because its evidence
+   * channels line up with what the registry already knows how to ask about;
+   * nothing in this file knows what a browser is. Point `config.probe.skill` at
+   * a security skill, an a11y skill, a performance skill — the order goes out
+   * and the result comes back in the same shape.
+   *
+   * The pipeline does not RUN the skill. It writes an order, and the agent
+   * driving this ship runs the skill and writes a result. Pretending the
+   * pipeline could drive a browser well would produce a worse test: choosing
+   * which invariants matter, telling a stale locator from a broken app, reading
+   * a red channel — that is judgement, and this product's rule is that an agent
+   * may widen what gets checked and may not move the pass mark.
+   */
+  const probeCfg = config.probe ?? {}
+  if (probeCfg.skill !== false) {
+    step(6, "probe", "run")
+    const order = probeOrder({
+      discovered, declared: config.declared ?? [], artifactId,
+      base: config.base, skill: probeCfg.skill ?? "dom-test",
+      only: probeCfg.only ?? ["P0"],
+    })
+    say("head", `7/8  probe — ${order.items.length} item(s) for ${order.skill}`)
+
+    if (order.items.length === 0) {
+      say("warn", `nothing to probe: no ${(probeCfg.only ?? ["P0"]).join("/")} page is both discovered and declared`)
+      step(6, "probe", "pass")
+    } else {
+      const orderPath = join(outDir, "probe-order.json")
+      await writeFile(orderPath, JSON.stringify(order, null, 2), "utf8")
+      say("dim", `order written: ${orderPath}`)
+
+      const result = await (probeCfg.fulfil
+        ? probeCfg.fulfil(order)
+        : readFile(join(outDir, "probe-result.json"), "utf8").then(JSON.parse).catch(() => null))
+
+      const judged = orderVerdict({ order, result, noiseIsFailure: probeCfg.noiseIsFailure ?? true })
+      for (const c of judged.cells) emit({ kind: "cell", cell: c })
+      say(judged.covered === judged.ordered ? "ok" : "warn",
+        `${judged.covered}/${judged.ordered} ordered item(s) reported on`)
+
+      const probeVerdict = verdictFor(gateCells({ cells: judged.cells, degraded: [] }))
+      if (!probeVerdict.ship) {
+        say("bad", probeVerdict.reason)
+        // "1 layer(s) errored" is a count, and a count is not a diagnosis. The
+        // cell knows which item and why; print it, because the operator's first
+        // line should not send them to a file to find out what broke.
+        for (const c of judged.cells.filter((x) => x.status !== "pass")) {
+          say("bad", `  ${c.feature} — ${c.skillVerdict ?? c.status}: ${c.reason}`)
+        }
+        step(6, "probe", "fail")
+        const r = await rollbackAndProve({ target, config, artifactId, previousId, say })
+        step(7, "report", "pass")
+        await writeReport(outDir, { artifactId, previousId, cells: [...all, ...judged.cells], verdict: probeVerdict, outcome: r.ok ? "rolled back" : "rollback unproven" })
+        return finish(r.ok ? "rolled back" : "rollback unproven", probeVerdict.reason)
+      }
+      say("ok", probeVerdict.reason)
+      step(6, "probe", "pass")
+      all.push(...judged.cells)
+    }
+  } else {
+    step(6, "probe", "unreached")
+    say("dim", "probe step disabled (probe.skill: false)")
+  }
+
+  /* ── 8 · report ──────────────────────────────────────────────────────── */
+  step(7, "report", "run")
   await writeReport(outDir, { artifactId, previousId, cells: all, verdict, outcome: "shipped" })
-  step(6, "report", "pass")
-  say("head", `7/7  report ${outDir}`)
+  step(7, "report", "pass")
+  say("head", `8/8  report ${outDir}`)
   return finish("shipped", verdict.reason)
 }
 
