@@ -86,14 +86,46 @@ authoring is a step nobody turns on.
   "observed": [ { "id": "page:/login", "verdict": "PASS", "why": "...", "evidence": {} } ] }
 ```
 
-| verdict | judged as |
-| --- | --- |
-| `PASS` | pass |
-| `PASS_WITH_NOISE` | **fail** by default — see below |
-| `FAIL` | fail |
-| `BLOCKED` | error — "we do not know" is not a pass |
-| `NOT_EXERCISED` | error — same |
-| anything else | error — an unknown verdict is not a pass |
+| verdict | judged as | rolls back? |
+| --- | --- | --- |
+| `PASS` | pass | no |
+| `PASS_WITH_NOISE` | pass, recorded as its own state | no by default — see below |
+| `FAIL` | fail | **yes** |
+| `BLOCKED` | blocked — unverified, counted | no |
+| `NOT_EXERCISED` | blocked — same | no |
+| anything else | blocked — an unknown verdict is not a pass | no |
+| (item missing from the result) | blocked — unverified, counted | no |
+
+### After the swap, absence of evidence must not undo a good deploy
+
+The first version rolled back on all of those. A peer's **first real run** hit
+it: a page came back `BLOCKED` because the pipeline's own sweep had rotated the
+test account's password. The deploy was fine, and the step replaced it with the
+previous build because of a fixture.
+
+Their distinction is the one this now runs on:
+
+> **"I could not see it" costs a different amount before and after the swap.**
+> Refusing at `verify` costs "this does not ship today", which is free. Rolling
+> back at `probe` is an ACTION — swapping a good build out on the strength of a
+> measurement that did not happen.
+
+So only `FAIL` — positive evidence that something IS broken — rolls back.
+Everything merely missing is `blocked`: not a pass, not a rollback, **counted**.
+
+`verdictFor` already had exactly this state, with a comment that already said
+it: *"a dependency is unavailable — not caused by this deploy, and rollback
+cannot fix it."*
+
+The protection against this becoming decoration is that the number is printed,
+in the outcome and not only on screen:
+
+```
+shipped · no failures · 1 P0 page(s) could not be verified
+```
+
+A caller running the step BEFORE a swap — where refusing is free again — sets
+`unmeasuredBlocks: true`.
 
 And the rules that are not about any single verdict:
 
@@ -116,11 +148,39 @@ And the rules that are not about any single verdict:
 `dom-test`'s acceptance-checklist table says a channel going red on an item
 whose condition held *"is still a FAIL of that item; that is precisely what the
 manual tester would have noticed."* Its `scenario.js` is looser and reports
-`PASS (with noise)` at the top level.
+`PASS (with noise)` at the top level. **The two halves disagree.**
 
-The two halves disagree. This follows the stricter one, and `noiseIsFailure`
-exists so a project can differ **on purpose** rather than by inheriting
-whichever half it happened to read.
+This defaulted to the stricter half, chosen with no data. Then a peer measured:
+on their app roughly **one run in four** produces `net::ERR_NETWORK_CHANGED`
+from an SSE stream cut by navigation — noise nobody can act on. Strict by
+default would therefore have rolled back a good deploy about every fourth
+deploy.
+
+So the default is now loose, and `PASS_WITH_NOISE` is still recorded as its own
+state rather than flattened into a pass. `noiseIsFailure: true` is there for a
+project that wants it.
+
+The real fix is not this knob. **The skill needs to separate actionable red
+from transport noise**, and until it does, `noiseIsFailure: true` turns a
+skill's ambiguity into a deploy decision.
+
+## Trying it on a repo that has not adopted vibeUbi
+
+Trying one step should not require making the adoption decision first:
+
+```bash
+vibeubi probe --declared ./pages.json --base https://app.test --artifact <id>
+vibeubi probe --judge --declared ./pages.json --base https://app.test --artifact <id>
+```
+
+`pages.json` is just a list of `{ id, priority, testId?, probes? }`.
+
+## Where the artifact id comes from
+
+**Copy it from the order you were handed** — `order.artifactId`. The result is
+refused if it names a different one, and that check is free as long as the
+runner reads the order first. A peer's runner did exactly that and never felt
+the check.
 
 ## Using a different skill
 

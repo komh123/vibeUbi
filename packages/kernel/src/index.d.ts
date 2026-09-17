@@ -388,7 +388,17 @@ export interface ProbeOrder {
   artifactId: string
   base: string
   at: "probe"
-  items: { id: string; priority: string; testId: string | null; probes: unknown[]; invariants: string[] }[]
+  items: {
+    id: string
+    /** resolved from base + id, so nobody has to know to strip `page:` */
+    url: string
+    priority: string
+    testId: string | null
+    probes: unknown[]
+    /** false when it is declared but discovery did not find it — named, not absent */
+    discovered: boolean
+    invariants: { id: string; why: string }[]
+  }[]
 }
 
 /** Derived from the registry, ordered by priority: if the expensive step is cut
@@ -406,6 +416,10 @@ export function probeOrder(o: {
 /** A result file is a REPORT — the class of evidence this product refuses — so
  *  it must name the artifact it was produced against, or yesterday's green file
  *  passes today's ship. */
+/** Resolves the URL the skill should open — guessing it wrong means testing a
+ *  different page and reporting PASS, which is the worst outcome this step has. */
+export function pageUrl(base: string, id: string): string
+
 export function skillResultAdmission(o: {
   order: ProbeOrder
   result: unknown
@@ -414,9 +428,17 @@ export function skillResultAdmission(o: {
 export function orderVerdict(o: {
   order: ProbeOrder
   result: { skill: string; artifactId: string; observed: { id: string; verdict: string; why?: string; evidence?: unknown }[] }
+  /** default false: measured at ~1 noisy run in 4 on a real app, so strict
+   *  would roll back a good deploy about every fourth deploy. */
   noiseIsFailure?: boolean
+  /** default false. After a swap, absence of evidence must not undo a good
+   *  deploy; before one, refusing is free, so a pre-swap caller sets this. */
+  unmeasuredBlocks?: boolean
 }): {
   cells: { feature: string; layer: string; priority: string; status: string; reason: string; skillVerdict?: string; volunteered?: boolean }[]
   ordered: number
   covered: number
+  /** could not be measured — the deploy stands, and this number is printed */
+  unverified: number
+  verified: number
 }

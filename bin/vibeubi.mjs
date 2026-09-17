@@ -198,6 +198,47 @@ const COMMANDS = {
    * how the standalone path and the pipeline start disagreeing.
    */
   async probe() {
+    /**
+     * No-config mode: `--declared <file>` with `--base` and `--artifact`.
+     *
+     * A peer tried this step on a repo that has not adopted vibeubi and the
+     * first line back was "no vibeubi.config.mjs here" — so trying ONE step
+     * required making the whole adoption decision first. Those are separate
+     * decisions and the tool should not fuse them.
+     */
+    if (flag("declared")) {
+      const { probeOrder, orderVerdict, verdictFor, gateCells } = await import("../packages/kernel/src/index.mjs")
+      const { readFile, writeFile, mkdir } = await import("node:fs/promises")
+      const declared = JSON.parse(await readFile(val("declared", ""), "utf8"))
+      const base = val("base", "")
+      const artifactId = val("artifact", "")
+      if (!base || !artifactId) { bad("no-config mode needs --base and --artifact"); process.exit(2) }
+      const out = join(ROOT, ".vibeubi"); await mkdir(out, { recursive: true })
+      const orderPath = val("order-file", join(out, "probe-order.json"))
+      const resultPath = val("result-file", join(out, "probe-result.json"))
+      say(`\n${C.bold}vibeubi probe${C.off} ${C.dim}no config · ${declared.length} declared${C.off}\n`)
+      if (!flag("judge")) {
+        const order = probeOrder({ discovered: [], declared, artifactId, base, skill: val("skill", "dom-test"), only: val("only", "P0").split(",") })
+        await writeFile(orderPath, JSON.stringify(order, null, 2), "utf8")
+        ok(`${order.items.length} item(s) for ${order.skill}`)
+        for (const i of order.items) say(`  ${C.dim}${i.priority}${C.off}  ${i.url}${i.discovered ? "" : C.dim + "  (declared, not discovered)" + C.off}`)
+        note(`order  ${relativeish(orderPath)}`)
+        return
+      }
+      const order = JSON.parse(await readFile(orderPath, "utf8"))
+      const result = await readFile(resultPath, "utf8").then(JSON.parse).catch(() => null)
+      const judged = orderVerdict({ order, result })
+      const verdict = verdictFor(gateCells({ cells: judged.cells, degraded: [] }))
+      say(`  ${judged.verified}/${judged.ordered} verified${judged.unverified ? `, ${judged.unverified} unverified` : ""}\n`)
+      for (const c of judged.cells) {
+        const mark = c.status === "pass" ? C.green + "✓" : c.status === "blocked" ? C.yellow + "?" : C.red + "✗"
+        say(`  ${mark}${C.off} ${C.dim}${c.priority}${C.off} ${c.feature}`)
+        if (c.status !== "pass") say(`      ${C.dim}${c.reason}${C.off}`)
+      }
+      say(`\n  ${verdict.ship ? C.green + "would ship" : C.red + "would ROLL BACK"}${C.off} — ${verdict.reason}`)
+      process.exit(verdict.ship ? 0 : 1)
+    }
+
     const { config, ctx } = await boot()
     const { probeOrder, orderVerdict, verdictFor, gateCells } = await import("../packages/kernel/src/index.mjs")
     const { readFile, writeFile, mkdir } = await import("node:fs/promises")
@@ -467,6 +508,7 @@ ${C.bold}vibeubi${C.off} — the gate that remembers so you do not have to
   ${C.bold}adopt${C.off}     claim every orphan  [--dry-run] [--only area=x]
   ${C.bold}ship${C.off}      verify → build → swap → prove → sweep → gate → report
   ${C.bold}probe${C.off}     order the skill step, or judge what it returned  [--judge] [--artifact ID]
+            no config needed: --declared <file> --base <url> --artifact <id>
   ${C.bold}rollback${C.off}  put the previous build back, and prove it
   ${C.bold}init${C.off}      probe the project and write a config  [--dry-run] [--force]
   ${C.bold}guard${C.off}     --action <a>   refuse a narrowing action

@@ -67,23 +67,63 @@ export const FREE_INVARIANTS = Object.freeze([
  * to be *named* rather than missing.
  */
 export function probeOrder({ discovered = [], declared = [], artifactId, base, skill = "dom-test", only = ["P0"] }) {
-  const byId = new Map(declared.map((d) => [d.id, d]))
-  const items = discovered
-    .filter((d) => d.kind === "page")
-    .map((d) => {
-      const dec = byId.get(d.id) ?? {}
+  const decById = new Map(declared.map((d) => [d.id, d]))
+  const seen = new Set(discovered.filter((d) => d.kind === "page").map((d) => d.id))
+
+  /**
+   * The universe is discovered ∪ declared, not discovered alone.
+   *
+   * The first version built `items` from `discovered` and used `declared` only
+   * as a lookup for extra fields — so a declared P0 that discovery MISSED was
+   * silently absent from the order. A peer proved it with a falsifiable pair:
+   * same declaration, one run with the page discovered (1 item) and one without
+   * (0 items), no other difference.
+   *
+   * That is the scope being narrowed BEFORE the filter, and the narrowing not
+   * being said — the same shape as a listing cap applied before its skip-list.
+   * A run whose discoverer broke would order fewer items and then judge green
+   * on the smaller universe, and this file's own comment says what was not
+   * reached has to be NAMED rather than absent.
+   *
+   * So a declared-but-undiscovered page goes into the order carrying
+   * `discovered: false`. It is a registry problem as well as a probe problem,
+   * and the skill is told which it is looking at.
+   */
+  const ids = new Set([...seen, ...declared.filter((d) => String(d.id).startsWith("page:")).map((d) => d.id)])
+
+  const items = [...ids]
+    .map((id) => {
+      const dec = decById.get(id) ?? {}
       return {
-        id: d.id,
+        id,
+        url: pageUrl(base, id),
         priority: dec.priority ?? "P2",
         testId: dec.testId ?? null,
         probes: dec.probes ?? [],
-        invariants: FREE_INVARIANTS.map((i) => i.id),
+        discovered: seen.has(id),
+        // The whole objects, not just the ids. `why` is the field that lets an
+        // agent unfamiliar with the skill act without asking anyone — and the
+        // first version dropped it in a `.map(i => i.id)`.
+        invariants: FREE_INVARIANTS.map((i) => ({ ...i })),
       }
     })
     .filter((i) => only.includes(i.priority))
-    .sort((a, b) => a.priority.localeCompare(b.priority))
+    .sort((a, b) => a.priority.localeCompare(b.priority) || a.id.localeCompare(b.id))
 
   return { skill, artifactId, base, at: "probe", items }
+}
+
+/**
+ * The URL the skill should open.
+ *
+ * Resolved here rather than left to the caller: joining `base` to a feature id
+ * means knowing to strip the `page:` prefix, and a peer who guessed right said
+ * the cost of guessing WRONG is testing a different page and reporting PASS.
+ * A silent success on the wrong page is the worst outcome this step can have.
+ */
+export function pageUrl(base, id) {
+  const path = String(id).replace(/^page:/, "") || "/"
+  return `${String(base ?? "").replace(/\/+$/, "")}${path.startsWith("/") ? path : `/${path}`}`
 }
 
 /**
@@ -125,18 +165,62 @@ export function skillResultAdmission({ order, result }) {
  *   green rows for a twelve-item order has told you nothing about nine of them.
  *
  * @param {object} o
+ * AFTER THE SWAP, ABSENCE OF EVIDENCE MUST NOT UNDO A GOOD DEPLOY.
+ *
+ * The first version treated BLOCKED, NOT_EXERCISED and a missing row as
+ * `error`, which the gate blocks on — so the step rolled back. A peer's first
+ * real run hit exactly that: `/en/chat` came back BLOCKED because their test
+ * account's password had been rotated by the pipeline's own sweep. The deploy
+ * was fine. The pipeline replaced it with the previous build because of a
+ * fixture.
+ *
+ * Their distinction is the right one and I did not have it: **"I could not
+ * see it" costs a different amount before and after the swap.** Refusing at
+ * verify costs "this does not ship today", which is free. Rolling back at
+ * probe is an ACTION — swapping a good build out on the strength of a
+ * measurement that did not happen.
+ *
+ * So only FAIL rolls back: positive evidence that something IS broken.
+ * Everything that is merely missing becomes `unverified` — recorded, counted,
+ * named in the outcome, and not a pass. `unmeasuredBlocks` exists for a caller
+ * running this BEFORE a swap, where refusing is free again.
+ *
+ * The protection against this becoming decorative is that `unverified` is a
+ * number the report has to print: "shipped, 3 of 4 P0 pages unverified" is a
+ * sentence somebody acts on. Silence would not be.
+ *
  * @param {boolean} [o.noiseIsFailure] dom-test's checklist table says a channel
  *   going red on an item whose condition held "is still a FAIL of that item —
  *   that is precisely what the manual tester would have noticed". Its
- *   `scenario.js` is looser and reports "PASS (with noise)" at the top level.
- *   The two halves of the skill disagree; this follows the stricter one, and
- *   the knob exists so a project can say otherwise ON PURPOSE rather than by
- *   inheriting whichever half it happened to read.
+ *   `scenario.js` is looser and reports "PASS (with noise)".
+ *
+ *   The two halves of the skill disagree, and I defaulted to the stricter one
+ *   with no data. The peer then measured: on their app roughly one run in four
+ *   produces `net::ERR_NETWORK_CHANGED` from an SSE stream cut by navigation —
+ *   noise nobody can act on. Strict-by-default would therefore have rolled back
+ *   a good deploy about every fourth deploy.
+ *
+ *   So the default is now loose, and `PASS_WITH_NOISE` is still recorded as its
+ *   own state rather than flattened into a pass. The real fix is not this knob:
+ *   the skill needs to separate actionable red from transport noise, and until
+ *   it does, `noiseIsFailure: true` turns a skill's ambiguity into a deploy
+ *   decision.
  */
-export function orderVerdict({ order, result, noiseIsFailure = true }) {
+export function orderVerdict({ order, result, noiseIsFailure = false, unmeasuredBlocks = false }) {
+  /**
+   * `blocked` is not a new state — `verdictFor` already has it, and its comment
+   * already says what this needs: "a dependency is unavailable — not caused by
+   * this deploy, and rollback cannot fix it". Inventing `unverified` alongside
+   * it would have been two names for one decision, which is how the same rule
+   * ends up with two implementations that disagree.
+   */
+  const absent = unmeasuredBlocks ? "error" : "blocked"
   const admitted = skillResultAdmission({ order, result })
   if (!admitted.ok) {
     return {
+      // An inadmissible result is a protocol failure, not a measurement one —
+      // it blocks either way, because a result that cannot be tied to this
+      // deploy is indistinguishable from one fabricated for it.
       cells: [{ feature: "probe", layer: "probe", priority: "P0", status: "error", reason: admitted.reason }],
       covered: 0,
       ordered: order.items.length,
@@ -149,7 +233,7 @@ export function orderVerdict({ order, result, noiseIsFailure = true }) {
     const got = byId.get(item.id)
     if (!got) {
       cells.push({
-        feature: item.id, layer: "probe", priority: item.priority, status: "error",
+        feature: item.id, layer: "probe", priority: item.priority, status: absent,
         reason: `ordered and not reported. A result that omits an item says nothing about it, and a short green list must never read as full coverage.`,
       })
       continue
@@ -157,7 +241,7 @@ export function orderVerdict({ order, result, noiseIsFailure = true }) {
     const v = String(got.verdict ?? "").toUpperCase()
     if (!SKILL_VERDICTS.includes(v)) {
       cells.push({
-        feature: item.id, layer: "probe", priority: item.priority, status: "error",
+        feature: item.id, layer: "probe", priority: item.priority, status: absent,
         reason: `unrecognised verdict "${got.verdict}". An unknown verdict is not a pass — see what a misspelled severity used to cost.`,
       })
       continue
@@ -166,7 +250,7 @@ export function orderVerdict({ order, result, noiseIsFailure = true }) {
       v === "PASS" ? "pass"
       : v === "PASS_WITH_NOISE" ? (noiseIsFailure ? "fail" : "pass")
       : v === "FAIL" ? "fail"
-      : "error"   // BLOCKED and NOT_EXERCISED are both "we do not know"
+      : absent    // BLOCKED and NOT_EXERCISED are "we do not know", not "it is broken"
     cells.push({
       feature: item.id, layer: "probe", priority: item.priority, status,
       reason: got.why ?? v,
@@ -187,9 +271,15 @@ export function orderVerdict({ order, result, noiseIsFailure = true }) {
     })
   }
 
+  const ordered = order.items.length
+  const unverified = cells.filter((c) => c.status === "blocked" && !c.volunteered).length
   return {
     cells,
-    ordered: order.items.length,
+    ordered,
     covered: order.items.filter((i) => byId.has(i.id)).length,
+    unverified,
+    // The number a report has to print. "shipped, 3 of 4 P0 pages unverified"
+    // is a sentence somebody acts on; silence is how this step becomes decoration.
+    verified: ordered - unverified - cells.filter((c) => c.status === "fail" && !c.volunteered).length,
   }
 }

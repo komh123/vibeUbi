@@ -77,10 +77,29 @@ test("a clean report ships, and the probe cells reach the report", async () => {
   assert.ok(cells.some((c) => c.layer === "probe" && c.status === "pass"))
 })
 
-test("a skill that reports NOTHING rolls back — silence is not a pass", async () => {
+test("a skill that reports NOTHING does not roll back — but the outcome SAYS so", async () => {
+  // Changed deliberately after a peer's first real run rolled back a good
+  // deploy because their test account's password had been rotated by the
+  // pipeline's own sweep. Absence of evidence after a swap is not evidence
+  // against the build; it is a gap, and the protection against this becoming
+  // decoration is that the number is printed.
   const state = { live: "old-0", rolledBack: false }
   const { done } = await run({
     fulfil: async (order) => ({ skill: order.skill, artifactId: order.artifactId, observed: [] }),
+  }, state)
+  assert.equal(state.rolledBack, false, "a measurement failure must not swap out a build that passed everything measurable")
+  assert.equal(done.outcome, "shipped")
+  assert.match(done.reason, /1 P0 page\(s\) could not be verified/,
+    "shipping silently on an unverified P0 page is how this step becomes decoration")
+})
+
+test("a real FAIL still rolls back — the difference is positive evidence", async () => {
+  const state = { live: "old-0", rolledBack: false }
+  const { done } = await run({
+    fulfil: async (order) => ({
+      skill: order.skill, artifactId: order.artifactId,
+      observed: [{ id: "page:/login", verdict: "FAIL", why: "form never mounted" }],
+    }),
   }, state)
   assert.equal(state.rolledBack, true)
   assert.match(done.outcome, /rolled back/)

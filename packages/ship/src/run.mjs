@@ -474,6 +474,7 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
    * a red channel — that is judgement, and this product's rule is that an agent
    * may widen what gets checked and may not move the pass mark.
    */
+  let probeUnverified = 0
   const probeCfg = config.probe ?? {}
   if (probeCfg.skill !== false) {
     step(6, "probe", "run")
@@ -498,8 +499,14 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
 
       const judged = orderVerdict({ order, result, noiseIsFailure: probeCfg.noiseIsFailure ?? true })
       for (const c of judged.cells) emit({ kind: "cell", cell: c })
-      say(judged.covered === judged.ordered ? "ok" : "warn",
-        `${judged.covered}/${judged.ordered} ordered item(s) reported on`)
+      // The number that stops this step being decoration: an operator who reads
+      // "shipped" has to also read how much of it was actually verified.
+      say(judged.unverified === 0 ? "ok" : "warn",
+        `${judged.verified}/${judged.ordered} item(s) verified` +
+        (judged.unverified ? `, ${judged.unverified} unverified (could not be measured — the deploy stands)` : ""))
+      for (const c of judged.cells.filter((x) => x.status === "blocked")) {
+        say("warn", `  ${c.feature} — ${c.skillVerdict ?? "not reported"}: ${c.reason}`)
+      }
 
       const probeVerdict = verdictFor(gateCells({ cells: judged.cells, degraded: [] }))
       if (!probeVerdict.ship) {
@@ -517,8 +524,9 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
         return finish(r.ok ? "rolled back" : "rollback unproven", probeVerdict.reason)
       }
       say("ok", probeVerdict.reason)
-      step(6, "probe", "pass")
+      step(6, "probe", judged.unverified ? "pass" : "pass", { unverified: judged.unverified, verified: judged.verified })
       all.push(...judged.cells)
+      if (judged.unverified) probeUnverified = judged.unverified
     }
   } else {
     step(6, "probe", "unreached")
@@ -530,7 +538,9 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
   await writeReport(outDir, { artifactId, previousId, cells: all, verdict, outcome: "shipped" })
   step(7, "report", "pass")
   say("head", `8/8  report ${outDir}`)
-  return finish("shipped", verdict.reason)
+  return finish("shipped", probeUnverified
+    ? `${verdict.reason} · ${probeUnverified} P0 page(s) could not be verified`
+    : verdict.reason)
 }
 
 /** A rollback is not done when the files move. It is done when the old
