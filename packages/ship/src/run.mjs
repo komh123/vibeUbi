@@ -497,7 +497,21 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
         ? probeCfg.fulfil(order)
         : readFile(join(outDir, "probe-result.json"), "utf8").then(JSON.parse).catch(() => null))
 
-      const judged = orderVerdict({ order, result, noiseIsFailure: probeCfg.noiseIsFailure ?? true })
+      /**
+       * Look at the base ourselves before judging what the skill said about it.
+       *
+       * One request, trusting nobody. `prove` saw this artifact serving minutes
+       * ago, so a base that is down NOW is the deploy, not the fixture — and
+       * without this check the most dangerous case (a deploy that takes the
+       * site down, so the skill honestly reports it could not load anything)
+       * and the benign one (an expired test password) produce the same word.
+       */
+      const liveness = await fetch(config.base, { redirect: "manual" })
+        .then((r) => ({ ok: r.status < 500, status: r.status }))
+        .catch((e) => ({ ok: false, unreachable: e.cause?.code ?? e.message }))
+      if (!liveness.ok) say("bad", `base is not serving at probe time: ${liveness.unreachable ?? `HTTP ${liveness.status}`}`)
+
+      const judged = orderVerdict({ order, result, liveness, noiseIsFailure: probeCfg.noiseIsFailure ?? false })
       for (const c of judged.cells) emit({ kind: "cell", cell: c })
       // The number that stops this step being decoration: an operator who reads
       // "shipped" has to also read how much of it was actually verified.

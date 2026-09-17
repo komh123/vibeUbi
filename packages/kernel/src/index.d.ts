@@ -434,6 +434,11 @@ export function orderVerdict(o: {
   /** default false. After a swap, absence of evidence must not undo a good
    *  deploy; before one, refusing is free, so a pre-swap caller sets this. */
   unmeasuredBlocks?: boolean
+  /** vibeUbi's OWN look at `base`, taken just before judging — not the skill's
+   *  claim about it. Without it, "the deploy took the site down" and "the test
+   *  account's password expired" produce the same word and need opposite
+   *  handling. `null` is reported as "no look taken", never assumed alive. */
+  liveness?: { ok: boolean; status?: number; unreachable?: string } | null
 }): {
   cells: { feature: string; layer: string; priority: string; status: string; reason: string; skillVerdict?: string; volunteered?: boolean }[]
   ordered: number

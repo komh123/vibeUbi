@@ -117,6 +117,31 @@ Everything merely missing is `blocked`: not a pass, not a rollback, **counted**.
 it: *"a dependency is unavailable — not caused by this deploy, and rollback
 cannot fix it."*
 
+### …but the step takes its own look first
+
+Making absence non-blocking fixed a false red and opened a worse hole, and a
+peer named it before it bit anyone:
+
+> A deploy that takes the site down makes the skill honestly report *"I could
+> not load the page"* — the **same word** as an expired test password, and the
+> two need opposite handling.
+
+The discriminator is not in the reason text. A rule that reads a
+caller-supplied reason is one an agent satisfies by writing better prose, and an
+enum is only structured prose unless something can **contradict** it. So
+vibeUbi takes its own look at `base` before judging — one HTTP request,
+trusting nobody, the same move as `deployProof`:
+
+| what vibeUbi sees | what the skill said | judged |
+| --- | --- | --- |
+| base 2xx | "could not see it" | the deploy is alive, the test side is not → **blocked**, ships |
+| base 5xx / unreachable | "could not see it" | it is the deploy → **FAIL**, rolls back |
+| base 5xx / unreachable | nothing reported | consistent → **FAIL** |
+| no look taken | anything | **named**, never assumed alive |
+
+`prove` saw this artifact serving minutes earlier, so a base that is down at
+probe time is a regression, not a fixture.
+
 The protection against this becoming decoration is that the number is printed,
 in the outcome and not only on screen:
 

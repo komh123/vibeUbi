@@ -206,7 +206,31 @@ export function skillResultAdmission({ order, result }) {
  *   it does, `noiseIsFailure: true` turns a skill's ambiguity into a deploy
  *   decision.
  */
-export function orderVerdict({ order, result, noiseIsFailure = false, unmeasuredBlocks = false }) {
+/**
+ * @param {{ok:boolean, status?:number, unreachable?:string}|null} [o.liveness]
+ *   vibeUbi's OWN look at `base`, taken just before judging. Not the skill's
+ *   claim about it — this module's, one HTTP request, trusting nobody.
+ *
+ *   It exists because the fix for a false red opened a worse hole. Making
+ *   BLOCKED non-blocking is right when the test side broke; it is exactly wrong
+ *   when the DEPLOY broke, because a deploy that takes the site down makes the
+ *   skill honestly report "I could not load the page" — and that would then
+ *   ship. The most dangerous case and the benign one produce the same word.
+ *
+ *   The discriminator is not in the reason text. A rule that reads a
+ *   caller-supplied reason is a rule an agent satisfies by writing better prose,
+ *   and an enum is only structured prose unless something can CONTRADICT it. So:
+ *
+ *     base 2xx, skill says it could not see    → the deploy is alive, the test
+ *                                                side is not → blocked, no rollback
+ *     base 5xx or unreachable                  → not blocked. FAIL, and the kind
+ *                                                that most needs a rollback
+ *     no liveness taken                        → say so; do not assume alive
+ *
+ *   Same move as `deployProof`, which does not ask the deploy script whether it
+ *   worked. Go and look.
+ */
+export function orderVerdict({ order, result, noiseIsFailure = false, unmeasuredBlocks = false, liveness = null }) {
   /**
    * `blocked` is not a new state — `verdictFor` already has it, and its comment
    * already says what this needs: "a dependency is unavailable — not caused by
@@ -214,7 +238,15 @@ export function orderVerdict({ order, result, noiseIsFailure = false, unmeasured
    * it would have been two names for one decision, which is how the same rule
    * ends up with two implementations that disagree.
    */
-  const absent = unmeasuredBlocks ? "error" : "blocked"
+  /**
+   * The site being down turns every absence into positive evidence.
+   *
+   * If the base is not serving, "the skill could not see the page" is no longer
+   * ambiguous — it is the deploy, observed independently. Those items become
+   * `fail`, which rolls back.
+   */
+  const siteDown = liveness != null && liveness.ok === false
+  const absent = unmeasuredBlocks ? "error" : siteDown ? "fail" : "blocked"
   const admitted = skillResultAdmission({ order, result })
   if (!admitted.ok) {
     return {
@@ -229,6 +261,22 @@ export function orderVerdict({ order, result, noiseIsFailure = false, unmeasured
 
   const byId = new Map(result.observed.map((o) => [o.id, o]))
   const cells = []
+
+  if (liveness == null) {
+    // Not "assume it is up". A judgement made without looking is the thing this
+    // parameter exists to replace, so it is named rather than silently defaulted.
+    cells.push({
+      feature: "probe:liveness", layer: "probe", priority: "P0", status: "blocked",
+      reason: "no independent look at the base was taken before judging, so a failure of the test side cannot be told from a failure of the deploy",
+    })
+  } else if (!liveness.ok) {
+    cells.push({
+      feature: "probe:liveness", layer: "probe", priority: "P0", status: "fail",
+      reason:
+        `the base is not serving (${liveness.unreachable ?? `HTTP ${liveness.status}`}) at probe time, and \`prove\` saw it serving this artifact minutes ago. ` +
+        `Every item the skill could not reach is this, not a broken fixture.`,
+    })
+  }
   for (const item of order.items) {
     const got = byId.get(item.id)
     if (!got) {
@@ -272,7 +320,7 @@ export function orderVerdict({ order, result, noiseIsFailure = false, unmeasured
   }
 
   const ordered = order.items.length
-  const unverified = cells.filter((c) => c.status === "blocked" && !c.volunteered).length
+  const unverified = cells.filter((c) => c.status === "blocked" && !c.volunteered && c.feature !== "probe:liveness").length
   return {
     cells,
     ordered,
@@ -280,6 +328,6 @@ export function orderVerdict({ order, result, noiseIsFailure = false, unmeasured
     unverified,
     // The number a report has to print. "shipped, 3 of 4 P0 pages unverified"
     // is a sentence somebody acts on; silence is how this step becomes decoration.
-    verified: ordered - unverified - cells.filter((c) => c.status === "fail" && !c.volunteered).length,
+    verified: ordered - unverified - cells.filter((c) => c.status === "fail" && !c.volunteered && c.feature !== "probe:liveness").length,
   }
 }

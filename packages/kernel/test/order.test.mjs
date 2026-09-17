@@ -67,15 +67,22 @@ test("no result at all is refused, and says the two things that could mean", () 
 
 /* ── judging ──────────────────────────────────────────────────────────── */
 const res = (observed) => ({ skill: "dom-test", artifactId: "abc-1", observed })
+/** Find the cell for an item by IDENTITY. The tests used `cells[0]`, which
+ *  broke the day a liveness cell joined the list — a positional assertion fails
+ *  for reasons that have nothing to do with the property it is pinning. */
+const cellFor = (j, id = "page:/login-page") => j.cells.find((c) => c.feature === id)
+const UP = { ok: true, status: 200 }
+const DOWN = { ok: false, status: 503 }
+const GONE = { ok: false, unreachable: "ECONNREFUSED" }
 
 test("ORDERED AND NOT REPORTED IS NOT A PASS — and after a swap it is not a rollback either", () => {
   const j = orderVerdict({ order: ORDER, result: res([]) })
   assert.equal(j.covered, 0)
   assert.equal(j.ordered, 1)
   assert.equal(j.unverified, 1)
-  assert.equal(j.cells[0].status, "blocked")
-  assert.notEqual(j.cells[0].status, "pass")
-  assert.match(j.cells[0].reason, /short green list must never read as full coverage/)
+  assert.equal(cellFor(j).status, "blocked")
+  assert.notEqual(cellFor(j).status, "pass")
+  assert.match(cellFor(j).reason, /short green list must never read as full coverage/)
 })
 
 test("BLOCKED and NOT_EXERCISED do not roll back a good deploy — but are not a pass either", () => {
@@ -85,8 +92,8 @@ test("BLOCKED and NOT_EXERCISED do not roll back a good deploy — but are not a
   // "I could not see it" costs a different amount before and after the swap.
   for (const v of ["BLOCKED", "NOT_EXERCISED"]) {
     const j = orderVerdict({ order: ORDER, result: res([{ id: "page:/login-page", verdict: v }]) })
-    assert.equal(j.cells[0].status, "blocked", `${v} must not roll back`)
-    assert.notEqual(j.cells[0].status, "pass", `${v} must not read as a pass`)
+    assert.equal(cellFor(j).status, "blocked", `${v} must not roll back`)
+    assert.notEqual(cellFor(j).status, "pass", `${v} must not read as a pass`)
     assert.equal(j.unverified, 1)
     assert.equal(j.verified, 0)
     assert.equal(verdictFor(j.cells).ship, true, "absence of evidence must not undo a deploy that passed everything measurable")
@@ -95,13 +102,13 @@ test("BLOCKED and NOT_EXERCISED do not roll back a good deploy — but are not a
 
 test("before a swap, refusing is free again — `unmeasuredBlocks` restores it", () => {
   const j = orderVerdict({ order: ORDER, result: res([{ id: "page:/login-page", verdict: "BLOCKED" }]), unmeasuredBlocks: true })
-  assert.equal(j.cells[0].status, "error")
+  assert.equal(cellFor(j).status, "error")
   assert.equal(verdictFor(j.cells).ship, false)
 })
 
 test("a FAIL still rolls back — positive evidence is the thing that does", () => {
   const j = orderVerdict({ order: ORDER, result: res([{ id: "page:/login-page", verdict: "FAIL", why: "never mounted" }]) })
-  assert.equal(j.cells[0].status, "fail")
+  assert.equal(cellFor(j).status, "fail")
   assert.equal(verdictFor(j.cells).ship, false)
 })
 
@@ -114,23 +121,23 @@ test("PASS_WITH_NOISE does not roll back by default — measured, not guessed", 
   // red from transport noise; until then this knob turns a skill's ambiguity
   // into a deploy decision, so it defaults off.
   const loose = orderVerdict({ order: ORDER, result: res([{ id: "page:/login-page", verdict: "PASS_WITH_NOISE" }]) })
-  assert.equal(loose.cells[0].status, "pass")
-  assert.equal(loose.cells[0].skillVerdict, "PASS_WITH_NOISE", "still recorded as its own state, not flattened")
+  assert.equal(cellFor(loose).status, "pass")
+  assert.equal(cellFor(loose).skillVerdict, "PASS_WITH_NOISE", "still recorded as its own state, not flattened")
   const strict = orderVerdict({ order: ORDER, result: res([{ id: "page:/login-page", verdict: "PASS_WITH_NOISE" }]), noiseIsFailure: true })
-  assert.equal(strict.cells[0].status, "fail")
+  assert.equal(cellFor(strict).status, "fail")
 })
 
 test("an unrecognised verdict is not a pass", () => {
   const j = orderVerdict({ order: ORDER, result: res([{ id: "page:/login-page", verdict: "probably fine" }]) })
-  assert.notEqual(j.cells[0].status, "pass")
-  assert.match(j.cells[0].reason, /unrecognised verdict/)
+  assert.notEqual(cellFor(j).status, "pass")
+  assert.match(cellFor(j).reason, /unrecognised verdict/)
 })
 
 test("a clean report passes and carries its evidence", () => {
   const j = orderVerdict({ order: ORDER, result: res([{ id: "page:/login-page", verdict: "PASS", evidence: { errors: 0, shifts: 0 }, why: "mounted, no channel red" }]) })
-  assert.equal(j.cells[0].status, "pass")
+  assert.equal(cellFor(j).status, "pass")
   assert.equal(j.covered, 1)
-  assert.deepEqual(j.cells[0].evidence, { errors: 0, shifts: 0 })
+  assert.deepEqual(cellFor(j).evidence, { errors: 0, shifts: 0 })
 })
 
 test("what the skill checked WITHOUT being asked is kept — widening is the half it may do", () => {
@@ -145,10 +152,14 @@ test("what the skill checked WITHOUT being asked is kept — widening is the hal
 })
 
 test("an inadmissible result produces ONE P0 error, not a wall of them", () => {
-  const j = orderVerdict({ order: ORDER, result: { skill: "dom-test", artifactId: "stale", observed: [] } })
-  assert.equal(j.cells.length, 1)
-  assert.equal(j.cells[0].priority, "P0")
-  assert.equal(j.cells[0].status, "error")
+  // A protocol failure blocks either way: a result that cannot be tied to this
+  // deploy is indistinguishable from one fabricated for it, so unlike a
+  // measurement failure it does NOT get the after-swap leniency.
+  const j = orderVerdict({ order: ORDER, liveness: UP, result: { skill: "dom-test", artifactId: "stale", observed: [] } })
+  assert.equal(j.cells.length, 1, "one cell, not one per ordered item")
+  assert.equal(cellFor(j, "probe").priority, "P0")
+  assert.equal(cellFor(j, "probe").status, "error")
+  assert.equal(verdictFor(j.cells).ship, false)
 })
 
 test("the verdict vocabulary is the skill's own, so nothing needs translating", () => {
@@ -172,4 +183,61 @@ test("a DECLARED page discovery missed is in the order, named — not silently a
   assert.equal(blind.items.length, 1, "the declared P0 must still be ordered")
   assert.equal(blind.items[0].discovered, false, "and the skill must be told which it is looking at")
   assert.equal(ORDER.items[0].discovered, true)
+})
+
+/* ── the hole that yesterday's fix opened ─────────────────────────────── */
+
+test("THE DANGEROUS CASE: the deploy took the site down, so the skill honestly said BLOCKED", () => {
+  // Making BLOCKED non-blocking fixed a false red and opened a worse hole: a
+  // deploy that breaks the site makes the skill report "I could not load the
+  // page", which is the same word as an expired test password — and the two
+  // need opposite handling. The discriminator is not in the reason text; it is
+  // vibeUbi taking its own look.
+  for (const live of [DOWN, GONE]) {
+    const j = orderVerdict({ order: ORDER, liveness: live, result: res([{ id: "page:/login-page", verdict: "BLOCKED", why: "page never loaded" }]) })
+    assert.equal(verdictFor(j.cells).ship, false, "the case that most needs a rollback must roll back")
+    assert.ok(j.cells.some((c) => c.feature === "probe:liveness" && c.status === "fail"))
+    assert.equal(j.cells.find((c) => c.feature === "page:/login-page").status, "fail")
+  }
+})
+
+test("THE BENIGN CASE still ships: base is serving, the test side broke", () => {
+  // The peer's actual first run: 200 from the site, their test account's
+  // password rotated mid-run by the pipeline's own sweep.
+  const j = orderVerdict({ order: ORDER, liveness: UP, result: res([{ id: "page:/login-page", verdict: "BLOCKED", why: "login timed out, credentials rotated" }]) })
+  assert.equal(verdictFor(j.cells).ship, true)
+  assert.equal(j.cells.find((c) => c.feature === "page:/login-page").status, "blocked")
+  assert.equal(j.unverified, 1)
+})
+
+test("the same words, opposite outcomes — which is the whole point", () => {
+  const same = [{ id: "page:/login-page", verdict: "BLOCKED", why: "could not see the page" }]
+  const alive = orderVerdict({ order: ORDER, liveness: UP, result: res(same) })
+  const dead = orderVerdict({ order: ORDER, liveness: DOWN, result: res(same) })
+  assert.equal(verdictFor(alive.cells).ship, true)
+  assert.equal(verdictFor(dead.cells).ship, false)
+})
+
+test("no look taken is NAMED, never assumed alive", () => {
+  const j = orderVerdict({ order: ORDER, result: res([{ id: "page:/login-page", verdict: "PASS" }]) })
+  const cell = j.cells.find((c) => c.feature === "probe:liveness")
+  assert.ok(cell, "a judgement made without looking must say so")
+  assert.equal(cell.status, "blocked")
+  assert.match(cell.reason, /cannot be told from a failure of the deploy/)
+})
+
+test("the liveness cell is not counted as one of the ordered items", () => {
+  const j = orderVerdict({ order: ORDER, liveness: UP, result: res([{ id: "page:/login-page", verdict: "PASS" }]) })
+  assert.equal(j.ordered, 1)
+  assert.equal(j.verified, 1)
+  assert.equal(j.unverified, 0)
+})
+
+test("a site that is down does not turn a PASS into a fail — only absences", () => {
+  // The skill saw the page and it was fine; a 503 on `/` afterwards is a real
+  // problem and the liveness cell says so, but it must not rewrite an
+  // observation that actually happened.
+  const j = orderVerdict({ order: ORDER, liveness: DOWN, result: res([{ id: "page:/login-page", verdict: "PASS" }]) })
+  assert.equal(j.cells.find((c) => c.feature === "page:/login-page").status, "pass")
+  assert.equal(verdictFor(j.cells).ship, false, "but the base being down still blocks")
 })

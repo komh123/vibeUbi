@@ -3,12 +3,28 @@
  * "a P0 red here rolls back". These tests drive a whole ship and check the
  * outcome and whether rollback was actually called.
  */
-import { test } from "node:test"
+import { test, before, after } from "node:test"
 import assert from "node:assert/strict"
 import { mkdtemp, writeFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import http from "node:http"
 import { ship, SHIP_STEPS } from "../src/run.mjs"
+
+/**
+ * A real server, because the step now takes its OWN look at `base` before
+ * judging — and with an unreachable base every one of these tests would be
+ * measuring "the site is down" instead of what it claims to measure. The
+ * previous version used 127.0.0.1:1 and went red the moment that look was
+ * added, which is the check working.
+ */
+let server, BASE
+before(async () => {
+  server = http.createServer((_q, s) => { s.writeHead(200); s.end("ok") })
+  await new Promise((r) => server.listen(0, "127.0.0.1", r))
+  BASE = `http://127.0.0.1:${server.address().port}`
+})
+after(() => server?.close())
 
 const DISCOVERED = [{ id: "page:/login", kind: "page" }]
 const DECLARED = [{ id: "page:/login", priority: "P0", testId: "app-page-login" }]
@@ -33,7 +49,7 @@ const run = async (probe, state) => {
     await ship({
       root, discovered: DISCOVERED,
       config: {
-        base: "http://127.0.0.1:1", declared: DECLARED, verify: [], layers: [],
+        base: BASE, declared: DECLARED, verify: [], layers: [],
         memory: { cgroupLimitMb: 16_384, availableMb: 16_384 },
         sweep: async function* () {}, probe,
       },
@@ -117,7 +133,7 @@ test("and the operator is told WHICH item, not just a count", async () => {
     await ship({
       root, discovered: DISCOVERED,
       config: {
-        base: "http://127.0.0.1:1", declared: DECLARED, verify: [], layers: [],
+        base: BASE, declared: DECLARED, verify: [], layers: [],
         memory: { cgroupLimitMb: 16_384, availableMb: 16_384 }, sweep: async function* () {},
         probe: { fulfil: async (o) => ({ skill: o.skill, artifactId: o.artifactId, observed: [] }) },
       },
@@ -167,7 +183,7 @@ test("nothing to probe is honest, not green", async () => {
     await ship({
       root, discovered: [{ id: "api:/x", kind: "api" }],   // no pages at all
       config: {
-        base: "http://127.0.0.1:1", declared: [], verify: [], layers: [],
+        base: BASE, declared: [], verify: [], layers: [],
         memory: { cgroupLimitMb: 16_384, availableMb: 16_384 },
         sweep: async function* () {}, probe: {},
       },
@@ -176,4 +192,31 @@ test("nothing to probe is honest, not green", async () => {
     })
     assert.equal(done.outcome, "shipped")
   } finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test("end to end: the site goes down after prove, the skill says BLOCKED, and it ROLLS BACK", async () => {
+  // The hole that the after-swap leniency opened, closed by the step taking its
+  // own look. Nothing about the skill's words changes — only whether the base
+  // is serving when the judgement is made.
+  const root = await mkdtemp(join(tmpdir(), "vibeubi-down-"))
+  const dead = http.createServer((_q, s) => { s.writeHead(503); s.end("down") })
+  await new Promise((r) => dead.listen(0, "127.0.0.1", r))
+  const deadBase = `http://127.0.0.1:${dead.address().port}`
+  try {
+    const state = { live: "old-0", rolledBack: false }
+    let done = null
+    await ship({
+      root, discovered: DISCOVERED,
+      config: {
+        base: deadBase, declared: DECLARED, verify: [], layers: [],
+        memory: { cgroupLimitMb: 16_384, availableMb: 16_384 }, sweep: async function* () {},
+        probe: { fulfil: async (o) => ({ skill: o.skill, artifactId: o.artifactId,
+          observed: [{ id: "page:/login", verdict: "BLOCKED", why: "the page never loaded" }] }) },
+      },
+      target: fakeTarget(state),
+      emit: (e) => { if (e.kind === "done") done = e },
+    })
+    assert.equal(state.rolledBack, true, "a deploy that takes the site down must not ship on an honest BLOCKED")
+    assert.match(done.outcome, /rolled back/)
+  } finally { dead.close(); await rm(root, { recursive: true, force: true }) }
 })
