@@ -313,6 +313,21 @@ export interface RegressionGuard {
 
 /** Refuses a gap with no probe: a gap nobody can check is a comment, and a
  *  comment in a gate reads as coverage. */
+/**
+ * Only a state carrying a fact ABOUT THE SYSTEM counts as an observation.
+ * `not-here` and `unmeasured` carry facts about the RUN. Exported because the
+ * obvious caller-side derivation — `state !== "not-here"` — is wrong, and got
+ * written by the first person to need it.
+ */
+export function isObservation(state: string): boolean
+
+/** "We have a guard" and "the guard ran this month" are different claims. */
+export function observationAge(o: {
+  lastObservedAt?: number | null
+  now?: number
+  maxAgeDays?: number
+}): { days: number | null; stale: boolean; reason: string }
+
 export function manualGapAdmission(gap: Partial<ManualGap>): { ok: true } | { ok: false; reason: string }
 
 /** `null` / `{unreachable}` are NOT `{open:false}` — collapsing them is how
@@ -328,6 +343,9 @@ export function manualGapVerdict(o: {
   runbook: string | null
   vantage: string | null
   state: "open" | "closed" | "unmeasured" | "not-here"
+  /** True only when this verdict came from actually seeing the system. Stamp
+   *  a "last observed" timestamp from THIS, never from `state !== "not-here"`. */
+  observed: boolean
   blocks: boolean
   /** Present on "closed": move it to a regression guard rather than deleting. */
   promoteTo?: "regression"
@@ -351,6 +369,7 @@ export function regressionVerdict(o: {
   days: number | null
   vantage: string | null
   state: "holding" | "regressed" | "unmeasured" | "not-here"
+  observed: boolean
   blocks: boolean
   reason: string
 }

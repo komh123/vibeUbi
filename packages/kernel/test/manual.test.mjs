@@ -130,3 +130,58 @@ test("the report separates the three, and names the oldest open one", () => {
   assert.equal(r.blocks, true, "one unmeasured probe is enough to block")
   assert.equal(r.oldestDays, 300)
 })
+
+/* ── the seam: who decides what counts as an observation ──────────────── */
+import { isObservation, observationAge } from "../src/index.mjs"
+
+test("`observed` is NOT `state !== \"not-here\"` — that one line was the whole bug", () => {
+  // A peer added a "last actually observed" timestamp — the right idea, and the
+  // one I had asked them for — with the condition `if (state !== "not-here")`.
+  // So `unmeasured` stamped too, and their report printed "could not measure"
+  // and "last actually seen: today" on adjacent lines. "We tried and could not
+  // see it" collapsed back into "we saw it", which is the single distinction
+  // this module exists for.
+  const g = { ...GAP }
+  const cases = {
+    "not-here":   manualGapVerdict({ gap: g, observed: null, at: "ship" }),
+    unmeasured:   manualGapVerdict({ gap: g, observed: null, at: "e2e-modes" }),
+    open:         manualGapVerdict({ gap: g, observed: { open: true } }),
+    closed:       manualGapVerdict({ gap: g, observed: { open: false } }),
+  }
+  assert.equal(cases["not-here"].observed, false)
+  assert.equal(cases.unmeasured.observed, false, "the naive derivation returns true here")
+  assert.equal(cases.open.observed, true)
+  assert.equal(cases.closed.observed, true)
+
+  // and the naive predicate really does disagree, so this test is not vacuous
+  const naive = (v) => v.state !== "not-here"
+  assert.notEqual(naive(cases.unmeasured), cases.unmeasured.observed)
+})
+
+test("the regression guard carries it too, with the same rule", () => {
+  const G = { id: "g", owner: "o", closedAt: Date.now(), vantage: "e2e-modes" }
+  assert.equal(regressionVerdict({ guard: G, observed: { open: false } }).observed, true)
+  assert.equal(regressionVerdict({ guard: G, observed: { open: true } }).observed, true)
+  assert.equal(regressionVerdict({ guard: G, observed: null }).observed, false)
+  assert.equal(regressionVerdict({ guard: G, observed: null, at: "ship" }).observed, false)
+})
+
+test("isObservation is the same rule, exported for anyone deriving their own", () => {
+  for (const s of ["open", "closed", "holding", "regressed"]) assert.equal(isObservation(s), true)
+  for (const s of ["not-here", "unmeasured", "", undefined]) assert.equal(isObservation(s), false)
+})
+
+test("legitimate silence is still silence — an aged-out guard says so", () => {
+  const now = Date.parse("2026-09-17")
+  assert.equal(observationAge({ lastObservedAt: now - 3 * DAY, now }).stale, false)
+  const old = observationAge({ lastObservedAt: now - 90 * DAY, now })
+  assert.equal(old.stale, true)
+  assert.match(old.reason, /Every run since then was legitimately silent/)
+})
+
+test("never observed is stale, not zero days", () => {
+  const never = observationAge({ lastObservedAt: null })
+  assert.equal(never.days, null, "0 would read as `seen today`")
+  assert.equal(never.stale, true)
+  assert.match(never.reason, /guard in name only/)
+})

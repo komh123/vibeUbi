@@ -52,6 +52,57 @@
  * "not checked here" instead of a failure it has no standing to claim.
  */
 
+/**
+ * Did this verdict come from actually seeing the system?
+ *
+ * THE SEAM THIS CLOSES, found by the peer who uses this — in their own code,
+ * one line, and it was the exact mistake the whole file exists to prevent.
+ *
+ * They added the thing I had warned them to add: a timestamp of the last REAL
+ * observation, because `vantage` makes silence legitimate and legitimate
+ * silence is still silence. Their condition was:
+ *
+ *     if (state !== "not-here") stamp()
+ *
+ * So `unmeasured` stamped too, and the report printed "could not measure" and
+ * "last actually seen: today" side by side. "We tried and could not see it"
+ * collapsed back into "we saw it" — which is the one distinction this module is
+ * for.
+ *
+ * The kernel's states were right. The DERIVED fact was left to the caller, and
+ * the obvious derivation is wrong. So it stops being the caller's: only a state
+ * that carries a fact ABOUT THE SYSTEM counts as an observation. `not-here` and
+ * `unmeasured` carry facts about the RUN.
+ */
+export function isObservation(state) {
+  return state === "open" || state === "closed" || state === "holding" || state === "regressed"
+}
+
+/**
+ * How long since anything actually looked — and is that too long?
+ *
+ * "We have a guard" and "the guard ran this month" are different claims, and a
+ * vantage-scoped probe makes the second one easy to stop being true without
+ * anyone noticing: every run that is not at the vantage reports `not-here`,
+ * legitimately, forever.
+ */
+export function observationAge({ lastObservedAt, now = Date.now(), maxAgeDays = 30 }) {
+  if (!Number.isFinite(lastObservedAt)) {
+    return {
+      days: null, stale: true,
+      reason: "nothing has ever actually observed this. A guard that has never run is a guard in name only.",
+    }
+  }
+  const days = Math.floor((now - lastObservedAt) / 86_400_000)
+  return {
+    days,
+    stale: days > maxAgeDays,
+    reason: days > maxAgeDays
+      ? `last actually observed ${days} day(s) ago, past the ${maxAgeDays}-day limit. Every run since then was legitimately silent, which is not the same as fine.`
+      : `last actually observed ${days} day(s) ago.`,
+  }
+}
+
 /** A manual gap must say who owns it and when it was accepted — a gap with no
  *  owner is everybody's, which means nobody's, and `debtAge` needs the date. */
 export function manualGapAdmission(gap) {
@@ -96,26 +147,26 @@ export function manualGapVerdict({ gap, observed, at = null, now = Date.now() })
   // Silence from the wrong place is not evidence, and it is not a failure either.
   if (gap?.vantage && at && at !== gap.vantage) {
     return {
-      ...base, state: "not-here", blocks: false,
+      ...base, state: "not-here", observed: false, blocks: false,
       reason: `"${gap?.id}" can only be observed from ${gap.vantage}; this run is ${at}, so nothing is claimed either way.`,
     }
   }
 
   if (observed === null || observed === undefined) {
     return {
-      ...base, state: "unmeasured", blocks: true,
+      ...base, state: "unmeasured", observed: false, blocks: true,
       reason: `the probe for "${gap?.id}" did not run, so nothing is known about it. An unrun probe contributes no finding, which reads exactly like a closed gap.`,
     }
   }
   if (observed.unreachable) {
     return {
-      ...base, state: "unmeasured", blocks: true,
+      ...base, state: "unmeasured", observed: false, blocks: true,
       reason: `could not observe "${gap?.id}": ${observed.unreachable}. Not evidence that it is fixed.`,
     }
   }
   if (observed.open) {
     return {
-      ...base, state: "open", blocks: false,
+      ...base, state: "open", observed: true, blocks: false,
       reason:
         `"${gap?.id}" is still open after ${days} day(s), owned by ${gap?.owner}. ` +
         (gap?.runbook ? `The fix is a human one: ${gap.runbook}. ` : "") +
@@ -123,7 +174,7 @@ export function manualGapVerdict({ gap, observed, at = null, now = Date.now() })
     }
   }
   return {
-    ...base, state: "closed", blocks: false,
+    ...base, state: "closed", observed: true, blocks: false,
     promoteTo: "regression",
     reason:
       `"${gap?.id}" is no longer present — it was fixed. Move it out of the open list, but do NOT delete it: ` +
@@ -150,11 +201,11 @@ export function regressionVerdict({ guard, observed, at = null, now = Date.now()
   const base = { id: guard?.id, owner: guard?.owner, days, vantage: guard?.vantage ?? null }
 
   if (guard?.vantage && at && at !== guard.vantage) {
-    return { ...base, state: "not-here", blocks: false, reason: `"${guard?.id}" is only observable from ${guard.vantage}; this run is ${at}.` }
+    return { ...base, state: "not-here", observed: false, blocks: false, reason: `"${guard?.id}" is only observable from ${guard.vantage}; this run is ${at}.` }
   }
   if (observed === null || observed === undefined || observed?.unreachable) {
     return {
-      ...base, state: "unmeasured", blocks: true,
+      ...base, state: "unmeasured", observed: false, blocks: true,
       reason:
         `could not confirm "${guard?.id}" is still closed${observed?.unreachable ? `: ${observed.unreachable}` : ""}. ` +
         `This property was false once, so not knowing is not the same as it being fine.`,
@@ -162,13 +213,13 @@ export function regressionVerdict({ guard, observed, at = null, now = Date.now()
   }
   if (observed.open) {
     return {
-      ...base, state: "regressed", blocks: true,
+      ...base, state: "regressed", observed: true, blocks: true,
       reason:
         `"${guard?.id}" was fixed ${days} day(s) ago and is OPEN again. Something undid it, and the only reason ` +
         `anyone knows is that this probe outlived the gap it was written for.`,
     }
   }
-  return { ...base, state: "holding", blocks: false, reason: `"${guard?.id}" is still closed (${days} day(s)).` }
+  return { ...base, state: "holding", observed: true, blocks: false, reason: `"${guard?.id}" is still closed (${days} day(s)).` }
 }
 
 /** The whole set, so a report can say "3 open, 1 fixed, 1 we could not check". */
