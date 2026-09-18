@@ -153,6 +153,46 @@ anyone, in **two** directions:
 `proofDiscrimination` in the kernel. The second direction is the one that is
 easy to miss, and it is the one a rollback needs.
 
+### 5. "Did that step LOOK at anything?"
+
+`testRanVerdict` asks it of test steps. Ask it of every checker that prints no
+TAP, because they all exit 0 over an empty file set:
+
+| the step | how to ask what it read |
+| --- | --- |
+| a type check | `tsc --listFiles` |
+| a linter | its file list, or `--print-config` per path |
+| a scanner | the count of files it collected |
+
+A peer measured the cost of not asking: their root config excluded a whole
+runtime, so the service on a user's own machine went **four months without a
+type check**, exiting 0 every time. A green test suite says nothing about types.
+The first real check found **six defects**.
+
+`coveredVerdict` in the kernel, and `scripts/typecheck.mjs` applies it here —
+today it finds nothing, because `include` names both TypeScript files. That is
+the point: the day someone adds a `.d.ts` the `include` does not match, tsc
+still exits 0.
+
+And the rule that makes it worth a check rather than care: **read the tool's
+output, never your own conclusion.** The same peer had reported a type check
+passing while two errors stood.
+
+### 6. Two sides that must agree, where neither is authoritative
+
+Three feature names lived in a service and were never registered in the
+protocol. Frames carrying them were dropped in silence; what a person saw was
+120 seconds of nothing and then "your computer is not responding" — a timeout,
+nowhere near the cause.
+
+**Each side was correct alone. Only the pair was wrong**, which is why no test
+on either side could have failed. `crossLayerNames` is `orphanVerdict`'s shape
+for that case, and unlike it neither list is the authority — the report says
+which side each missing name is on, because the two fixes are different.
+
+Two EMPTY lists agree perfectly, so that is reported rather than passed — same
+rule as `sameObserved`.
+
 ### A contract is only understood after it has been violated once
 
 Said by the peer who asked for `itemsAreIndependent`, then broke it while

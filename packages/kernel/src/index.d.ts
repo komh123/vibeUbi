@@ -509,3 +509,30 @@ export function proofDiscrimination(
 /** Bounded history that keeps the FIRST and last sighting of every artifact —
  *  the older sample is the only one direction 2 can use. */
 export function trimProofHistory(samples?: readonly ProofSample[], max?: number): ProofSample[]
+
+/* ── did the step look at anything, and at everything? ────────────────── */
+
+/**
+ * `testRanVerdict` for the checkers that print no TAP. A type checker over an
+ * empty file set exits 0 exactly like one that found no problems — measured on
+ * a real service that went four months unchecked because a root config
+ * excluded it, and whose first real check found six defects.
+ */
+export function coveredVerdict(o: {
+  step: string
+  read?: readonly string[]
+  expected?: readonly string[]
+  how?: string
+}): { ok: true; checked: number } | { ok: false; reason: string; unchecked?: string[] }
+
+/**
+ * Names on one side of a boundary must be registered on the other. Neither
+ * side is authoritative: each is correct alone and only the pair is wrong,
+ * which is why no test on either side can fail.
+ */
+export function crossLayerNames(o: {
+  a?: readonly string[]
+  b?: readonly string[]
+  aName?: string
+  bName?: string
+}): { ok: boolean; known: boolean; onlyA: string[]; onlyB: string[]; reason: string }
