@@ -12,7 +12,7 @@ import { join, resolve } from "node:path"
 import { pathToFileURL } from "node:url"
 import {
   createContext, applyAll, capabilityCells, orphanVerdict, verdictFor,
-  proofContract, deployProof, requiresHuman, rosterVerdict,
+  proofContract, deployProof, requiresHuman, rosterVerdict, findRule, SYMPTOMS,
 } from "../packages/kernel/src/index.mjs"
 import { toIR, toMermaid, toArchify } from "../packages/viz/src/archify.mjs"
 
@@ -91,6 +91,51 @@ async function discoverAll(ctx) {
 /* ───────────────────────────── commands ───────────────────────────── */
 
 const COMMANDS = {
+  /**
+   * `vibeubi find "<what you can see>"` — the discovery map.
+   *
+   * A consumer of this kernel hand-found seven "declared but never read" defects
+   * with `declaredFieldsAreRead` sitting in their node_modules, and shipped a
+   * scanner that reported "cleaned 0" as success — a textbook `vacuousComparison`,
+   * also already installed. Neither was their mistake: a flat index of exports is
+   * not a discovery mechanism. **You cannot import what you cannot find.**
+   *
+   * So this takes no config and needs no project. It is deliberately the one
+   * command that works in an empty directory, because the moment you need it is
+   * before you have wired anything up.
+   */
+  async find() {
+    const q = argv.slice(1).filter((a) => !a.startsWith("-")).join(" ")
+    if (!q) {
+      say(`\n${C.bold}vibeubi find${C.off} ${C.dim}— describe what you can SEE${C.off}\n`)
+      say(`${C.dim}  vibeubi find "my scanner reported 0 and I believed it"${C.off}`)
+      say(`${C.dim}  vibeubi find "the gate is green on a machine where the feature does not exist"${C.off}\n`)
+      say(`${C.bold}${SYMPTOMS.length} rules${C.off}, every one of them reachable from a symptom:\n`)
+      for (const s of SYMPTOMS) say(`  ${C.bold}${s.rule}${C.off}\n    ${C.dim}${s.seen[0]}${C.off}`)
+      say("")
+      return 0
+    }
+
+    const hits = findRule(q)
+    say(`\n${C.bold}vibeubi find${C.off} ${C.dim}${JSON.stringify(q)}${C.off}\n`)
+    if (hits.length === 0) {
+      // An honest nothing. A fuzzy matcher that always returns something sends
+      // you to read a rule that does not apply, which is worse than a miss.
+      bad("no rule in this kernel matches that description.")
+      note(`\`vibeubi find\` with no argument lists all ${SYMPTOMS.length}. If you have found a defect shape`)
+      note("that none of them catch, that is a gap in the kernel, not in your search.")
+      return 1
+    }
+    for (const h of hits.slice(0, 4)) {
+      say(`${C.bold}${h.rule}${C.off}`)
+      for (const line of h.matched.slice(0, 3)) say(`  ${C.dim}“${line}”${C.off}`)
+      say(`  ${h.why}`)
+      say(`  ${C.dim}${h.use}${C.off}\n`)
+    }
+    if (hits.length > 4) note(`${hits.length - 4} weaker match(es) not shown`)
+    return 0
+  },
+
   async plan() {
     const { config, ctx, loaded } = await boot()
     say(`\n${C.bold}vibeubi plan${C.off} ${C.dim}${ROOT}${C.off}\n`)
@@ -541,6 +586,8 @@ ${C.bold}vibeubi${C.off} — the gate that remembers so you do not have to
   ${C.bold}rollback${C.off}  put the previous build back, and prove it
   ${C.bold}init${C.off}      probe the project and write a config  [--dry-run] [--force]
   ${C.bold}guard${C.off}     --action <a>   refuse a narrowing action
+  ${C.bold}find${C.off}      which rule catches THIS?  vibeubi find "<what you can see>"
+            takes no config and needs no project — you need it before you have one
 
 ${C.dim}--root DIR    where the project is
 --config F    use this config instead of <root>/vibeubi.config.mjs

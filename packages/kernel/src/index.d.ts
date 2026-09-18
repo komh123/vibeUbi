@@ -333,12 +333,23 @@ export interface RegressionGuard {
  */
 export function isObservation(state: string): boolean
 
-/** "We have a guard" and "the guard ran this month" are different claims. */
+/** "We have a guard" and "the guard ran this month" are different claims — and
+ *  so are the two ways of never: `never-wired` is a coding task, `never-reached`
+ *  means the probe exists and something upstream is starving it. Pass
+ *  `lastAttemptedAt` to get the distinction; omit it and the answer stays
+ *  honestly undifferentiated rather than guessed. */
 export function observationAge(o: {
   lastObservedAt?: number | null
+  lastAttemptedAt?: number | null
   now?: number
   maxAgeDays?: number
-}): { days: number | null; stale: boolean; reason: string }
+}): {
+  days: number | null
+  stale: boolean
+  state: "fresh" | "stale" | "never-wired" | "never-reached" | "reached-then-starved"
+  fix: "write it" | "look upstream" | "run it" | null
+  reason: string
+}
 
 export function manualGapAdmission(gap: Partial<ManualGap>): { ok: true } | { ok: false; reason: string }
 
@@ -551,3 +562,41 @@ export function runtimeFloorVerdict(o: {
   running?: string | null
   floor?: string | null
 }): { ok: boolean; known: boolean; running?: string | null; floor?: string | null; reason: string }
+
+/* ── symptoms.mjs ─────────────────────────────────────────────────────────── */
+
+/** One defect, keyed on what a person SEES rather than on its name. */
+export interface Symptom {
+  /** the kernel export that catches it */
+  rule: string
+  /** things people actually said while hitting this — the searchable side */
+  seen: string[]
+  why: string
+  use: string
+}
+
+/** The discovery map. You cannot import what you cannot find, and a flat index
+ *  of 85 exports is not a discovery mechanism. */
+export const SYMPTOMS: readonly Symptom[]
+
+/** Search the map by what you can observe. Returns [] rather than a bad guess. */
+export function findRule(
+  query: string,
+  symptoms?: readonly Symptom[],
+): (Symptom & { score: number; matched: string[] })[]
+
+/** Does the mitigation still cost less than the path it avoids? A guard that
+ *  asks whether a cache EXISTS never re-checks the premise it was chosen on. */
+export function mitigationStillPays(o: {
+  mitigated: number
+  plain: number
+  ceiling?: number
+  what?: string
+}): {
+  ok: boolean
+  known: boolean
+  mitigated?: number
+  plain?: number
+  ceiling?: number
+  reason: string
+}

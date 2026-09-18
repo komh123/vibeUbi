@@ -86,19 +86,64 @@ export function isObservation(state) {
  * anyone noticing: every run that is not at the vantage reports `not-here`,
  * legitimately, forever.
  */
-export function observationAge({ lastObservedAt, now = Date.now(), maxAgeDays = 30 }) {
+/**
+ * How long since anything actually LOOKED — and if never, which kind of never.
+ *
+ * A peer asked for this distinction by name, from a case where it mattered:
+ * their probe was wired correctly and had never returned a value, because an
+ * upstream step failed for a week and the pipeline never reached it. My first
+ * version reported that as "a guard that has never run is a guard in name
+ * only", which reads as *go write the probe* — and the probe was already there.
+ *
+ * Their words: **"the first is a coding task, the second is a triage order."**
+ * So the two nevers are different findings and must not share a sentence:
+ *
+ *   never ATTEMPTED  → nothing is wired. Somebody has to write it.
+ *   attempted, never OBSERVED → it is wired and starved. Something upstream is
+ *                      eating it, and the fix is there, not here.
+ *
+ * `lastAttemptedAt` is optional: a caller that does not track attempts gets the
+ * old, honest, undifferentiated answer rather than a guess.
+ *
+ * @param {object} o
+ * @param {number} [o.lastObservedAt]   when a probe last RETURNED a value
+ * @param {number} [o.lastAttemptedAt]  when a probe was last RUN, observed or not
+ */
+export function observationAge({ lastObservedAt, lastAttemptedAt, now = Date.now(), maxAgeDays = 30 }) {
+  const triedEver = Number.isFinite(lastAttemptedAt)
+
   if (!Number.isFinite(lastObservedAt)) {
+    if (!triedEver) {
+      return {
+        days: null, stale: true, state: "never-wired", fix: "write it",
+        reason:
+          "nothing has ever attempted to observe this. A guard that has never run is a guard in name only, " +
+          "and this one has no probe behind it — the fix is to write one.",
+      }
+    }
+    const since = Math.floor((now - lastAttemptedAt) / 86_400_000)
     return {
-      days: null, stale: true,
-      reason: "nothing has ever actually observed this. A guard that has never run is a guard in name only.",
+      days: null, stale: true, state: "never-reached", fix: "look upstream",
+      reason:
+        `this probe IS wired — last attempted ${since} day(s) ago — and has never returned a value. ` +
+        `It is being starved, not missing: something before it is failing and the pipeline never gets here. ` +
+        `Writing another probe changes nothing; the fix is upstream.`,
     }
   }
+
   const days = Math.floor((now - lastObservedAt) / 86_400_000)
+  // Wired, observed once, and silent since: that is the starved shape again,
+  // just with a value in the past rather than none at all.
+  const starving = triedEver && lastAttemptedAt > lastObservedAt && days > maxAgeDays
   return {
-    days,
-    stale: days > maxAgeDays,
+    days, stale: days > maxAgeDays,
+    state: days > maxAgeDays ? (starving ? "reached-then-starved" : "stale") : "fresh",
+    fix: days > maxAgeDays ? (starving ? "look upstream" : "run it") : null,
     reason: days > maxAgeDays
-      ? `last actually observed ${days} day(s) ago, past the ${maxAgeDays}-day limit. Every run since then was legitimately silent, which is not the same as fine.`
+      ? `last actually observed ${days} day(s) ago, past the ${maxAgeDays}-day limit. ` +
+        (starving
+          ? `It has been ATTEMPTED since then and returned nothing, so it is wired and starved — the fix is upstream.`
+          : `Every run since then was legitimately silent, which is not the same as fine.`)
       : `last actually observed ${days} day(s) ago.`,
   }
 }
