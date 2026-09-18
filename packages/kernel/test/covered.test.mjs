@@ -69,3 +69,42 @@ test("two EMPTY lists agree perfectly, which is why they do not pass", () => {
   assert.equal(r.known, false)
   assert.match(r.reason, /Two empty lists agree perfectly|neither .* produced any names/)
 })
+
+/* ── `engines` is enforced nowhere at run time ────────────────────────── */
+import { runtimeFloorVerdict } from "../src/index.mjs"
+
+test("a step below the declared floor is refused, and told where the floor lives", () => {
+  const r = runtimeFloorVerdict({ step: "verify", running: "v18.19.1", floor: ">=22.0.0" })
+  assert.equal(r.ok, false)
+  assert.match(r.reason, /below the declared floor/)
+  assert.match(r.reason, /npm at install time and by nothing at run time/)
+  assert.match(r.reason, /use process\.execPath/)
+})
+
+test("equal to the floor passes; above passes; patch versions compare", () => {
+  assert.equal(runtimeFloorVerdict({ running: "v22.0.0", floor: ">=22.0.0" }).ok, true)
+  assert.equal(runtimeFloorVerdict({ running: "v24.21.0", floor: ">=22.0.0" }).ok, true)
+  assert.equal(runtimeFloorVerdict({ running: "v22.14.0", floor: ">=22.15.0" }).ok, false, "22.14 < 22.15")
+  assert.equal(runtimeFloorVerdict({ running: "v22.22.0", floor: ">=22.15" }).ok, true)
+})
+
+test("an unreadable version on either side is NOT a satisfied one", () => {
+  // sameObserved's rule at a third type level: absence must not read as
+  // agreement. A floor nobody could parse would otherwise pass everything.
+  for (const [running, floor] of [[null, ">=22"], ["v22.0.0", null], ["", ">=22"], ["not-a-version", ">=22"]]) {
+    const r = runtimeFloorVerdict({ running, floor })
+    assert.equal(r.ok, false, `running=${running} floor=${floor}`)
+    assert.equal(r.known, false)
+  }
+})
+
+test("the symptom travels with the cross-layer gap", () => {
+  // The gap and the timeout were ONE defect: three names dropped as bad_shape,
+  // and what a person saw was 120 seconds of nothing. Pairing them is what
+  // makes it findable from the symptom end.
+  const r = crossLayerNames({
+    a: ["open", "read"], b: ["open"], aName: "service", bName: "protocol",
+    symptom: "a 120s timeout saying your computer is not responding",
+  })
+  assert.match(r.reason, /What a person sees when this happens: a 120s timeout/)
+})

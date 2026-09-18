@@ -34,7 +34,7 @@ import {
   verdictFor, earlyVerdict, gateCells, deployProof, proofContract,
   prereqVerdict, testRanVerdict, attributedVerdict, budgetVerdict,
   nodeHeapMb, heapOomMessage, ceilingEffect, HEAP_FLOOR_MB,
-  proofDiscrimination, trimProofHistory,
+  proofDiscrimination, trimProofHistory, runtimeFloorVerdict,
   probeOrder, orderVerdict,
 } from "../../kernel/src/index.mjs"
 const exec = promisify(execFile)
@@ -315,6 +315,40 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
     say("bad", `${id}: ${h.why}`)
     say("dim", `raise the memory limit on this container, or set heapMb explicitly if you know this step fits in less than ${HEAP_FLOOR_MB} MB`)
     return finish("refused", `the memory fence for ${id} (${h.numbers?.cgroupLimitMb} MB) is below this pipeline's floor`)
+  }
+
+  /**
+   * Which node will the STEPS get — not which one is running this pipeline.
+   *
+   * A peer's machine has `type -P node` pointing at a wrapper hard-locked to
+   * v18.19.1 that also makes nvm ineffective, so "I ran ship with node 22" and
+   * "the steps ran on node 22" are different claims there. Checked before the
+   * swap, where refusing is free.
+   *
+   * Narrow on purpose: only when the project DECLARES a floor and a step's
+   * command actually invokes node. A check that fires on projects it knows
+   * nothing about is the too-wide kind that gets deleted.
+   */
+  if (checks.some((c) => /\bnode\b/.test(c.cmd))) {
+    const floor = await readFile(join(root, "package.json"), "utf8")
+      .then((t) => JSON.parse(t).engines?.node).catch(() => null)
+    if (floor) {
+      const stepNode = await new Promise((r) => {
+        const p = spawn("node", ["-p", "process.version"], { stdio: ["ignore", "pipe", "ignore"] })
+        let out = ""
+        p.stdout.on("data", (d) => (out += d))
+        p.on("exit", () => r(out.trim() || null))
+        p.on("error", () => r(null))
+      })
+      const rv = runtimeFloorVerdict({ step: "your verify steps", running: stepNode, floor })
+      if (!rv.ok) {
+        step(0, "verify", "fail")
+        say("bad", rv.reason)
+        say("dim", `this pipeline is on ${process.version}; what a step gets is a different question`)
+        return finish("refused", `steps would run on ${stepNode ?? "an unreadable node"}, below ${floor}`)
+      }
+      say("dim", `steps will run on ${stepNode} (floor ${floor})`)
+    }
   }
 
   for (const c of checks) {

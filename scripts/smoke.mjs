@@ -34,7 +34,20 @@ export default {
 }
 `)
 
-const cli = (...args) => run("node", [join(HERE, "bin/vibeubi.mjs"), ...args, "--root", dir])
+/**
+ * `process.execPath`, never the string "node".
+ *
+ * A peer pointed out that a gate shelling out to bare `node` is silently a gate
+ * on whatever `node` resolves to — and on the machine that found it,
+ * `type -P node` is a wrapper hard-locked to v18.19.1 that makes nvm
+ * ineffective. Measured here immediately afterwards: running this file under
+ * v22.22.0 spawned a CLI on **v18.19.1**.
+ *
+ * So every "Node 22 · smoke 5/5" and "Node 24 · smoke 5/5" reported from this
+ * script was testing the same Node 18 CLI. The parent version changed; the
+ * thing under test never did — a measurement that appears to vary and does not.
+ */
+const cli = (...args) => run(process.execPath, [join(HERE, "bin/vibeubi.mjs"), ...args, "--root", dir])
   .then((r) => ({ code: 0, ...r }))
   .catch((e) => ({ code: e.code ?? 1, stdout: e.stdout ?? "", stderr: e.stderr ?? "" }))
 

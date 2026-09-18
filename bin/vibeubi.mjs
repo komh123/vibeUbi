@@ -25,6 +25,28 @@ const ROOT = resolve(val("root", process.cwd()))
 const relativeish = (p) => p.startsWith(ROOT) ? p.slice(ROOT.length + 1) : p
 
 const C = { dim: "\x1b[90m", red: "\x1b[31m", green: "\x1b[32m", yellow: "\x1b[33m", bold: "\x1b[1m", off: "\x1b[0m" }
+
+/**
+ * Refuse to run below our own declared floor.
+ *
+ * `engines` is read by npm at install time and by nothing afterwards, so a tool
+ * installed once and invoked for a year never checks again. On the machine this
+ * was found, `type -P node` is a wrapper hard-locked to v18.19.1 which also
+ * makes nvm ineffective — so "I ran it with node 22" and "it ran on node 22"
+ * are different claims there.
+ */
+{
+  const { runtimeFloorVerdict } = await import("../packages/kernel/src/index.mjs")
+  const { readFile } = await import("node:fs/promises")
+  const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"))
+  const v = runtimeFloorVerdict({ step: "vibeubi", running: process.version, floor: pkg.engines?.node })
+  if (!v.ok) {
+    console.error(`\n  ${C.red}✗${C.off} ${v.reason}`)
+    console.error(`  ${C.dim}this binary is at ${process.execPath}${C.off}\n`)
+    process.exit(2)
+  }
+}
+
 const say = (s = "") => console.log(s)
 const ok = (s) => say(`  ${C.green}✓${C.off} ${s}`)
 const bad = (s) => say(`  ${C.red}✗${C.off} ${s}`)

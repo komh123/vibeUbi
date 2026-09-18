@@ -23,4 +23,4 @@ export { nodeHeapMb, heapOomMessage, killScope, ceilingEffect, NON_HEAP_SHARE, H
 export { manualGapAdmission, manualGapVerdict, manualGapReport, regressionVerdict, isObservation, observationAge } from "./manual.mjs"
 export { probeOrder, orderVerdict, skillResultAdmission, pageUrl, SKILL_VERDICTS, FREE_INVARIANTS } from "./order.mjs"
 export { proofDiscrimination, trimProofHistory } from "./discrimination.mjs"
-export { coveredVerdict, crossLayerNames } from "./covered.mjs"
+export { coveredVerdict, crossLayerNames, runtimeFloorVerdict } from "./covered.mjs"

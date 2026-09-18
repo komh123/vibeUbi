@@ -93,7 +93,7 @@ export function coveredVerdict({ step, read = [], expected = [], how = "" }) {
  * @param {string} [o.aName]
  * @param {string} [o.bName]
  */
-export function crossLayerNames({ a = [], b = [], aName = "A", bName = "B" }) {
+export function crossLayerNames({ a = [], b = [], aName = "A", bName = "B", symptom = "" }) {
   const A = new Set(a), B = new Set(b)
   const onlyA = [...A].filter((n) => !B.has(n))
   const onlyB = [...B].filter((n) => !A.has(n))
@@ -115,6 +115,69 @@ export function crossLayerNames({ a = [], b = [], aName = "A", bName = "B" }) {
       onlyA.length ? `${onlyA.length} in ${aName} and not in ${bName} (${onlyA.slice(0, 4).join(", ")})` : "",
       onlyB.length ? `${onlyB.length} in ${bName} and not in ${aName} (${onlyB.slice(0, 4).join(", ")})` : "",
     ].filter(Boolean).join("; ") +
-      `. Each side is correct on its own; only the pair is wrong, so no test on either side can fail.`,
+      `. Each side is correct on its own; only the pair is wrong, so no test on either side can fail.` +
+      // The peer's correction: their three names were not merely unregistered,
+      // they were DROPPED as bad_shape, so what a person saw was 120 seconds of
+      // nothing and then "your computer is not responding". The cross-layer gap
+      // and the timeout were one defect, and pairing them is what makes it
+      // findable from the symptom end next time.
+      (symptom ? ` What a person sees when this happens: ${symptom}` : ""),
   }
+}
+
+/**
+ * Is the runtime that will ACTUALLY run this step above the declared floor?
+ *
+ * `engines` is a declaration. npm reads it at install time and warns; at RUN
+ * time nothing reads it at all — so a project can declare `>=22` and have every
+ * step execute on 18, silently, for as long as nobody looks.
+ *
+ * A peer named the mechanism on their machine and it is not exotic: `type -P
+ * node` resolves to a wrapper hard-locked to v18.19.1, which also makes nvm
+ * ineffective. Anything spawning the string `"node"` gets 18 there, whatever
+ * the parent process is running on.
+ *
+ * Measured here within a minute of reading that: this project's own smoke test
+ * spawned bare `"node"`, so every "Node 22 · 5/5" and "Node 24 · 5/5" it had
+ * reported was testing the same **v18.19.1** CLI. The parent version changed;
+ * the thing under test never did.
+ *
+ * Two rules follow, and the second is the one that keeps biting:
+ *
+ *   1. compare the floor against the runtime the STEP will get, not the one the
+ *      pipeline is running on
+ *   2. spawn `process.execPath`, never the string "node" — otherwise the check
+ *      above is measuring one process and the work happens in another
+ */
+export function runtimeFloorVerdict({ step = "this step", running, floor }) {
+  const parse = (v) => {
+    const m = /^v?(\d+)\.(\d+)\.(\d+)/.exec(String(v ?? "").trim())
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null
+  }
+  const min = /(\d+)\.(\d+)\.(\d+)|(\d+)/.exec(String(floor ?? "").replace(/^[^\d]*/, ""))
+  const have = parse(running)
+  const want = min ? (min[1] ? [Number(min[1]), Number(min[2]), Number(min[3])] : [Number(min[4]), 0, 0]) : null
+
+  if (!have || !want) {
+    // Unreadable on either side is not a pass — `sameObserved`'s rule, here.
+    return {
+      ok: false, known: false,
+      reason:
+        `could not compare runtimes for "${step}": running=${JSON.stringify(running ?? null)}, ` +
+        `floor=${JSON.stringify(floor ?? null)}. An unreadable version is not a satisfied one.`,
+    }
+  }
+  for (let i = 0; i < 3; i++) {
+    if (have[i] > want[i]) return { ok: true, known: true, running, floor, reason: `${running} ≥ ${floor}` }
+    if (have[i] < want[i]) {
+      return {
+        ok: false, known: true, running, floor,
+        reason:
+          `"${step}" will run on ${running}, below the declared floor ${floor}. ` +
+          `\`engines\` is read by npm at install time and by nothing at run time, so this is the only place it is enforced. ` +
+          `A step that spawns the string "node" gets whatever is first on PATH — use process.execPath.`,
+      }
+    }
+  }
+  return { ok: true, known: true, running, floor, reason: `${running} = ${floor}` }
 }

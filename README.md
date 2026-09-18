@@ -203,10 +203,10 @@ engines: ">=22.0.0"
 
 | | status on 2026-09-17 | tests | typecheck | smoke | CLI |
 | --- | --- | --- | --- | --- | --- |
-| Node 18.19 | **EOL 2025-04-30** | 267 pass | ✓ | 5/5 | ✓ |
+| Node 18.19 | **EOL 2025-04-30** | refused at startup | — | — | refused |
 | Node 20 | **EOL 2026-04-30** | not run | | | |
-| **Node 22.22** | supported to 2027-04-30 | 267 pass | ✓ | 5/5 | ✓ |
-| **Node 24.21** | supported to 2028-04-30 | 267 pass | ✓ | 5/5 | ✓ |
+| **Node 22.22** | supported to 2027-04-30 | 279 pass | ✓ | 5/5 | ✓ |
+| **Node 24.21** | supported to 2028-04-30 | 279 pass | ✓ | 5/5 | ✓ |
 
 The floor is 22 and not 18, even though everything passes on 18, because **a
 security gate should not declare support for a runtime that stopped receiving
@@ -229,6 +229,20 @@ Two runtime differences have actually bitten, both invisible to reading the code
   whole suite was 5/5 red on 22 until a shell glob replaced it.
 - **Node 24's default test reporter is no longer TAP**, so a first run there
   looks like it produced no counts at all. `--test-reporter=tap` restores them.
+
+**The floor is enforced at run time, not only declared.** `engines` is read by
+npm at install time and by nothing afterwards, so a tool installed once and
+invoked for a year never checks again. The CLI now refuses below its own floor,
+and `ship` checks which node the *steps* will get — a different question from
+which one the pipeline is running on.
+
+That distinction was not theoretical. A peer's machine has `type -P node`
+pointing at a wrapper hard-locked to v18.19.1 which also makes nvm ineffective.
+Within a minute of reading that, this project's own smoke test was found
+spawning the string `"node"` — so every "Node 22 · 5/5" and "Node 24 · 5/5" it
+had reported was testing the same **v18.19.1** CLI. The parent version changed;
+the thing under test never did. Fixed to `process.execPath`, and the numbers
+above are from after that fix.
 
 No API removed in 20/22/24 is used: no `url.parse`, no `util.isArray`, no
 `new Buffer()`, no `process.binding`.

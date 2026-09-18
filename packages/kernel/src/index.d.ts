@@ -535,4 +535,19 @@ export function crossLayerNames(o: {
   b?: readonly string[]
   aName?: string
   bName?: string
+  /** What a person sees when this gap happens — e.g. "a 120s timeout saying
+   *  your computer is not responding". The gap and the symptom are one defect,
+   *  and pairing them is what makes it findable from the symptom end. */
+  symptom?: string
 }): { ok: boolean; known: boolean; onlyA: string[]; onlyB: string[]; reason: string }
+
+/**
+ * `engines` is read by npm at install time and by nothing at run time. Compare
+ * the floor against the runtime the STEP will get — not the one the pipeline is
+ * running on — and spawn `process.execPath`, never the string "node".
+ */
+export function runtimeFloorVerdict(o: {
+  step?: string
+  running?: string | null
+  floor?: string | null
+}): { ok: boolean; known: boolean; running?: string | null; floor?: string | null; reason: string }
