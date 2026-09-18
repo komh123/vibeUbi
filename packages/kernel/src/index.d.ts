@@ -600,3 +600,73 @@ export function mitigationStillPays(o: {
   ceiling?: number
   reason: string
 }
+
+/* ── claims.mjs — four ways a true statement answers the wrong question ───── */
+
+/** A remediation is a claim that doing this will change your situation. It can
+ *  be false: "update the app" for a cause updating cannot clear. */
+export function remediationVerdict(o: {
+  cause: string
+  remediation: string
+  resolves?: readonly string[]
+  seen?: string
+}): { ok: boolean; known: boolean; cause?: string; remediation?: string; reason: string }
+
+/** Run every copy of one rule over the same inputs. Copies that were never meant
+ *  to exist are not declared a pair, so nothing compares them — and each is
+ *  individually correct and individually tested. */
+export function implementationsAgree(o: {
+  rule?: string
+  implementations: Record<string, (x: any) => any>
+  cases?: readonly any[]
+}): {
+  ok: boolean
+  known: boolean
+  names: string[]
+  disagreements?: string[]
+  agreedOn?: number
+  reason: string
+}
+
+/** "How many came back" and "are any of them what I asked for" are different
+ *  measurements that happen to arrive together. */
+export function countIsNotFitness(o: {
+  counted: number
+  checked?: number
+  fit?: number
+  claim?: string
+}): { ok: boolean; known: boolean; counted?: number; checked?: number; fit?: number; reason: string }
+
+/** The arithmetic is fine and the denominator is a different group, which no
+ *  recomputation will reveal. */
+export function populationVerdict(o: {
+  claimAbout: string
+  measured: string
+  n?: number
+  statistic?: string
+}): { ok: boolean; known: boolean; claimAbout?: string; measured?: string; n?: number; reason: string }
+
+/* ── heap.mjs ─────────────────────────────────────────────────────────────── */
+
+/** Why did the step stop making progress — and is that knowable at all?
+ *
+ *  `unknown` is a first-class state and its message carries NO theory: a
+ *  confident wrong diagnosis is strictly worse than silence, because silence
+ *  sends nobody anywhere. `loadAvg1` is accepted and is never a discriminator —
+ *  a thrashing process sits in D state and a hung one sits at the same number. */
+export function hangVerdict(o?: {
+  quietForMs?: number
+  loadAvg1?: number
+  rssGb?: number
+  swapUsedGb?: number
+  swapUsedGbAtStart?: number
+  ceilingGb?: number
+  step?: string
+}): {
+  state: "thrashing" | "quiet" | "unknown"
+  known: boolean
+  swapGrowth: number | null
+  headroom: number | null
+  loadAvg1?: number
+  message: string
+}

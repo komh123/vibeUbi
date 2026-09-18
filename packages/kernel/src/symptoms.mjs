@@ -37,6 +37,8 @@ export const SYMPTOMS = Object.freeze([
       "exit 0 with # pass 0",
       "the tests passed on a machine where the executable does not exist",
       "it stopped at file 44 of 504 and everything before it was green",
+      "I reported the step green and its own output had errors in it",
+      "the echo ran whether the command succeeded or not",
     ],
     why: "no bad news was taken for good news",
     use: "testRanVerdict(step, output) — needs the runner's own summary line, N > 0",
@@ -189,6 +191,61 @@ export const SYMPTOMS = Object.freeze([
     use: "grade(findings, unmeasured) — the letter is withheld, not lowered",
   },
   {
+    rule: "remediationVerdict",
+    seen: [
+      "the error message tells the user to do something that can never help",
+      "we told them to update and updating cannot fix that cause",
+      "two different causes produced the same instruction",
+      "the field that separates the two cases was in the payload and nobody read it",
+    ],
+    why: "a remediation is a claim that doing this will change your situation, and it can be false",
+    use: "remediationVerdict({cause, remediation, resolves}) — declare what each action can actually clear",
+  },
+  {
+    rule: "implementationsAgree",
+    seen: [
+      "one rule, two implementations, I changed one of them",
+      "there is a gate copy and a report copy of the same rule",
+      "one call site honours it and another does not",
+      "each copy is correct on its own and passes its own tests",
+    ],
+    why: "copies that were never meant to exist are not declared a pair, so nothing compares them",
+    use: "implementationsAgree({rule, implementations, cases}) — run every copy over the same inputs",
+  },
+  {
+    rule: "countIsNotFitness",
+    seen: [
+      "the count went up and the content is irrelevant",
+      "156 services listed, 0 connected",
+      "I concluded the backend worked from the number of results",
+      "the results came back and none of them were what I asked for",
+    ],
+    why: "how many came back and are any of them right are different measurements that arrive together",
+    use: "countIsNotFitness({counted, checked, fit}) — nothing examined the items",
+  },
+  {
+    rule: "populationVerdict",
+    seen: [
+      "the number is for a population I never measured",
+      "the percentage is right and it describes a different group",
+      "I used a recent sample to make a claim about what reached production",
+      "the denominator is not written down anywhere near the figure",
+    ],
+    why: "the arithmetic is fine and the population is wrong, which no recomputation reveals",
+    use: "populationVerdict({claimAbout, measured, n})",
+  },
+  {
+    rule: "hangVerdict",
+    seen: [
+      "the timeout message told me to look for a network call and there was none",
+      "load average was low so it said the machine was not busy",
+      "it was not hung, it was thrashing against swap",
+      "the diagnosis was confident and every clause of it was wrong",
+    ],
+    why: "load average cannot tell a thrashing process from a hung one — both sit at the same number",
+    use: "hangVerdict({rssGb, swapUsedGb, swapUsedGbAtStart, ceilingGb}) — with no swap reading it returns `unknown` and offers no theory",
+  },
+  {
     rule: "mitigationStillPays",
     seen: [
       "the warm start is now slower than the cold one",
@@ -228,26 +285,32 @@ export function findRule(query, symptoms = SYMPTOMS) {
       (line) => line.toLowerCase().includes(q) || words.some((w) => line.toLowerCase().includes(w)),
     )
 
+    const hitWords = words.filter((w) => seenText.includes(w))
+    // How much of what they TYPED this entry accounts for. A ten-word symptom
+    // that overlaps on one common noun is not a match, however high its raw
+    // score — and raw scores alone were returning `orphanVerdict` for "the
+    // error message tells the user to do something that can never help" on the
+    // strength of "something" and "never".
+    const coverage = words.length ? hitWords.length / words.length : 0
+
     let score = 0
-    // Whole phrase inside a symptom line: they are describing the same thing.
     if (seenText.includes(q)) score += 100
-    // Otherwise the SYMPTOM lines carry the weight — the `why` and the rule's
-    // own name are prose around the entry, not what somebody searched with.
-    for (const w of words) if (seenText.includes(w)) score += 4
+    score += hitWords.length * 4
     for (const w of words) if (s.why.toLowerCase().includes(w)) score += 1
-    // Somebody who already knows the rule's name does not need this function,
-    // so the name is a tiebreak, never a reason to appear.
     if (s.rule.toLowerCase().includes(q)) score += 5
 
-    return { ...s, score, matched }
+    return { ...s, score, matched, coverage, hitWords: hitWords.length }
   })
 
-  const hits = scored.filter((s) => s.score > 0)
-  // A hit that matched no symptom line matched only the surrounding prose. Drop
-  // those whenever anything real matched — an honest short list beats a padded
-  // one, because every extra row sends somebody to read a rule that does not apply.
-  const real = hits.filter((s) => s.matched.length > 0)
-  return (real.length ? real : hits).sort((a, b) => b.score - a.score || a.rule.localeCompare(b.rule))
+  // The bar: an exact phrase, or enough of the query accounted for that the
+  // entry is plausibly about the same thing. A peer put it best about their own
+  // tooling — the failure was never "no diagnosis", it was A CONFIDENT WRONG
+  // ONE, which is strictly worse than silence because it sends you to spend an
+  // hour on the wrong theory. That applies to this function before anything else.
+  const hits = scored.filter(
+    (s) => s.seen.join(" ").toLowerCase().includes(q) || (s.hitWords >= 2 && s.coverage >= 0.4),
+  )
+  return hits.sort((a, b) => b.score - a.score || a.rule.localeCompare(b.rule))
 }
 
 /**

@@ -220,3 +220,95 @@ export function ceilingEffect(heapMb, defaultOldSpaceMb, toleranceMb = 64) {
     defaultOldSpaceMb,
   }
 }
+
+/**
+ * Why did that step stop making progress — and is that even knowable?
+ *
+ * A peer's ship printed this, verbatim, after killing a 40-minute build:
+ *
+ *     "build" did not finish within 40 minutes and was stopped.
+ *     Load average is 6.41, so the machine was not busy — this looks like a hang.
+ *     Run the step on its own and look for real I/O (a network call, a database,
+ *     a container) in what it covers. Raising the limit is rarely the fix.
+ *
+ * **Every clause was wrong.** It was not a hang: the build was at 16.7 GB RSS
+ * thrashing against 20 GB of swap. There was no real I/O to go and find. And the
+ * one thing the message told them not to do — look at the limit — was where the
+ * defect lived, because the binding limit under pressure was a 14 GB cache, not
+ * the timeout. They spent the next hour looking for a network call.
+ *
+ * So the lesson is not "diagnose better", it is: **a confident wrong diagnosis
+ * is strictly worse than silence**, because silence sends nobody anywhere. That
+ * is why `unknown` is a first-class state here and its message carries no theory
+ * at all. A tool that must say something will say something wrong.
+ *
+ * Load average is the wrong instrument in BOTH directions and is deliberately
+ * not a discriminator: a thrashing process sits in D state and counts toward it,
+ * and a genuinely hung one can sit at exactly the same number. What separates
+ * them is memory pressure — swap GROWTH across the step, and RSS against the
+ * ceiling. `loadAvg1` is accepted only so callers can pass what they have and be
+ * told, explicitly, that it decided nothing.
+ *
+ * @param {object} o
+ * @param {number} [o.quietForMs]          how long without progress
+ * @param {number} [o.loadAvg1]            accepted, and never a discriminator
+ * @param {number} [o.rssGb]               the step's resident set
+ * @param {number} [o.swapUsedGb]          swap in use now
+ * @param {number} [o.swapUsedGbAtStart]   swap in use when the step began
+ * @param {number} [o.ceilingGb]           the memory wall the step runs under
+ * @param {string} [o.step]
+ */
+export function hangVerdict({
+  quietForMs, loadAvg1, rssGb, swapUsedGb, swapUsedGbAtStart, ceilingGb, step = "the step",
+} = {}) {
+  const num = (v) => (Number.isFinite(v) ? v : null)
+  const rss = num(rssGb), ceil = num(ceilingGb)
+  const swapNow = num(swapUsedGb), swapThen = num(swapUsedGbAtStart)
+  const mins = Number.isFinite(quietForMs) ? Math.round(quietForMs / 60_000) : null
+  const ranFor = mins == null ? "" : ` after ${mins} minute(s) without finishing`
+
+  const swapGrowth = swapNow != null && swapThen != null ? swapNow - swapThen : null
+  const headroom = rss != null && ceil != null && ceil > 0 ? rss / ceil : null
+
+  /* ── the honest nothing ───────────────────────────────────────────────── */
+  if (swapGrowth == null && headroom == null) {
+    return {
+      state: "unknown", known: false, swapGrowth, headroom, loadAvg1,
+      // No theory. Not one word about hangs, I/O, or what to go and look for —
+      // that sentence is the defect this function exists to stop.
+      message:
+        `${step} ran out of time${ranFor} and was stopped. ` +
+        `Nothing here can say why: no swap or memory reading was supplied.` +
+        (loadAvg1 != null
+          ? ` Load average was ${loadAvg1}, which distinguishes nothing — a thrashing process and a hung one sit at the same number.`
+          : ""),
+    }
+  }
+
+  /* ── memory pressure, which is measurable ─────────────────────────────── */
+  const thrashing = (swapGrowth != null && swapGrowth > 1) || (headroom != null && headroom >= 0.75)
+  if (thrashing) {
+    const facts = [
+      swapGrowth != null ? `swap grew ${swapGrowth.toFixed(1)} GB during the step` : null,
+      headroom != null ? `RSS reached ${rss.toFixed(1)} GB of a ${ceil.toFixed(1)} GB ceiling (${Math.round(headroom * 100)}%)` : null,
+    ].filter(Boolean).join("; ")
+    return {
+      state: "thrashing", known: true, swapGrowth, headroom, loadAvg1,
+      message:
+        `${step} was stopped${ranFor}, and it was not idle: ${facts}. ` +
+        `This is memory pressure, not a hang — the work was making progress through swap, slowly. ` +
+        `Look at what this step is asked to hold, not at what it might be waiting on; the binding limit is ` +
+        `whatever grew (a cache, a working set), and the timeout is the symptom.`,
+    }
+  }
+
+  return {
+    state: "quiet", known: true, swapGrowth, headroom, loadAvg1,
+    message:
+      `${step} was stopped${ranFor} with no memory pressure` +
+      `${swapGrowth != null ? ` (swap moved ${swapGrowth.toFixed(1)} GB` : ""}` +
+      `${headroom != null ? `${swapGrowth != null ? ", " : " ("}RSS ${Math.round(headroom * 100)}% of the ceiling` : ""}` +
+      `${swapGrowth != null || headroom != null ? ")" : ""}. ` +
+      `Memory has been ruled out; what it was waiting on has not been established.`,
+  }
+}
