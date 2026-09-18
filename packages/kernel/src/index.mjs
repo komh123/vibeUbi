@@ -20,7 +20,7 @@ export { baselineAdmission, exemptionScope, checkAssertsOnBehaviour, sourceScanH
 export { createContext, applyAll, capabilityCells } from "./plugin.mjs"
 export { onboardStage, baselinePlan, prunePlan, STAGES } from "./onboard.mjs"
 export { nodeHeapMb, heapOomMessage, killScope, ceilingEffect, hangVerdict, NON_HEAP_SHARE, HEAP_FLOOR_MB, HEAP_CEILING_MB } from "./heap.mjs"
-export { manualGapAdmission, manualGapVerdict, manualGapReport, regressionVerdict, isObservation, observationAge } from "./manual.mjs"
+export { manualGapAdmission, manualGapVerdict, manualGapReport, regressionVerdict, isObservation, observationAge, VANTAGE_ANY, observableFrom } from "./manual.mjs"
 export { probeOrder, orderVerdict, skillResultAdmission, pageUrl, SKILL_VERDICTS, FREE_INVARIANTS } from "./order.mjs"
 export { proofDiscrimination, trimProofHistory } from "./discrimination.mjs"
 export { coveredVerdict, crossLayerNames, runtimeFloorVerdict } from "./covered.mjs"

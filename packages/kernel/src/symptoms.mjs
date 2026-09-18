@@ -246,6 +246,27 @@ export const SYMPTOMS = Object.freeze([
     use: "hangVerdict({rssGb, swapUsedGb, swapUsedGbAtStart, ceilingGb}) — with no swap reading it returns `unknown` and offers no theory",
   },
   {
+    rule: "attributedVerdict",
+    seen: [
+      "the gate said it ruled out a pre-existing cause and it never looked at the old build",
+      "the re-check runs on the same build, so it cannot say whose fault it is",
+      "a failure that was already there blocks every deploy for ever",
+      "it passed the second time so we called the deploy innocent",
+    ],
+    why: "a claim of attribution needs both sides of the change; one side reports consistency only",
+    use: "attributedVerdict(first, retry, {onPrevious}) — three answers: consistent, intermittent, pre-existing",
+  },
+  {
+    rule: "VANTAGE_ANY / observableFrom",
+    seen: [
+      "the probe works everywhere and there is no way to say so",
+      "the guard reports not-here on every run, legitimately, for ever",
+      "the probe produced a real observation and the verdict threw it away",
+    ],
+    why: "a vantage that cannot express `anywhere` turns a working probe into a permanently silent one",
+    use: 'declare vantage: "any" — a sentinel the kernel knows, not a looser string comparison',
+  },
+  {
     rule: "mitigationStillPays",
     seen: [
       "the warm start is now slower than the cold one",

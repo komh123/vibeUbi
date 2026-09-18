@@ -264,7 +264,32 @@ export function verdictFor(...args: any[]): any
 export function earlyVerdict(...args: any[]): any
 export function gateCells(...args: any[]): any
 export function testRanVerdict(...args: any[]): any
-export function attributedVerdict(...args: any[]): any
+/** Was this red caused by THIS deploy? Three answers, not two.
+ *
+ *  A re-check runs on the SAME build, so it separates flaky from consistent and
+ *  nothing else. Attribution needs BOTH SIDES of the change — pass `onPrevious`
+ *  (only obtainable after the rollback) or the verdict reports, honestly, that
+ *  the previous build was never observed. Claiming otherwise is how a
+ *  pre-existing failure blocks every deploy for ever while the gate announces
+ *  it has ruled that out. */
+export function attributedVerdict(
+  first: readonly Cell[],
+  retry: readonly Cell[],
+  o?: { onPrevious?: readonly Cell[] },
+): {
+  ship: boolean
+  reason: string
+  blocking: Cell[]
+  owned: Cell[]
+  /** passed on re-check: flaky on this build. NOT an attribution. */
+  intermittent: Cell[]
+  /** fails on the previous build too: the only real exoneration. */
+  preExisting: Cell[]
+  /** alias of `intermittent`, kept so existing callers do not silently see []. */
+  exonerated: Cell[]
+  /** was the other side of the change actually observed? */
+  attributed: boolean
+}
 export function retrySelector(...args: any[]): any
 export function cellKey(...args: any[]): any
 export function needsAttribution(...args: any[]): any
@@ -670,3 +695,18 @@ export function hangVerdict(o?: {
   loadAvg1?: number
   message: string
 }
+
+/* ── manual.mjs — the vantage sentinel ────────────────────────────────────── */
+
+/** `vantage: "any"` — the declarant asserts this probe depends on nothing
+ *  run-specific, so every run can observe it.
+ *
+ *  A sentinel, deliberately, rather than a looser comparison: relaxing the match
+ *  would make every typo a wildcard. Not an escape hatch either — a probe that
+ *  really needs a live sandbox and claims "any" returns `unreachable` where the
+ *  sandbox is absent, which is unmeasured and BLOCKS. Claiming it falsely makes
+ *  your gate redder, not greener. */
+export const VANTAGE_ANY: "any"
+
+/** Can a run at `at` observe a gap declared for `vantage`? */
+export function observableFrom(vantage: string | null | undefined, at: string | null | undefined): boolean

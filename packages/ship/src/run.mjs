@@ -499,11 +499,17 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
   if (!verdict.ship && config.recheck) {
     // The gate's whole justification is that undoing the deploy undoes the
     // problem. A red that also fails on the build being rolled back TO fails
-    // that test — so re-check once, and REPORT what gets exonerated.
-    say("warn", "P0 red — re-checking once to find out whose fault it is")
+    // that test — but this re-check runs on the SAME build, so all it can
+    // separate is flaky from consistent. Saying more than that is how a
+    // pre-existing failure blocks every deploy for ever while the gate
+    // announces it has ruled that out. The real attribution needs the previous
+    // build, which only exists after the rollback below.
+    say("warn", "P0 red — re-checking once to separate a flake from a consistent failure")
     const again = await config.recheck(verdict.blocking)
     const attributed = attributedVerdict(all, again)
-    for (const c of attributed.exonerated) say("warn", `exonerated (not this deploy): ${c.feature} · ${c.layer}`)
+    for (const c of attributed.intermittent) {
+      say("warn", `intermittent on this build (whose fault is still unknown): ${c.feature} · ${c.layer}`)
+    }
     verdict = attributed
   }
 

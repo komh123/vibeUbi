@@ -98,18 +98,52 @@ test("recognises node:test, vitest and mocha summaries", () => {
 
 /* ── attribution ─────────────────────────────────────────────────────── */
 
-test("a cell that survives the re-check is owned by this deploy", () => {
-  const first = [{ status: "fail", priority: "P0", feature: "f", layer: "L1" }]
-  const retry = [{ status: "fail", priority: "P0", feature: "f", layer: "L1" }]
-  assert.equal(attributedVerdict(first, retry).ship, false)
+const cell = (status) => [{ status, priority: "P0", feature: "f", layer: "L1" }]
+
+test("a cell that survives the re-check blocks — and is NOT yet attributed", () => {
+  const v = attributedVerdict(cell("fail"), cell("fail"))
+  assert.equal(v.ship, false)
+  assert.equal(v.owned.length, 1)
+  // The previous build was never observed, so nothing here says the deploy
+  // caused it. Saying so is what let a pre-existing P0 block every deploy for
+  // ever in a real gate, while the gate announced it had ruled that out.
+  assert.equal(v.attributed, false)
+  assert.match(v.reason, /previous build was not observed/)
 })
 
-test("a cell that passes the re-check exonerates the deploy — and is still reported", () => {
-  const first = [{ status: "fail", priority: "P0", feature: "f", layer: "L1" }]
-  const retry = [{ status: "pass", priority: "P0", feature: "f", layer: "L1" }]
-  const v = attributedVerdict(first, retry)
+test("a cell that passes the re-check is INTERMITTENT, which is not an attribution", () => {
+  const v = attributedVerdict(cell("fail"), cell("pass"))
   assert.equal(v.ship, true)
-  assert.match(v.reason, /NOT caused by this deploy/)
+  assert.equal(v.intermittent.length, 1)
+  // It does not block: a coin flip wired to a rollback trains people to re-run
+  // until green, which is the habit that ships a real regression. But the old
+  // wording claimed the deploy was cleared, and a re-check on the SAME build
+  // cannot establish that — a deploy can introduce an intermittent failure.
+  assert.match(v.reason, /INTERMITTENT on this build/)
+  assert.match(v.reason, /not an attribution/)
+  assert.ok(!/NOT caused by this deploy/.test(v.reason), "one side cannot support a two-sided claim")
+})
+
+test("only the previous build can exonerate the deploy", () => {
+  // Their case: the same P0 fails on the build being rolled back TO. Without
+  // this evidence it looks identical to a regression.
+  const v = attributedVerdict(cell("fail"), cell("fail"), { onPrevious: cell("fail") })
+  assert.equal(v.ship, true)
+  assert.equal(v.preExisting.length, 1)
+  assert.equal(v.owned.length, 0)
+  assert.equal(v.attributed, true)
+  assert.match(v.reason, /not caused by this deploy/)
+
+  // And when the previous build was fine, the same evidence convicts.
+  const guilty = attributedVerdict(cell("fail"), cell("fail"), { onPrevious: cell("pass") })
+  assert.equal(guilty.ship, false)
+  assert.equal(guilty.owned.length, 1)
+  assert.equal(guilty.attributed, true)
+})
+
+test("`exonerated` survives as an alias so callers do not silently see an empty list", () => {
+  const v = attributedVerdict(cell("fail"), cell("pass"))
+  assert.equal(v.exonerated, v.intermittent)
   assert.equal(v.exonerated.length, 1)
 })
 

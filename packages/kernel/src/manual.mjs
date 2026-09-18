@@ -148,6 +148,41 @@ export function observationAge({ lastObservedAt, lastAttemptedAt, now = Date.now
   }
 }
 
+/**
+ * The vantage that means "this probe depends on nothing run-specific".
+ *
+ * A consumer declared two gaps whose probes read state present on every machine
+ * in every run — one reads the daemon's audit log, one reads `/proc/<pid>/environ`
+ * of the running app. Their honest vantage is *anywhere*. With an exact string
+ * comparison, `vantage: "any"` produced:
+ *
+ *     "no-web-search-provider" can only be observed from any;
+ *     this run is manual, so nothing is claimed either way.
+ *
+ * A guard that is永遠 `not-here` — which is exactly what `manualGapAdmission`
+ * refuses at declaration time, arriving through the back door at verdict time.
+ * The probe had already run and produced a real observation; the verdict threw
+ * it away.
+ *
+ * A SENTINEL, NOT A LOOSER COMPARISON. They asked for it this way and they are
+ * right: relaxing the match would let any typo become a wildcard. `"any"` is a
+ * declaration — *I assert this probe depends on nothing run-specific* — and like
+ * every other declaration here it is checkable.
+ *
+ * It is not an escape hatch, and the incentive already runs the right way: a
+ * probe that actually needs a live sandbox and claims `"any"` will return
+ * `unreachable` wherever that sandbox is absent, which is UNMEASURED and blocks.
+ * Claiming `"any"` falsely makes your gate redder, not greener. The refusal text
+ * says so, because a rule whose incentive is only implicit gets argued with.
+ */
+export const VANTAGE_ANY = "any"
+
+/** Can a run at `at` observe a gap declared for `vantage`? */
+export function observableFrom(vantage, at) {
+  if (!vantage || !at) return true          // nothing declared, nothing to scope
+  return vantage === VANTAGE_ANY || vantage === at
+}
+
 /** A manual gap must say who owns it and when it was accepted — a gap with no
  *  owner is everybody's, which means nobody's, and `debtAge` needs the date. */
 export function manualGapAdmission(gap) {
@@ -155,8 +190,11 @@ export function manualGapAdmission(gap) {
   if (!String(gap?.id ?? "").trim()) faults.push("no id")
   if (!String(gap?.vantage ?? "").trim()) {
     faults.push(
-      "no vantage — the run that can actually observe this must be named, or a run that cannot see it " +
-      "reports `unreachable`, blocks, and gets deleted by the third person it stops",
+      'no vantage — the run that can actually observe this must be named, or a run that cannot see it ' +
+      'reports `unreachable`, blocks, and gets deleted by the third person it stops. ' +
+      'If the probe genuinely depends on nothing run-specific, say so with `vantage: "any"`; ' +
+      'claiming that falsely makes your gate redder, not greener, because a probe that cannot reach ' +
+      'what it needs returns `unreachable`, which is unmeasured and blocks.',
     )
   }
   if (!String(gap?.why ?? "").trim()) faults.push("no reason — a gap with no written why cannot be judged later by anyone but its author")
@@ -190,7 +228,7 @@ export function manualGapVerdict({ gap, observed, at = null, now = Date.now() })
   const base = { id: gap?.id, owner: gap?.owner, days, runbook: gap?.runbook ?? null, vantage: gap?.vantage ?? null }
 
   // Silence from the wrong place is not evidence, and it is not a failure either.
-  if (gap?.vantage && at && at !== gap.vantage) {
+  if (!observableFrom(gap?.vantage, at)) {
     return {
       ...base, state: "not-here", observed: false, blocks: false,
       reason: `"${gap?.id}" can only be observed from ${gap.vantage}; this run is ${at}, so nothing is claimed either way.`,
@@ -245,7 +283,7 @@ export function regressionVerdict({ guard, observed, at = null, now = Date.now()
   const days = Number.isFinite(guard?.closedAt) ? Math.floor((now - guard.closedAt) / 86_400_000) : null
   const base = { id: guard?.id, owner: guard?.owner, days, vantage: guard?.vantage ?? null }
 
-  if (guard?.vantage && at && at !== guard.vantage) {
+  if (!observableFrom(guard?.vantage, at)) {
     return { ...base, state: "not-here", observed: false, blocks: false, reason: `"${guard?.id}" is only observable from ${guard.vantage}; this run is ${at}.` }
   }
   if (observed === null || observed === undefined || observed?.unreachable) {

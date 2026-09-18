@@ -185,3 +185,47 @@ test("never observed is stale, not zero days", () => {
   assert.equal(never.stale, true)
   assert.match(never.reason, /guard in name only/)
 })
+
+/* ── vantage: "any" ───────────────────────────────────────────────────────── */
+
+import { VANTAGE_ANY, observableFrom } from "../src/index.mjs"
+
+const anyGap = {
+  id: "no-web-search-provider", vantage: VANTAGE_ANY, why: "no provider configured",
+  owner: "ops", acceptedAt: Date.now() - 86_400_000, probeId: "env-scan",
+}
+
+test('a probe that depends on nothing run-specific can say so, and is then observed anywhere', () => {
+  // Before the sentinel, an exact comparison made this permanently `not-here`:
+  // the probe ran, produced a real observation, and the verdict discarded it.
+  for (const at of ["manual", "ci", "nightly", "whatever"]) {
+    const v = manualGapVerdict({ gap: anyGap, observed: { open: true }, at })
+    assert.notEqual(v.state, "not-here", `vantage "any" must be observable from ${at}`)
+    assert.equal(v.state, "open")
+  }
+})
+
+test('"any" is a sentinel, not a relaxed comparison — a typo is still scoped', () => {
+  // The whole reason for a named constant: loosening the match would turn every
+  // misspelling into a wildcard.
+  const typo = { ...anyGap, vantage: "anywhere" }
+  assert.equal(manualGapVerdict({ gap: typo, observed: { open: true }, at: "manual" }).state, "not-here")
+  assert.equal(observableFrom("any", "manual"), true)
+  assert.equal(observableFrom("sandbox", "manual"), false)
+  assert.equal(observableFrom("sandbox", "sandbox"), true)
+})
+
+test('claiming "any" falsely makes the gate redder, not greener', () => {
+  // The incentive that stops this being an escape hatch: a probe that needs a
+  // live sandbox and declares "any" is now REACHED everywhere, and reports
+  // unreachable where it cannot look — which is unmeasured, and blocks.
+  const v = manualGapVerdict({ gap: anyGap, observed: { unreachable: "no sandbox here" }, at: "manual" })
+  assert.equal(v.state, "unmeasured")
+  assert.equal(v.blocks, true)
+})
+
+test("the refusal text tells a declarant the sentinel exists", () => {
+  const r = manualGapAdmission({ ...anyGap, vantage: "" })
+  assert.equal(r.ok, false)
+  assert.match(r.reason, /vantage: "any"/)
+})
