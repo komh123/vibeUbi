@@ -3,6 +3,8 @@ import assert from "node:assert/strict"
 import { s0Secrets, s0Config, s2Routes, s2Sinks, s3Headers, s3Unauth, s4Exposure, stripStrings, mask, fingerprint } from "../src/rules.mjs"
 import { lex } from "../src/collect.mjs"
 
+// A real key carries its body; a base64 line long enough to be one (the value is random, not a key).
+const PEM_BODY = "MIIEowIBAAKCAQEAq7Zp2Lm9Xc4Vb8Nh1Kj6Tw3Rf5Yd0GsQ7zP2lM9xC4vB8nH1kJ6"
 const L = (text, n = 1) => ({ n, text, region: "code" })
 const file = (path, lines) => ({ path, lines: lines.map((t, i) => L(t, i + 1)) })
 
@@ -14,7 +16,7 @@ test("a secret is never printed, only measured", () => {
 })
 
 test("history counts: a key deleted next commit is still a key", () => {
-  const out = s0Secrets({ files: [], history: [{ commit: "abc1234", path: "k.yaml", text: "-----BEGIN RSA PRIVATE KEY-----" }] })
+  const out = s0Secrets({ files: [], history: [{ commit: "abc1234", path: "k.yaml", text: `-----BEGIN RSA PRIVATE KEY-----\n${PEM_BODY}\n-----END RSA PRIVATE KEY-----` }] })
   assert.equal(out[0].rule, "S0.secret.history")
   assert.match(out[0].why, /Rotate it/)
 })
@@ -234,4 +236,30 @@ test("assets referenced but never fetched is itself a finding", async () => {
   const { s2Assets } = await import("../src/rules.mjs")
   const r = s2Assets({ url: "http://x/", html: '<script src="/a.js"></script>', assets: [] })
   assert.equal(r[0].rule, "L2.assets.unchecked")
+})
+
+// A PEM header alone is not a private key (deploy 35 of Ava was refused on a fixture that BUILDS a key at run time:
+// `-----BEGIN PRIVATE KEY-----\n${bodyLines.join("\n")}`). A real key always carries its body, so the rule needs one of:
+//   · base64 on the next line · a `Proc-Type:` header (legacy encrypted PEM) · an escaped `\n` + base64 on the same line
+//     (service-account JSON, env values) · base64 directly after the header on the same line.
+// Changed in the rule, not whitelisted: the same fixture shape in any other file is judged the same way.
+test("privkey: a PEM header counts only when a key body follows it — four shapes in, two out", () => {
+  const ids = (path, text) => s0Secrets({ files: [{ path, text }] }).filter((f) => /privkey/.test(f.evidence)).length
+  const BEGIN = "-----BEGIN PRIVATE KEY-----"
+
+  // in
+  assert.equal(ids("k.pem", `${BEGIN}\n${PEM_BODY}\n-----END PRIVATE KEY-----`), 1, "header + base64 on the next line")
+  assert.equal(ids("k.pem", "-----BEGIN RSA PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nDEK-Info: AES-128-CBC,0123456789ABCDEF"), 1, "legacy encrypted PEM (Proc-Type)")
+  assert.equal(ids("sa.json", `{"private_key": "${BEGIN}\\n${PEM_BODY}\\n-----END PRIVATE KEY-----\\n"}`), 1, "escaped one-line key (service-account JSON)")
+  assert.equal(ids("k.txt", `${BEGIN} ${PEM_BODY}`), 1, "base64 straight after the header on the same line")
+
+  // out
+  const generated = "const block = `" + BEGIN + "\\n${bodyLines.join(\"\\n\")}\\n-----END PRIVATE KEY-----\\n`;"
+  assert.equal(ids("scripts/lib/guards.mjs", generated), 0, "a header whose body is generated at run time is not a key")
+  assert.equal(ids("k.pem", `${BEGIN}\n-----END PRIVATE KEY-----`), 0, "a bare header with nothing under it is not a key")
+})
+
+test("privkey: the other credential shapes are unaffected by the body rule", () => {
+  assert.equal(s0Secrets({ files: [{ path: "a.env", text: "OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz123" }] }).length, 1)
+  assert.equal(s0Secrets({ files: [{ path: "a.txt", text: "AKIAABCDEFGHIJKLMNOP" }] }).length, 1)
 })

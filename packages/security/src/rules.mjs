@@ -50,11 +50,30 @@ export const SECRET_PATTERNS = [
   { id: "aws",      re: /\bAKIA[0-9A-Z]{16}\b/g,                               sev: "critical" },
   { id: "github",   re: /\bgh[pousr]_[A-Za-z0-9]{30,}/g,                       sev: "critical" },
   { id: "slack",    re: /\bxox[baprs]-[A-Za-z0-9-]{10,}/g,                     sev: "critical" },
-  { id: "privkey",  re: /-----BEGIN (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----/g, sev: "critical" },
+  { id: "privkey",  re: /-----BEGIN (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----/g, sev: "critical", needsBody: true },
   { id: "jwt_hs",   re: /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, sev: "high" },
   { id: "gcp",      re: /"type"\s*:\s*"service_account"/g,                     sev: "critical" },
   { id: "pw_inline",re: /\b(?:password|passwd|secret|token)\s*[:=]\s*["'][^"'\s]{8,}["']/gi, sev: "high" },
 ]
+
+/**
+ * A PEM header alone is not a private key. A real key always carries its body: base64 on the next line, a `Proc-Type:`
+ * header (legacy encrypted PEM), an escaped `\\n` followed by base64 on the same line (service-account JSON, env values), or
+ * base64 straight after the header. A fixture that BUILDS a key at run time (`-----BEGIN PRIVATE KEY-----\\n${body}`) has none of
+ * these — flagging it as a leaked key blocked Ava's deploy 35 (2026-10-01). The rule changes; no allow-list is added, so the
+ * same shape anywhere else is judged the same way. `end` is the index just after the header in `text`.
+ */
+const BASE64_RUN = /[A-Za-z0-9+/]{40,}/
+export function pemBodyFollows(text, end) {
+  const rest = String(text).slice(end, end + 400)
+  const escaped = /^[ \t]*(?:\\r)?\\n([A-Za-z0-9+/=]*)/.exec(rest)
+  if (escaped) return BASE64_RUN.test(escaped[1])
+  if (/^[ \t]*[A-Za-z0-9+/]{40,}/.test(rest)) return true
+  const next = /^[ \t]*\r?\n[ \t]*([^\r\n]*)/.exec(rest)
+  if (!next) return false
+  const line = next[1].trim()
+  return /^[A-Za-z0-9+/]{40,}={0,2}$/.test(line) || /^Proc-Type:/i.test(line)
+}
 
 /** A value that is obviously not a real credential. Keeps precision high —
  *  see textRuleFitness: a rule below 90% cannot gate. */
@@ -67,6 +86,7 @@ export function s0Secrets({ files, history = [] }) {
       p.re.lastIndex = 0
       for (const m of String(text).matchAll(p.re)) {
         const val = m[0]
+        if (p.needsBody && !pemBodyFollows(text, m.index + val.length)) continue
         if (PLACEHOLDER.test(val.replace(/^[A-Za-z_]+\s*[:=]\s*["']?/, ""))) continue
         out.push(f(
           inHistory ? "S0.secret.history" : "S0.secret.tree",
