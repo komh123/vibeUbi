@@ -84,3 +84,26 @@ const invented2: number | undefined = aliased.numbers.budgetMb
 const looksPrudent: number = aliased.numbers.budgetMb ?? 0
 
 void aliased; void stillNarrows; void invented2; void looksPrudent
+
+/* ── acceptance ──────────────────────────────────────────────────────────
+ * The phase is a closed union, and severity is not optional: both were
+ * refused at runtime first, and the types now say so before anything runs. */
+import { acceptanceContract, preSwapBehaviourVerdict, foldAttempts, type Acceptance } from "../../src/index.js"
+
+const fulfil: Acceptance["fulfil"] = async () => ({})
+const okDecl: Acceptance = { phase: "post-swap", fulfil, items: [{ id: "a", severity: "P0" }] }
+const contract = acceptanceContract(okDecl)
+if (!contract.ok) { const faults: string[] = contract.faults }
+
+// @ts-expect-error "pre-swap" is not a phase — it was the defect.
+const badPhase: Acceptance = { phase: "pre-swap", fulfil, items: [{ id: "a", severity: "P0" }] }
+
+// @ts-expect-error severity is required; a missing one is refused, not defaulted.
+const noSeverity: Acceptance = { phase: "post-swap", fulfil, items: [{ id: "a" }] }
+
+const rule = preSwapBehaviourVerdict(okDecl, { productionBase: "https://x" })
+const refuses: boolean = rule.refuse
+const warns: boolean = rule.warn
+
+const folded = foldAttempts([[{ feature: "a", layer: "acceptance", priority: "P0", status: "fail", reason: "r" }]])
+const flakyFeature: string | undefined = folded.flaky[0]?.feature

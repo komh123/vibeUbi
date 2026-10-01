@@ -314,8 +314,13 @@ export function skillResultAdmission({ order, result }) {
  *
  *   Same move as `deployProof`, which does not ask the deploy script whether it
  *   worked. Go and look.
+ *
+ * @param {string} [o.layer] what the cells call themselves (`layer`, and the
+ *   `<layer>:liveness` / `<layer>:artifact` feature names). Default "probe".
+ *   Parametrised so that acceptance is judged by THIS function rather than by a
+ *   copy of it — two judges for one result shape is how they come to disagree.
  */
-export function orderVerdict({ order, result, noiseIsFailure = true, unmeasuredBlocks = false, liveness = null }) {
+export function orderVerdict({ order, result, noiseIsFailure = true, unmeasuredBlocks = false, liveness = null, layer = "probe" }) {
   /**
    * `blocked` is not a new state — `verdictFor` already has it, and its comment
    * already says what this needs: "a dependency is unavailable — not caused by
@@ -338,7 +343,7 @@ export function orderVerdict({ order, result, noiseIsFailure = true, unmeasuredB
       // An inadmissible result is a protocol failure, not a measurement one —
       // it blocks either way, because a result that cannot be tied to this
       // deploy is indistinguishable from one fabricated for it.
-      cells: [{ feature: "probe", layer: "probe", priority: "P0", status: "error", reason: admitted.reason }],
+      cells: [{ feature: layer, layer, priority: "P0", status: "error", reason: admitted.reason }],
       covered: 0,
       ordered: order.items.length,
     }
@@ -352,7 +357,7 @@ export function orderVerdict({ order, result, noiseIsFailure = true, unmeasuredB
     // real situation. But the claim-vs-claim comparison it leaves behind is not
     // evidence, and saying nothing would let it read as if it were.
     cells.push({
-      feature: "probe:artifact", layer: "probe", priority: "P0", status: "blocked",
+      feature: `${layer}:artifact`, layer, priority: "P0", status: "blocked",
       reason:
         `the skill did not report which artifact it actually observed, so the only tie between this result and this deploy ` +
         `is an id copied out of the order — equal by construction, and not evidence that the test ran against ${order.artifactId}.`,
@@ -363,21 +368,21 @@ export function orderVerdict({ order, result, noiseIsFailure = true, unmeasuredB
     // Not "assume it is up". A judgement made without looking is the thing this
     // parameter exists to replace, so it is named rather than silently defaulted.
     cells.push({
-      feature: "probe:liveness", layer: "probe", priority: "P0", status: "blocked",
+      feature: `${layer}:liveness`, layer, priority: "P0", status: "blocked",
       reason: "no independent look at the base was taken before judging, so a failure of the test side cannot be told from a failure of the deploy",
     })
   } else if (liveness.ok && liveness.artifact && liveness.artifact !== order.artifactId) {
     // Our own look, at judge time: the site is serving something else now. The
     // skill's report may be perfectly true and about a build that is gone.
     cells.push({
-      feature: "probe:artifact", layer: "probe", priority: "P0", status: "fail",
+      feature: `${layer}:artifact`, layer, priority: "P0", status: "fail",
       reason:
         `the site is serving ${liveness.artifact} at probe time and this deploy is ${order.artifactId}. ` +
         `Something replaced it between prove and probe.`,
     })
   } else if (!liveness.ok) {
     cells.push({
-      feature: "probe:liveness", layer: "probe", priority: "P0", status: "fail",
+      feature: `${layer}:liveness`, layer, priority: "P0", status: "fail",
       reason:
         `the base is not serving (${liveness.unreachable ?? `HTTP ${liveness.status}`}) at probe time, and \`prove\` saw it serving this artifact minutes ago. ` +
         `Every item the skill could not reach is this, not a broken fixture.`,
@@ -387,7 +392,7 @@ export function orderVerdict({ order, result, noiseIsFailure = true, unmeasuredB
     const got = byId.get(item.id)
     if (!got) {
       cells.push({
-        feature: item.id, layer: "probe", priority: item.priority, status: absent,
+        feature: item.id, layer, priority: item.priority, status: absent,
         reason: `ordered and not reported. A result that omits an item says nothing about it, and a short green list must never read as full coverage.`,
       })
       continue
@@ -395,7 +400,7 @@ export function orderVerdict({ order, result, noiseIsFailure = true, unmeasuredB
     const v = String(got.verdict ?? "").toUpperCase()
     if (!SKILL_VERDICTS.includes(v)) {
       cells.push({
-        feature: item.id, layer: "probe", priority: item.priority, status: absent,
+        feature: item.id, layer, priority: item.priority, status: absent,
         reason: `unrecognised verdict "${got.verdict}". An unknown verdict is not a pass — see what a misspelled severity used to cost.`,
       })
       continue
@@ -406,7 +411,7 @@ export function orderVerdict({ order, result, noiseIsFailure = true, unmeasuredB
       : v === "FAIL" ? "fail"
       : absent    // BLOCKED and NOT_EXERCISED are "we do not know", not "it is broken"
     cells.push({
-      feature: item.id, layer: "probe", priority: item.priority, status,
+      feature: item.id, layer, priority: item.priority, status,
       reason: got.why ?? v,
       evidence: got.evidence ?? null,
       skillVerdict: v,
@@ -418,7 +423,7 @@ export function orderVerdict({ order, result, noiseIsFailure = true, unmeasuredB
   for (const o of result.observed) {
     if (order.items.some((i) => i.id === o.id)) continue
     cells.push({
-      feature: o.id, layer: "probe", priority: "P2", status: String(o.verdict).toUpperCase() === "PASS" ? "pass" : "fail",
+      feature: o.id, layer, priority: "P2", status: String(o.verdict).toUpperCase() === "PASS" ? "pass" : "fail",
       reason: `not ordered — the skill checked this on its own initiative. ${o.why ?? ""}`.trim(),
       skillVerdict: String(o.verdict ?? "").toUpperCase(),
       volunteered: true,
@@ -426,7 +431,7 @@ export function orderVerdict({ order, result, noiseIsFailure = true, unmeasuredB
   }
 
   const ordered = order.items.length
-  const unverified = cells.filter((c) => c.status === "blocked" && !c.volunteered && c.feature !== "probe:liveness" && c.feature !== "probe:artifact").length
+  const unverified = cells.filter((c) => c.status === "blocked" && !c.volunteered && c.feature !== `${layer}:liveness` && c.feature !== `${layer}:artifact`).length
   return {
     cells,
     ordered,
@@ -434,6 +439,6 @@ export function orderVerdict({ order, result, noiseIsFailure = true, unmeasuredB
     unverified,
     // The number a report has to print. "shipped, 3 of 4 P0 pages unverified"
     // is a sentence somebody acts on; silence is how this step becomes decoration.
-    verified: ordered - unverified - cells.filter((c) => c.status === "fail" && !c.volunteered && c.feature !== "probe:liveness" && c.feature !== "probe:artifact").length,
+    verified: ordered - unverified - cells.filter((c) => c.status === "fail" && !c.volunteered && c.feature !== `${layer}:liveness` && c.feature !== `${layer}:artifact`).length,
   }
 }

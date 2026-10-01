@@ -508,6 +508,9 @@ export function orderVerdict(o: {
    *  account's password expired" produce the same word and need opposite
    *  handling. `null` is reported as "no look taken", never assumed alive. */
   liveness?: { ok: boolean; status?: number; unreachable?: string; artifact?: string } | null
+  /** what the cells call themselves; default "probe". Acceptance passes
+   *  "acceptance" so it is judged by THIS function and not by a copy. */
+  layer?: string
 }): {
   cells: { feature: string; layer: string; priority: string; status: string; reason: string; skillVerdict?: string; volunteered?: boolean }[]
   ordered: number
@@ -710,3 +713,103 @@ export const VANTAGE_ANY: "any"
 
 /** Can a run at `at` observe a gap declared for `vantage`? */
 export function observableFrom(vantage: string | null | undefined, at: string | null | undefined): boolean
+
+/* ── acceptance: functional behaviour, judged after the swap ──────────── */
+
+/** The only two places acceptance may run. */
+export const ACCEPTANCE_PHASES: readonly ["post-swap", "pre-swap-health"]
+export const ACCEPTANCE_SEVERITIES: readonly ["P0", "P1", "P2"]
+export const ACCEPTANCE_JUDGES: readonly ["health", "behaviour"]
+/** pre-swap-health is "one shortest request", not a test run: 120 s at most. */
+export const HEALTH_BUDGET_MAX_MS: number
+export const ACCEPTANCE_MAX_ATTEMPTS: number
+
+export type AcceptancePhase = "post-swap" | "pre-swap-health"
+export type AcceptanceSeverity = "P0" | "P1" | "P2"
+
+export interface AcceptanceItem {
+  id: string
+  /** REQUIRED. P0 rolls back after the swap (and refuses before it); P1/P2 are
+   *  recorded and warned. Refused when missing — never defaulted. */
+  severity: AcceptanceSeverity
+  /** required in `pre-swap-health`, where it is the safety argument */
+  judges?: "health" | "behaviour"
+  /** 1..5, default 1. Only a P0 item may retry; pass-on-retry is `flaky`. */
+  attempts?: number
+  /** the project's own fields (a path, a role…) pass through to the order */
+  [extra: string]: unknown
+}
+
+export interface Acceptance {
+  phase: AcceptancePhase
+  /** Produces the result for an order. Required: nothing else ever would. */
+  fulfil: (order: AcceptanceOrder, ctx?: { signal?: AbortSignal; attempt?: number }) => Promise<unknown> | unknown
+  items: AcceptanceItem[]
+  skill?: string
+  /** pre-swap-health only: must be declared, and `true` unless `staging` is */
+  healthOnly?: boolean
+  /** pre-swap-health: required, 1..HEALTH_BUDGET_MAX_MS. post-swap: optional. */
+  timeBudgetMs?: number
+  /** pre-swap-health only. The one exception to "no behaviour before the swap". */
+  staging?: { base: string }
+  noiseIsFailure?: boolean
+}
+
+export function acceptanceContract(
+  decl: unknown,
+  o?: { productionBase?: string | null },
+): { ok: true } | { ok: false; reason: string; faults: string[] }
+
+export function preSwapBehaviourVerdict(
+  decl: Partial<Acceptance> | null | undefined,
+  o?: { productionBase?: string | null },
+): {
+  /** ship must refuse before anything runs */
+  refuse: boolean
+  /** allowed, but the operator must be told (the staging exception) */
+  warn: boolean
+  reason: string
+  /** which items / flags made it functional */
+  offending: string[]
+}
+
+export interface AcceptanceOrder extends Omit<ProbeOrder, "at" | "items"> {
+  at: "acceptance"
+  /** the declared items, with `priority` = severity so the probe's judge reads them */
+  items: (AcceptanceItem & { priority: AcceptanceSeverity })[]
+  phase: AcceptancePhase
+  healthOnly?: boolean
+  timeBudgetMs?: number
+  limits?: string
+}
+
+export function acceptanceOrder(o: { acceptance: Acceptance; artifactId: string; base: string }): AcceptanceOrder
+
+/** The probe's judge, with cells named `layer: "acceptance"`. Before the swap
+ *  (`pre-swap-health`) an unmeasured item errors and so refuses. */
+export function acceptanceVerdict(o: {
+  order: AcceptanceOrder
+  result: unknown
+  liveness?: { ok: boolean; status?: number; unreachable?: string; artifact?: string } | null
+  phase?: AcceptancePhase
+  noiseIsFailure?: boolean
+}): ReturnType<typeof orderVerdict>
+
+export interface AcceptanceCell {
+  feature: string
+  layer: string
+  priority: string
+  status: string
+  reason: string
+  flaky?: boolean
+  attempts?: number
+  [extra: string]: unknown
+}
+
+/** ids worth another attempt: FAILED, P0, attempts left, and nothing structural failing */
+export function retryItems(o: { order: AcceptanceOrder; cells: readonly AcceptanceCell[]; attemptsDone: number }): string[]
+
+export function foldAttempts(rounds: readonly (readonly AcceptanceCell[])[]): {
+  cells: AcceptanceCell[]
+  flaky: { feature: string; attempts: number; failures: string[] }[]
+}
