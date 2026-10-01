@@ -577,8 +577,11 @@
     <div class="perm">
       <div class="who"><span class="tag t-quiet">確定性</span></div>
       <div class="body"><b>步驟 3 · SHIP</b>
-        <p>verify → build → swap → prove → sweep（含 S 層）→ gate → report。
-        <strong>判決全部是純函式</strong>，沒有一行 LLM。</p></div>
+        <p>verify → [pre-swap-health] → build → swap → prove → sweep（含 S 層）→ gate → probe → [post-swap acceptance] → report。
+        <strong>判決全部是純函式</strong>，沒有一行 LLM。</p>
+        <p>方括號是專案選擇宣告的 <code>acceptance</code>：<code>pre-swap-health</code> 只能問「相依的東西還活著嗎」（登入、最短的一次請求），
+        <code>post-swap</code> 才能判斷功能行為，因為換版之前站台還是<em>正在被取代的那一版</em>——在那時候跑功能驗收，
+        舊版的偶發問題與新版才有的行為都會擋住新版。把功能驗收宣告在換版前，ship 會拒絕（除非明確宣告獨立的 staging 實例）。</p></div>
     </div>
   </div>
 
