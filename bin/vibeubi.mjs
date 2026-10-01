@@ -149,7 +149,7 @@ const COMMANDS = {
     // printed "reads" while its definition said it mutates — the number right
     // and the field next to it still saying the old thing.
     for (const s of SHIP_STEPS) {
-      say(`  ${s.mutates ? C.yellow + "mutates" + C.off : C.dim + "reads  " + C.off}  ${s.id}`)
+      say(`  ${s.mutates ? C.yellow + "mutates" + C.off : C.dim + "reads  " + C.off}  ${s.id}${s.optional ? C.dim + "  (only if acceptance is declared)" + C.off : ""}`)
     }
 
     say(`\n${C.bold}proof${C.off}`)
@@ -580,7 +580,8 @@ ${C.bold}vibeubi${C.off} — the gate that remembers so you do not have to
   ${C.bold}viz${C.off}       export a diagram IR   --format ir|archify|mermaid
   ${C.bold}scan${C.off}      S0–S4 security layers  --layer S0,S1,S2,S4 [--base URL]
   ${C.bold}adopt${C.off}     claim every orphan  [--dry-run] [--only area=x]
-  ${C.bold}ship${C.off}      verify → build → swap → prove → sweep → gate → report
+  ${C.bold}ship${C.off}      verify → [pre-swap-health] → build → swap → prove → sweep → gate → probe → [post-swap acceptance] → report
+            ([ ] = only if the project declares "acceptance")
   ${C.bold}probe${C.off}     order the skill step, or judge what it returned  [--judge] [--artifact ID]
             no config needed: --declared <file> --base <url> --artifact <id>
   ${C.bold}rollback${C.off}  put the previous build back, and prove it

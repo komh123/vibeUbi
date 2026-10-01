@@ -24,6 +24,13 @@
  *     minutes on was about a different tree.
  *   · rollback is not finished when the files move back. It is finished when
  *     the running service is observed serving the old artifact.
+ *   · functional ACCEPTANCE is placed after the swap and after every cheaper
+ *     judge, because before the swap `base` is still the build being replaced.
+ *     The only thing allowed earlier is `pre-swap-health`, which may refuse but
+ *     has nothing to roll back because it runs before anything is mutated.
+ *
+ *   verify -> [pre-swap-health] -> build -> swap -> prove -> sweep -> gate
+ *          -> probe -> [post-swap acceptance] -> report
  */
 import { execFile, spawn } from "node:child_process"
 import { mkdir, writeFile, readFile, rm } from "node:fs/promises"
@@ -36,26 +43,35 @@ import {
   nodeHeapMb, heapOomMessage, ceilingEffect, HEAP_FLOOR_MB,
   proofDiscrimination, trimProofHistory, runtimeFloorVerdict,
   probeOrder, orderVerdict,
+  acceptanceContract, preSwapBehaviourVerdict, acceptanceOrder,
 } from "../../kernel/src/index.mjs"
+import { resolveAcceptance, judgeRounds, observeBase, acceptanceSummary } from "./acceptance.mjs"
 const exec = promisify(execFile)
 
 export const SHIP_STEPS = [
   { id: "verify",  mutates: false, what: "typecheck, unit suites (each must show it actually ran tests), offline layers" },
+  { id: "health",  mutates: false, optional: true, what: "only if `acceptance.phase` is pre-swap-health: are the dependencies alive? Liveness only, time-bounded; a failure REFUSES before anything is mutated" },
   { id: "build",   mutates: false, what: "build into a scratch directory — never into the live one" },
   { id: "swap",    mutates: true,  what: "refuse if the tree changed since verify, then rename into place keeping the old build, and restart" },
   { id: "prove",   mutates: false, what: "observe, from OUTSIDE the process, that the running service serves the new artifact" },
   { id: "sweep",   mutates: false, what: "the layers, against the running site" },
   { id: "gate",    mutates: true,  what: "any P0 red or errored layer → roll back, and prove the rollback" },
   { id: "probe",   mutates: true,  what: "hand a SKILL the registry's P0 pages, judge what it reports, roll back on a P0 red" },
+  { id: "acceptance", mutates: true, optional: true, what: "only if `acceptance.phase` is post-swap: functional behaviour against the NEW build, judged like the probe; a P0 red rolls back and the rollback is proved" },
   { id: "report",  mutates: false, what: "write the evidence" },
 ]
 
 /** Budgets: at least 5 minutes, and 6×–40× the worst observed time. */
 /** Measured on real runs. Re-measure rather than widen: a budget you raise
  *  because something got slow stops being a limit. */
-export const OBSERVED_MS = { verify: 60_000, build: 90_000, swap: 20_000, prove: 15_000, sweep: 60_000, gate: 30_000, probe: 120_000, report: 8_000 }
+export const OBSERVED_MS = { verify: 60_000, health: 10_000, build: 90_000, swap: 20_000, prove: 15_000, sweep: 60_000, gate: 30_000, probe: 120_000, acceptance: 120_000, report: 8_000 }
 /** At least 5 minutes, at least 6x the worst observed, no more than 40x. */
-export const BUDGET_MS   = { verify: 600_000, build: 900_000, swap: 300_000, prove: 300_000, sweep: 600_000, gate: 300_000, probe: 1_800_000, report: 300_000 }
+export const BUDGET_MS   = { verify: 600_000, health: 300_000, build: 900_000, swap: 300_000, prove: 300_000, sweep: 600_000, gate: 300_000, probe: 1_800_000, acceptance: 1_800_000, report: 300_000 }
+
+/** step id -> its index in SHIP_STEPS. Step events carry the INDEX (the CLI reads
+ *  `SHIP_STEPS[e.n]`), so no call site may type a number: inserting a step used
+ *  to mean renumbering every early exit by hand. */
+const I = Object.fromEntries(SHIP_STEPS.map((s, i) => [s.id, i]))
 
 /**
  * The content hash of the tree right now.
@@ -203,15 +219,57 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
     return { outcome, reason, outDir }
   }
 
+  /** Acceptance is optional. A step nobody declared is SKIPPED — said once, in
+   *  the step stream — and does not appear in the n/total count, so a project
+   *  that never opted in sees the same run it always did. */
+  const resolved = resolveAcceptance({ config, target })
+  const acc = resolved.decl
+  const hasHealth = acc?.phase === "pre-swap-health"
+  const hasPost = acc?.phase === "post-swap"
+  const active = SHIP_STEPS.filter((s) =>
+    s.id === "probe" ? config.probe?.skill !== false
+    : !s.optional || (s.id === "health" ? hasHealth : hasPost))
+  const head = (id, text) => say("head", `${active.findIndex((s) => s.id === id) + 1}/${active.length}  ${text}`)
+  const unreached = (...ids) => { for (const id of ids) if (id !== "acceptance" || hasPost) step(I[id], id, "unreached") }
+  /** What acceptance said, for the report. Set when the step has run. */
+  let accReport
+  let healthCells = []
+
   /* ── 0 · can this adapter prove anything at all? ─────────────────────── */
   const contract = proofContract(target.proofClaim ?? {})
   if (!contract.ok) {
-    for (const s of SHIP_STEPS) step(SHIP_STEPS.indexOf(s), s.id, "unreached")
+    for (const s of SHIP_STEPS) step(I[s.id], s.id, "unreached")
     say("bad", contract.reason)
     say("bad", target.proofClaim?.source ?? "")
     return finish("refused", "proof contract: " + contract.reason)
   }
   say("ok", `proof: ${target.proofClaim.source}`)
+
+  /* ── 0b · may this acceptance declaration mean what it says? ──────────── */
+  /**
+   * Checked here, beside the proof contract, for the same reason: it is
+   * refused BEFORE anything runs. A functional check placed before the swap
+   * judges the build being replaced — it is the reason this step exists — so
+   * that refusal costs nothing now and costs a blocked deploy later.
+   */
+  let stagingWarning = null
+  if (resolved.error) {
+    for (const s of SHIP_STEPS) step(I[s.id], s.id, "unreached")
+    say("bad", resolved.error)
+    return finish("refused", "acceptance: " + resolved.error)
+  }
+  if (acc) {
+    const behaviour = preSwapBehaviourVerdict(acc, { productionBase: config.base })
+    const wiring = acceptanceContract(acc, { productionBase: config.base })
+    if (behaviour.refuse || !wiring.ok) {
+      for (const s of SHIP_STEPS) step(I[s.id], s.id, "unreached")
+      if (behaviour.refuse) say("bad", behaviour.reason)
+      if (!wiring.ok) say("bad", wiring.reason)
+      return finish("refused", "acceptance: " + (behaviour.refuse ? behaviour.reason : wiring.reason))
+    }
+    if (behaviour.warn) { stagingWarning = behaviour.reason; say("warn", behaviour.reason) }
+    say("ok", `acceptance: ${acc.items.length} item(s), phase ${acc.phase} (declared on ${resolved.source})`)
+  }
 
   /* ── budgets are a registry too ──────────────────────────────────────── */
   /**
@@ -227,8 +285,8 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
   if (!budgets.ok) say("warn", budgets.reason)
 
   /* ── 1 · verify ──────────────────────────────────────────────────────── */
-  step(0, "verify", "run")
-  say("head", "1/7  verify — nothing is built until this is green")
+  step(I.verify, "verify", "run")
+  head("verify", "verify — nothing is built until this is green")
 
   const checks = config.verify ?? []
   if (checks.length === 0) say("warn", "no verify steps configured — this ship proves nothing about the code")
@@ -311,7 +369,7 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
     if (id === "verify" && checks.length === 0) continue
     const h = heapFor(id)
     if (!h.tooSmall) continue
-    step(0, "verify", "fail")
+    step(I.verify, "verify", "fail")
     say("bad", `${id}: ${h.why}`)
     say("dim", `raise the memory limit on this container, or set heapMb explicitly if you know this step fits in less than ${HEAP_FLOOR_MB} MB`)
     return finish("refused", `the memory fence for ${id} (${h.numbers?.cgroupLimitMb} MB) is below this pipeline's floor`)
@@ -342,7 +400,7 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
       })
       const rv = runtimeFloorVerdict({ step: "your verify steps", running: stepNode, floor })
       if (!rv.ok) {
-        step(0, "verify", "fail")
+        step(I.verify, "verify", "fail")
         say("bad", rv.reason)
         say("dim", `this pipeline is on ${process.version}; what a step gets is a different question`)
         return finish("refused", `steps would run on ${stepNode ?? "an unreadable node"}, below ${floor}`)
@@ -357,9 +415,9 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
       cwd: root, outDir, timeoutMs: budgetMs.verify,
       heapMb: heap.heapMb, env: { __availableMb: mem.availableMb },
     })
-    if (r.timedOut) { step(0, "verify", "fail"); say("bad", `${c.name} hung past its budget — a hang is a named failure, not a slow day`); return finish("refused", `${c.name} timed out`) }
+    if (r.timedOut) { step(I.verify, "verify", "fail"); say("bad", `${c.name} hung past its budget — a hang is a named failure, not a slow day`); return finish("refused", `${c.name} timed out`) }
     if (r.code !== 0) {
-      step(0, "verify", "fail")
+      step(I.verify, "verify", "fail")
       // A V8 OOM is not "the tests failed", and saying so sends people to the
       // wrong place for an hour. It is also self-locking, which is why the
       // second run looks identical and the machine gets blamed.
@@ -369,7 +427,7 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
     if (c.expectsTests) {
       // Exit 0 is not enough. "No bad news" is not "good news".
       const ran = testRanVerdict(c.name, r.out)
-      if (!ran.ok) { step(0, "verify", "fail"); say("bad", ran.reason); return finish("refused", `${c.name} proved nothing`) }
+      if (!ran.ok) { step(I.verify, "verify", "fail"); say("bad", ran.reason); return finish("refused", `${c.name} proved nothing`) }
       say("ok", `${c.name}  ${(r.ms / 1000).toFixed(0)}s · ${ran.passed} pass`)
     } else {
       say("ok", `${c.name}  ${(r.ms / 1000).toFixed(0)}s`)
@@ -379,16 +437,60 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
   /* ── every layer we intend to use must be able to run, BEFORE we mutate ── */
   const wanted = config.layers ?? ["S0", "S2", "S4"]
   const pre = prereqVerdict(wanted, config.prereqs ?? wanted.map((l) => ({ layer: l, ok: true })), config.allowDegraded ?? [])
-  if (!pre.proceed) { step(0, "verify", "fail"); say("bad", pre.reason); return finish("refused", pre.reason) }
+  if (!pre.proceed) { step(I.verify, "verify", "fail"); say("bad", pre.reason); return finish("refused", pre.reason) }
   for (const d of pre.degraded ?? []) say("warn", `${d.layer} degraded by choice: ${d.reason}`)
   say("ok", `all ${pre.layers.length} layer(s) can run`)
 
   const treeAtVerify = await treeHash(root)
-  step(0, "verify", "pass")
+  step(I.verify, "verify", "pass")
+
+  /* ── 1b · pre-swap health — may refuse, can never roll back ─────────────── */
+  /**
+   * Placed after verify and BEFORE build, which is the whole licence: nothing
+   * has been built, swapped or restarted, so a failure here refuses and there
+   * is nothing to undo. That is also why it is not allowed to judge behaviour —
+   * `base` is still the build being replaced, so what it can honestly ask is
+   * whether the world is alive enough to try: login, one short request, the
+   * db / model / sandbox. It judges the build being replaced and says so.
+   */
+  if (hasHealth) {
+    step(I.health, "health", "run")
+    head("health", `pre-swap health — ${acc.items.length} item(s), liveness only, ${Math.round(acc.timeBudgetMs / 1000)}s budget`)
+    const healthBase = acc.staging?.base ?? config.base
+    let servedNow = null
+    try { servedNow = await target.previousArtifactId?.({ base: healthBase }) ?? null } catch { /* nothing served, or unreadable */ }
+    if (!servedNow) say("dim", "no artifact id is readable from the base before the swap — the order is tied to this run instead")
+    const order = acceptanceOrder({ acceptance: acc, artifactId: servedNow ?? `pre-swap:${new Date(started).toISOString()}`, base: healthBase })
+    const timeoutMs = Math.min(acc.timeBudgetMs, budgetMs.health)
+    const j = await judgeRounds({
+      decl: acc, order, phase: acc.phase, timeoutMs, say,
+      look: async () => {
+        const l = await observeBase({ target, base: healthBase, withArtifact: false })
+        return l.ok ? l : null
+      },
+    })
+    healthCells = j.cells
+    for (const c of j.cells) emit({ kind: "cell", cell: c })
+    const built = acceptanceSummary({ decl: acc, source: resolved.source, order, cells: j.cells, flaky: j.flaky, rounds: j.rounds, warning: stagingWarning })
+    accReport = built.summary
+    reportProblems(say, j.cells, built.verdict, "health")
+    if (!built.verdict.ship) {
+      step(I.health, "health", "fail")
+      say("bad", `pre-swap health failed: ${built.verdict.reason} [${built.summary.failed.map((f) => f.id).join(", ")}]`)
+      say("warn", "nothing was built, swapped or restarted — production is untouched, so there is nothing to roll back")
+      unreached("build", "swap", "prove", "sweep", "gate", "probe", "acceptance"); step(I.report, "report", "pass")
+      await writeReport(outDir, { artifactId: null, previousId: servedNow, cells: healthCells, verdict: built.verdict, outcome: "refused", acceptance: accReport })
+      return finish("refused", `pre-swap health: ${built.verdict.reason} [${built.summary.failed.map((f) => f.id).join(", ")}]`)
+    }
+    say("ok", `health: ${built.summary.verified}/${built.summary.ordered} verified${built.summary.warnings.length ? `, ${built.summary.warnings.length} warning(s)` : ""}`)
+    step(I.health, "health", "pass")
+  } else {
+    step(I.health, "health", "skip")
+  }
 
   /* ── 2 · build ───────────────────────────────────────────────────────── */
-  step(1, "build", "run")
-  say("head", "2/7  build into a scratch directory")
+  step(I.build, "build", "run")
+  head("build", "build into a scratch directory")
   let artifactId = ""
   try {
     const bh = heapFor("build")
@@ -397,18 +499,18 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
     if (b?.skipped) say("warn", `build skipped: ${b.skipped}`)
     artifactId = await target.artifactId()
   } catch (err) {
-    step(1, "build", "fail"); say("bad", String(err.message)); return finish("refused", "build failed")
+    step(I.build, "build", "fail"); say("bad", String(err.message)); return finish("refused", "build failed")
   }
-  if (!artifactId) { step(1, "build", "fail"); say("bad", "the build produced no artifact id — nothing to prove later"); return finish("refused", "no artifact id") }
+  if (!artifactId) { step(I.build, "build", "fail"); say("bad", "the build produced no artifact id — nothing to prove later"); return finish("refused", "no artifact id") }
   say("ok", `artifact ${artifactId}`)
-  step(1, "build", "pass")
+  step(I.build, "build", "pass")
 
   /* ── 3 · swap ────────────────────────────────────────────────────────── */
-  step(2, "swap", "run")
-  say("head", "3/7  swap")
+  step(I.swap, "swap", "run")
+  head("swap", "swap")
   const treeAtSwap = await treeHash(root)
   if (treeAtVerify && treeAtSwap && treeAtVerify !== treeAtSwap) {
-    step(2, "swap", "fail")
+    step(I.swap, "swap", "fail")
     say("bad", "the working tree changed since verify. The tree IS the deployment, so that proof was about a different tree.")
     return finish("refused", "tree drift between verify and swap")
   }
@@ -421,23 +523,23 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
     await target.swap()
     await target.restart?.()
   } catch (err) {
-    step(2, "swap", "fail"); say("bad", String(err.message)); return finish("refused", "swap failed")
+    step(I.swap, "swap", "fail"); say("bad", String(err.message)); return finish("refused", "swap failed")
   }
   say("ok", `swapped${previousId ? ` ${previousId} → ${artifactId}` : ""}`)
-  step(2, "swap", "pass")
+  step(I.swap, "swap", "pass")
 
   /* ── 4 · prove — the only evidence accepted ──────────────────────────── */
-  step(3, "prove", "run")
-  say("head", "4/7  prove — from OUTSIDE the deployed process")
+  step(I.prove, "prove", "run")
+  head("prove", "prove — from OUTSIDE the deployed process")
   const proofObserved = await readyObservation({ target, config, expected: artifactId, previous: previousId, say })
   const proof = deployProof(proofObserved)
   if (!proof.ok) {
-    step(3, "prove", "fail")
+    step(I.prove, "prove", "fail")
     say("bad", proof.reason)
     say("warn", "rolling back — the deploy could not be shown to have happened")
     const r = await rollbackAndProve({ target, config, artifactId, previousId, say })
-    step(5, "gate", r.ok ? "pass" : "fail")
-    step(4, "sweep", "unreached"); step(6, "probe", "unreached"); step(7, "report", "pass")
+    step(I.gate, "gate", r.ok ? "pass" : "fail")
+    unreached("sweep", "probe", "acceptance"); step(I.report, "report", "pass")
     return finish(r.ok ? "rolled back" : "rollback unproven", proof.reason)
   }
   say("ok", `the running service serves ${artifactId}`)
@@ -474,11 +576,11 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
     }
   } catch { /* history is an aid, never a gate — a broken file must not stop a ship */ }
 
-  step(3, "prove", "pass")
+  step(I.prove, "prove", "pass")
 
   /* ── 5 · sweep ───────────────────────────────────────────────────────── */
-  step(4, "sweep", "run")
-  say("head", "5/7  sweep — judged the moment each cell is known")
+  step(I.sweep, "sweep", "run")
+  head("sweep", "sweep — judged the moment each cell is known")
   const cells = []
   let stopped = null
   for await (const cell of config.sweep({ root, config, base: config.base, discovered })) {
@@ -488,11 +590,11 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
     const early = earlyVerdict(cells)
     if (early.stop && !stopped) { stopped = early.verdict; break }
   }
-  step(4, "sweep", stopped ? "fail" : "pass")
+  step(I.sweep, "sweep", stopped ? "fail" : "pass")
 
   /* ── 6 · gate ────────────────────────────────────────────────────────── */
-  step(5, "gate", "run")
-  say("head", "6/8  gate")
+  step(I.gate, "gate", "run")
+  head("gate", "gate")
   const all = gateCells({ cells, degraded: (pre.degraded ?? []).map((d) => d.layer) })
   let verdict = verdictFor(all)
 
@@ -516,12 +618,12 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
   if (!verdict.ship) {
     say("bad", verdict.reason)
     const r = await rollbackAndProve({ target, config, artifactId, previousId, say })
-    step(5, "gate", r.ok ? "pass" : "fail"); step(6, "probe", "unreached"); step(7, "report", "pass")
-    await writeReport(outDir, { artifactId, previousId, cells: all, verdict, outcome: r.ok ? "rolled back" : "rollback unproven" })
+    step(I.gate, "gate", r.ok ? "pass" : "fail"); unreached("probe", "acceptance"); step(I.report, "report", "pass")
+    await writeReport(outDir, { artifactId, previousId, cells: [...healthCells, ...all], verdict, outcome: r.ok ? "rolled back" : "rollback unproven", acceptance: accReport })
     return finish(r.ok ? "rolled back" : "rollback unproven", verdict.reason)
   }
   say("ok", verdict.reason)
-  step(5, "gate", "pass")
+  step(I.gate, "gate", "pass")
 
   /* ── 7 · probe — a SKILL checks what the registry says matters ───────── */
   /**
@@ -550,17 +652,17 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
   let probeUnverified = 0
   const probeCfg = config.probe ?? {}
   if (probeCfg.skill !== false) {
-    step(6, "probe", "run")
+    step(I.probe, "probe", "run")
     const order = probeOrder({
       discovered, declared: config.declared ?? [], artifactId,
       base: config.base, skill: probeCfg.skill ?? "dom-test",
       only: probeCfg.only ?? ["P0"],
     })
-    say("head", `7/8  probe — ${order.items.length} item(s) for ${order.skill}`)
+    head("probe", `probe — ${order.items.length} item(s) for ${order.skill}`)
 
     if (order.items.length === 0) {
       say("warn", `nothing to probe: no ${(probeCfg.only ?? ["P0"]).join("/")} page is both discovered and declared`)
-      step(6, "probe", "pass")
+      step(I.probe, "probe", "pass")
     } else {
       const orderPath = join(outDir, "probe-order.json")
       await writeFile(orderPath, JSON.stringify(order, null, 2), "utf8")
@@ -579,19 +681,7 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
        * site down, so the skill honestly reports it could not load anything)
        * and the benign one (an expired test password) produce the same word.
        */
-      const liveness = await fetch(config.base, { redirect: "manual" })
-        .then((r) => ({ ok: r.status < 500, status: r.status }))
-        .catch((e) => ({ ok: false, unreachable: e.cause?.code ?? e.message }))
-      // And which artifact is it serving NOW? `prove` established this minutes
-      // ago; anything else here means something replaced it in between, and the
-      // skill's report — however true — is about a build that is gone.
-      if (liveness.ok) {
-        try {
-          const seen = await target.proof({ base: config.base, expected: artifactId, previous: previousId })
-          if (typeof seen?.observed === "string" && seen.observed.includes(artifactId)) liveness.artifact = artifactId
-          else if (typeof seen?.observed === "string" && seen.observed.trim()) liveness.artifact = seen.observed.trim().slice(0, 120)
-        } catch { /* the adapter could not look; the null case is already named */ }
-      }
+      const liveness = await observeBase({ target, base: config.base, artifactId, previousId, withArtifact: true })
       if (!liveness.ok) say("bad", `base is not serving at probe time: ${liveness.unreachable ?? `HTTP ${liveness.status}`}`)
 
       const judged = orderVerdict({ order, result, liveness, noiseIsFailure: probeCfg.noiseIsFailure ?? true })
@@ -614,30 +704,95 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
         for (const c of judged.cells.filter((x) => x.status !== "pass")) {
           say("bad", `  ${c.feature} — ${c.skillVerdict ?? c.status}: ${c.reason}`)
         }
-        step(6, "probe", "fail")
+        step(I.probe, "probe", "fail")
         const r = await rollbackAndProve({ target, config, artifactId, previousId, say })
-        step(7, "report", "pass")
-        await writeReport(outDir, { artifactId, previousId, cells: [...all, ...judged.cells], verdict: probeVerdict, outcome: r.ok ? "rolled back" : "rollback unproven" })
+        unreached("acceptance"); step(I.report, "report", "pass")
+        await writeReport(outDir, { artifactId, previousId, cells: [...healthCells, ...all, ...judged.cells], verdict: probeVerdict, outcome: r.ok ? "rolled back" : "rollback unproven", acceptance: accReport })
         return finish(r.ok ? "rolled back" : "rollback unproven", probeVerdict.reason)
       }
       say("ok", probeVerdict.reason)
-      step(6, "probe", judged.unverified ? "pass" : "pass", { unverified: judged.unverified, verified: judged.verified })
+      step(I.probe, "probe", judged.unverified ? "pass" : "pass", { unverified: judged.unverified, verified: judged.verified })
       all.push(...judged.cells)
       if (judged.unverified) probeUnverified = judged.unverified
     }
   } else {
-    step(6, "probe", "unreached")
+    step(I.probe, "probe", "unreached")
     say("dim", "probe step disabled (probe.skill: false)")
   }
 
-  /* ── 8 · report ──────────────────────────────────────────────────────── */
-  step(7, "report", "run")
-  await writeReport(outDir, { artifactId, previousId, cells: all, verdict, outcome: "shipped" })
-  step(7, "report", "pass")
-  say("head", `8/8  report ${outDir}`)
-  return finish("shipped", probeUnverified
+  /* ── 8 · post-swap acceptance — functional behaviour, on the NEW build ─── */
+  /**
+   * After EVERYTHING cheaper, and mutating, for the reasons the probe gives —
+   * with one more that is the reason this step exists: it is the only place
+   * functional behaviour can be judged, because the new build is now the thing
+   * being served. Before the swap `base` is the build being replaced, so a pass
+   * there is about the wrong build and a failure there blocks the right one.
+   *
+   * Judged by the probe's own judge, so a P0 red rolls back through the same
+   * `rollbackAndProve`, and a P1/P2 red is a recorded warning that ships.
+   */
+  let accTail = ""
+  if (hasPost) {
+    step(I.acceptance, "acceptance", "run")
+    const order = acceptanceOrder({ acceptance: acc, artifactId, base: config.base })
+    head("acceptance", `acceptance — ${order.items.length} item(s) against the new build`)
+    const timeoutMs = Math.min(acc.timeBudgetMs ?? budgetMs.acceptance, budgetMs.acceptance)
+    const j = await judgeRounds({
+      decl: acc, order, phase: acc.phase, timeoutMs, say,
+      look: () => observeBase({ target, base: config.base, artifactId, previousId, withArtifact: true }),
+    })
+    for (const c of j.cells) emit({ kind: "cell", cell: c })
+    const built = acceptanceSummary({ decl: acc, source: resolved.source, order, cells: j.cells, flaky: j.flaky, rounds: j.rounds })
+    accReport = built.summary
+    const s = built.summary
+    say(s.unverified === 0 ? "ok" : "warn",
+      `${s.verified}/${s.ordered} acceptance item(s) verified` +
+      (s.unverified ? `, ${s.unverified} unverified (could not be measured — the deploy stands)` : ""))
+    reportProblems(say, j.cells, built.verdict, "acceptance")
+
+    if (!built.verdict.ship) {
+      const ids = s.failed.map((f) => f.id).join(", ")
+      say("bad", `${built.verdict.reason} [${ids}]`)
+      step(I.acceptance, "acceptance", "fail")
+      const r = await rollbackAndProve({ target, config, artifactId, previousId, say })
+      step(I.report, "report", "pass")
+      await writeReport(outDir, { artifactId, previousId, cells: [...healthCells, ...all, ...j.cells], verdict: built.verdict, outcome: r.ok ? "rolled back" : "rollback unproven", acceptance: accReport })
+      return finish(r.ok ? "rolled back" : "rollback unproven", `acceptance: ${built.verdict.reason} [${ids}]`)
+    }
+    say("ok", `acceptance: ${built.verdict.reason}`)
+    step(I.acceptance, "acceptance", "pass", { unverified: s.unverified, verified: s.verified })
+    all.push(...j.cells)
+    accTail = [
+      s.unverified ? ` · ${s.unverified} acceptance item(s) could not be verified` : "",
+      s.warnings.length ? ` · acceptance warning(s): ${s.warnings.map((w) => w.id).join(", ")}` : "",
+      s.flaky.length ? ` · flaky: ${s.flaky.map((f) => f.feature).join(", ")}` : "",
+    ].join("")
+  } else {
+    step(I.acceptance, "acceptance", "skip")
+  }
+
+  /* ── 9 · report ──────────────────────────────────────────────────────── */
+  step(I.report, "report", "run")
+  await writeReport(outDir, { artifactId, previousId, cells: [...healthCells, ...all], verdict, outcome: "shipped", acceptance: accReport })
+  step(I.report, "report", "pass")
+  head("report", `report ${outDir}`)
+  return finish("shipped", (probeUnverified
     ? `${verdict.reason} · ${probeUnverified} P0 page(s) could not be verified`
-    : verdict.reason)
+    : verdict.reason) + accTail)
+}
+
+/**
+ * Say, per item, what was not clean — an operator's first line should name the
+ * item, not send them to report.json to find out which one.
+ */
+function reportProblems(say, cells, verdict, what) {
+  const blocking = new Set(verdict.blocking)
+  for (const c of cells) {
+    if (c.flaky) say("warn", `${what} FLAKY — ${c.feature}: ${c.reason}`)
+    else if (blocking.has(c)) say("bad", `  ${c.feature} — ${c.skillVerdict ?? c.status}: ${c.reason}`)
+    else if (c.status === "fail") say("warn", `${what} warning (${c.priority}) — ${c.feature}: ${c.reason}`)
+    else if (c.status === "blocked") say("warn", `  ${c.feature} — ${c.skillVerdict ?? "not reported"}: ${c.reason}`)
+  }
 }
 
 /** A rollback is not done when the files move. It is done when the old

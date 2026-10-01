@@ -1,9 +1,10 @@
 # The probe step — plugging a skill into the pipeline
 
 ```
-verify → build → swap → prove → sweep → gate → probe → report
-                                                 ↑
-                                          a SKILL runs here
+verify → [pre-swap-health] → build → swap → prove → sweep → gate → probe → [post-swap acceptance] → report
+                                                                    ↑                    ↑
+                                                             a SKILL runs here   a project's own
+                                                                                 functional checks
 ```
 
 ## What it is
@@ -294,13 +295,36 @@ tree drift between `verify` and `swap` — by design, because the tree IS the
 deployment and a proof taken before the edit was about a different tree. A peer
 lost forty minutes to exactly this. **Let the ship finish, then bump.**
 
-### `unmeasuredBlocks` has no correct use inside ship
+### `unmeasuredBlocks` has no correct use for BEHAVIOUR inside ship
 
 The obvious idea — run the step strictly before the swap, loosely after — is
 wrong, and the peer who proposed it retracted it after asking the right
 question: *what is `base` pointing at in that moment?* Before the swap the site
 is still serving the **previous** artifact, so a strict pre-swap pass judges the
 build you are replacing. It needs a staging instance to mean anything.
+
+That is no longer only advice. **The `acceptance` interface (PORTING.md §3b)
+makes it a rule**, in the kernel, with the same reasoning:
+
+- functional behaviour runs **`post-swap`**, after the swap, `prove`, `sweep`,
+  `gate` and the probe — the only point at which the thing being served is the
+  thing being judged — and a P0 red rolls back through the same
+  `rollbackAndProve`;
+- before the swap the only thing allowed is **`pre-swap-health`**: liveness,
+  explicitly `healthOnly`, with a time budget, whose failure *refuses* the ship
+  while nothing has been mutated. This is the one honest use of strict, pre-swap
+  judging (`unmeasuredBlocks` there means "I could not see that the login works",
+  which costs nothing to act on) — and it is about the dependencies and the build
+  being replaced, never about the feature;
+- a project that declares a pre-swap functional check is **refused** with this
+  argument, unless it names a separate `staging: { base }` that differs from the
+  production base — and even then it is warned, because vibeUbi cannot see which
+  build staging holds.
+
+Two deploys of one project were each blocked three times by exactly this
+mistake — a strict acceptance stage run before the swap judged the build being
+replaced, so old-build flakiness and behaviour that only exists in the new build
+both blocked the new build.
 
 ## Using a different skill
 

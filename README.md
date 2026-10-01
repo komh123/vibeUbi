@@ -9,7 +9,7 @@ decays silently.** Features decay. So does the security surface.
 ```bash
 npx vibeubi plan        # what a run would do; touches nothing
 npx vibeubi orphans     # everything discovered that nobody claimed
-npx vibeubi ship        # verify → build → swap → prove → sweep → gate → report
+npx vibeubi ship        # verify → [pre-swap-health] → build → swap → prove → sweep → gate → probe → [post-swap acceptance] → report
 ```
 
 ---

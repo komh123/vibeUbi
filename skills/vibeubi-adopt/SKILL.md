@@ -10,7 +10,7 @@ Three steps get a project gated. You do steps 1 and 2. Step 3 is machinery.
 ```
 1 WIRE   probe the project, write the adapter, list every orphan     ← you
 2 ADOPT  turn each orphan into a declaration                          ← you
-3 SHIP   verify → build → swap → prove → sweep → gate → report        ← deterministic
+3 SHIP   verify → build → swap → prove → sweep → gate → probe → report  ← deterministic
 ```
 
 ## Step 1 · WIRE (once per project)

@@ -96,6 +96,45 @@ subset is a refusal on the whole — same decision, minutes earlier. A property
 test covers every combination of status × priority, because if that function
 ever starts counting, early judging silently becomes unsound.
 
+## The order of a ship is a safety property
+
+```
+verify → [pre-swap-health] → build → swap → prove → sweep → gate → probe → [post-swap acceptance] → report
+```
+
+Every position is a claim about what can be undone and what is true there:
+
+| step | what is true at this point | so |
+|---|---|---|
+| `verify` | nothing built, nothing touched | refusing is free |
+| `pre-swap-health` | still nothing touched; `base` is the build being REPLACED | may only ask "is the world alive?"; a failure refuses, no rollback exists or is needed |
+| `build` … `swap` | the first mutation is the swap | the tree hash is checked here, not earlier |
+| `prove` | production serves the new artifact, shown from outside | the first moment a behaviour question has a meaningful subject |
+| `sweep` · `gate` · `probe` | cheapest judges first; each P0 red rolls back | an expensive check is not paid for a deploy that already failed a cheaper one |
+| `post-swap acceptance` | the new build is being served and everything cheaper passed | functional behaviour is judged HERE or nowhere; a P0 red rolls back, a P1/P2 red is a warning |
+| `report` | last, so it describes what actually happened | |
+
+**Why acceptance is not earlier.** Before the swap `base` is production, and
+production is the previous build. A functional check run there judges the build
+being replaced: its flakiness blocks the new build, and behaviour that exists
+only in the new build fails against the old. Two deploys of one project were
+each blocked three times by exactly this. So the kernel refuses it
+(`preSwapBehaviourVerdict`) rather than documenting it — unless the project names
+a separate staging instance, in which case it is allowed and warned.
+
+**Why there is a pre-swap step at all.** Because "is login even working" is a
+question about the world, not about the build, and a ship that discovers a dead
+dependency after the swap rolls back a deploy that was fine. Before the swap
+that costs a refusal. It is bounded in time, declares `healthOnly`, and is
+refused if any item claims to judge behaviour — the flag is a claim, the items
+are the evidence.
+
+**One judge.** Acceptance results are turned into cells by the probe's own
+`orderVerdict` and judged by `verdictFor` — one definition of "P0 red", `error`
+and `blocked` for the gate, the probe and acceptance. Severity is declared per
+item and never defaulted (`acceptanceContract`): defaulting to P0 makes a
+decoration roll back deploys, and defaulting to P2 makes a gate that cannot.
+
 ## The AI-driven split
 
 ```

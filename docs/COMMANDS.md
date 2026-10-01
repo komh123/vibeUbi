@@ -45,6 +45,27 @@ vibeubi rollback                # previous build back — and proved
 vibeubi viz --format archify    # diagram IR
 ```
 
+### What `ship` does, in order
+
+```
+verify → [pre-swap-health] → build → swap → prove → sweep → gate → probe → [post-swap acceptance] → report
+```
+
+`[ ]` steps exist only if the project declares `acceptance` (see PORTING.md);
+otherwise they are skipped and a ship is what it always was. The order is a
+safety property — see ARCHITECTURE.md.
+
+| step | mutates | a failure |
+|---|---|---|
+| `pre-swap-health` | no | **refuses**; nothing was built, swapped or restarted, so nothing is rolled back |
+| `gate`, `probe`, `post-swap acceptance` | yes | P0 red or error → **rolls back**, and the rollback is proved from outside |
+| a P1/P2 acceptance red | — | recorded in `report.json` (`acceptance.warnings`) and warned; does not roll back |
+| a P0 that failed and then passed on retry | — | ships, reported `flaky` (`acceptance.flaky`) |
+
+`report.json` carries an `acceptance` block (phase, verified/unverified, `failed`
+with item ids, `warnings`, `flaky`) and the acceptance cells (`layer:
+"acceptance"`) beside every other cell. `vibeubi plan` marks the optional steps.
+
 ## Needs a human — the agent may prepare, not perform
 
 ```bash

@@ -5,7 +5,7 @@ Three steps. The middle one is the one you cannot skip by automation.
 ```
 1 WIRE    probe the project, write the adapter, list every orphan   ← agent
 2 ADOPT   turn each orphan into a declaration                       ← agent
-3 SHIP    verify → build → swap → prove → sweep → gate → report     ← deterministic
+3 SHIP    verify → build → swap → prove → sweep → gate → probe → report ← deterministic
 ```
 
 ## 1 · Wire
@@ -50,6 +50,69 @@ Apply the same shape to each new feature kind you add.
 
 Nothing to configure. The kernel decides; the adapter acts.
 
+## 3b · Acceptance — functional behaviour, if the project has any worth gating
+
+Optional. Without it a ship is exactly what it was. With it, the order is
+
+```
+verify → [pre-swap-health] → build → swap → prove → sweep → gate → probe → [post-swap acceptance] → report
+```
+
+Declare it once, on the project config (`vibeubi.config.mjs`) **or** on the
+target adapter (`ctx.target({ …, acceptance })`). Both is refused — two
+declarations and no rule for which one is the gate.
+
+```js
+acceptance: {
+  phase: "post-swap",                        // "post-swap" | "pre-swap-health" — nothing else
+  items: [
+    { id: "acc:chat-answers", severity: "P0", attempts: 2 },   // P0 red → roll back (and prove it)
+    { id: "acc:csv-export",   severity: "P1" },                // P1/P2 red → recorded, warned, ships
+  ],
+  // vibeUbi writes the ORDER, your function does the work and returns the
+  // RESULT. Same shape as the probe's: { skill, artifactId, observedArtifact?,
+  // observed: [{ id, verdict: PASS|FAIL|BLOCKED|…, why? }] }.
+  async fulfil(order, { signal, attempt }) { /* run your scenarios against order.base */ },
+}
+```
+
+| field | required | meaning |
+|---|---|---|
+| `phase` | yes | `post-swap`: judged against the NEW build, rolls back on a P0 red. `pre-swap-health`: liveness only, before anything is built. |
+| `items[].id` | yes, unique | echoed back in the result row, and named in the report and the outcome |
+| `items[].severity` | **yes — never defaulted** | `P0` / `P1` / `P2`. A missing one is refused at wiring time: defaulting to P0 makes a decoration roll back deploys, defaulting to P2 makes a rollback gate that cannot roll back |
+| `items[].attempts` | no, default **1** | P0 only, 1–5. A failed P0 is asked about again before it counts; a pass-on-retry ships and is reported as **`flaky`** with the failure it overwrote — never silently green |
+| `items[].judges` | pre-swap: yes | `"health"` or `"behaviour"` |
+| `fulfil` | yes | produces the result. `signal` aborts at the time budget |
+| `timeBudgetMs` | pre-swap: yes (≤ 120 000) | post-swap: optional, capped by the step budget. A fulfiller that overruns is stopped, and that is a failure, not a hang |
+| `healthOnly` | pre-swap: yes | must be declared. `true` — the phase may not assert feature behaviour |
+| `staging` | no, pre-swap only | `{ base }`, a separate instance. See below |
+| `skill` | no | name echoed in the result; default `"acceptance"` |
+
+What **pre-swap-health** is for: *can we even try?* — login works, one short
+request answers, the db / model / sandbox respond. It runs after `verify` and
+before `build`, so a failure **refuses** the ship while nothing has been built,
+swapped or restarted: there is nothing to roll back, and the outcome says so. It
+judges the build being replaced and the dependencies, not your feature.
+
+**Declaring a functional check before the swap is refused**, with SKILL-STEP's
+argument: before the swap `base` is still the previous build, so a pre-swap pass
+judges the build you are replacing — old-build flakiness blocks the new build,
+and behaviour that exists only in the new one fails against the old. That covers
+a `pre-…` phase other than `pre-swap-health`, `healthOnly` anything but `true`,
+and any item with `judges: "behaviour"` even under `healthOnly: true`.
+
+The one exception is `staging: { base }` where `base` differs from the
+production `base`. It is allowed, **with a warning on every run**: vibeUbi
+cannot see which build staging holds, so that is your promise and the report
+records it.
+
+Result states are the probe's — same judge, same `verdictFor`: only `FAIL`
+rolls back after the swap; `BLOCKED` / not reported are counted as unverified
+and printed, not rolled back (rolling back a good deploy for a broken fixture
+is worse than the gap). Before the swap the same absence refuses, because that
+costs nothing.
+
 ## Porting checklist
 
 - [ ] `vibeubi plan` lists your plugins and prints a proof source
@@ -58,6 +121,8 @@ Nothing to configure. The kernel decides; the adapter acts.
 - [ ] a deliberately broken proof makes `ship` refuse (test it once, on purpose)
 - [ ] `vibeubi guard --action ignore` exits 1
 - [ ] a test file added outside every suite makes `verify` name it
+- [ ] if you declared `acceptance`: a deliberately failing P0 item rolls back and the rollback is proved
+- [ ] and a `pre-swap` functional item is refused (`vibeubi plan` shows the steps; try it once, on purpose)
 
 The fourth item is worth the ten minutes. A gate you have never seen refuse is
 a gate you do not know works.
