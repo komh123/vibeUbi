@@ -218,9 +218,11 @@ export function acceptanceOrder({ acceptance, artifactId, base }) {
       ? {
           healthOnly: acceptance.healthOnly === true,
           timeBudgetMs: acceptance.timeBudgetMs,
-          limits:
-            "this runs BEFORE the swap, against the build being replaced and the dependencies it needs. " +
-            "Report whether each is alive; do not assert what any feature does — that is judged after the swap.",
+          limits: acceptance.healthOnly === true
+            ? "this runs BEFORE the swap, against the build being replaced and the dependencies it needs. " +
+              "Report whether each is alive; do not assert what any feature does — that is judged after the swap."
+            : "this runs BEFORE the swap, against the separate staging instance the project declared. Behaviour may be " +
+              "asserted, but it is about whatever build staging holds — which vibeUbi cannot see — so report the artifact you read off it.",
         }
       : {}),
     contract: {
@@ -274,8 +276,10 @@ export function retryItems({ order, cells, attemptsDone }) {
  * Collapse attempt rounds into the cells the gate will judge — without losing
  * what the retry hid.
  *
- * The latest round wins, because it is the most recent measurement. But a P0
- * that failed and then passed is `flaky`, carried on the cell with the failure
+ * The latest round wins, because it is the most recent measurement — with one
+ * exception: a retry may only turn a `fail` into a `pass`. A fail followed by
+ * `blocked` or `error` stays a `fail`, since an absence of evidence must not
+ * overwrite evidence. A P0 that failed and then passed is `flaky`, carried on the cell with the failure
  * it overwrote in its reason, and listed separately for the report. A retry
  * that quietly turns red into green is how a gate gets decorative; this makes
  * the pass cost a visible word.
@@ -301,6 +305,16 @@ export function foldAttempts(rounds) {
         reason: `FLAKY: passed on attempt ${h.length} after failing ${failures.length} time(s) — ${failures[0]}`,
       })
       flaky.push({ feature, attempts: h.length, failures })
+    } else if (failures.length > 0 && last.status !== "fail") {
+      // A retry may turn a FAIL into a pass, and nothing else. Positive
+      // evidence of a failure is not overwritten by a later ABSENCE of
+      // evidence: a P0 that failed and then could not be re-measured
+      // (`blocked` never gates) would otherwise ship on a measurement that
+      // did not happen.
+      cells.push({
+        ...last, status: "fail", attempts: h.length,
+        reason: `an earlier attempt FAILED (${failures[0]}) and the retry could not clear it: ${last.reason}`,
+      })
     } else {
       cells.push({ ...last, attempts: h.length })
     }

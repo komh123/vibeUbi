@@ -462,13 +462,26 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
     if (!servedNow) say("dim", "no artifact id is readable from the base before the swap — the order is tied to this run instead")
     const order = acceptanceOrder({ acceptance: acc, artifactId: servedNow ?? `pre-swap:${new Date(started).toISOString()}`, base: healthBase })
     const timeoutMs = Math.min(acc.timeBudgetMs, budgetMs.health)
-    const j = await judgeRounds({
-      decl: acc, order, phase: acc.phase, timeoutMs, say,
-      look: async () => {
-        const l = await observeBase({ target, base: healthBase, withArtifact: false })
-        return l.ok ? l : null
-      },
-    })
+    /**
+     * Look at the base BEFORE asking anyone about it. A dead dependency is the
+     * question this step exists to ask, so it refuses on its own evidence —
+     * and a fulfiller that says PASS over a base that is down cannot ship it.
+     */
+    const first = await observeBase({ target, base: healthBase, withArtifact: false })
+    let j
+    if (!first.ok) {
+      const why = first.unreachable ?? `HTTP ${first.status}`
+      say("bad", `the base is not serving before the swap (${healthBase}: ${why}) — a dead dependency is the question this step asks`)
+      j = {
+        cells: [{ feature: "acceptance:liveness", layer: "acceptance", priority: "P0", status: "fail", reason: `the base ${healthBase} is not serving before the swap: ${why}` }],
+        flaky: [], rounds: 0,
+      }
+    } else {
+      j = await judgeRounds({
+        decl: acc, order, phase: acc.phase, timeoutMs, say,
+        look: () => observeBase({ target, base: healthBase, withArtifact: false }),
+      })
+    }
     healthCells = j.cells
     for (const c of j.cells) emit({ kind: "cell", cell: c })
     const built = acceptanceSummary({ decl: acc, source: resolved.source, order, cells: j.cells, flaky: j.flaky, rounds: j.rounds, warning: stagingWarning })

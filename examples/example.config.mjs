@@ -103,4 +103,26 @@ export default {
     skill: "dom-test",
     only: ["P0"],
   },
+
+  /**
+   * Functional behaviour, judged AFTER the swap — optional, off until declared.
+   * See docs/PORTING.md §3b. Commented out because `fulfil` is yours to write.
+   *
+   * Why it is not a pre-swap stage: before the swap `base` is still the
+   * PREVIOUS build, so a pre-swap functional pass judges the build you are
+   * replacing. The only pre-swap form is `phase: "pre-swap-health"` (liveness,
+   * `healthOnly: true`, a `timeBudgetMs`), which refuses and never rolls back.
+   *
+   * acceptance: {
+   *   phase: "post-swap",
+   *   items: [
+   *     { id: "acc:<your-core-flow>", severity: "P0", attempts: 2 },  // red → roll back, proved
+   *     { id: "acc:<a-nice-to-have>", severity: "P1" },               // red → warned, ships
+   *   ],
+   *   async fulfil(order, { signal }) {
+   *     // run your scenarios against order.base, then return
+   *     // { skill: order.skill, artifactId: order.artifactId, observed: [{ id, verdict: "PASS" | "FAIL", why }] }
+   *   },
+   * },
+   */
 }

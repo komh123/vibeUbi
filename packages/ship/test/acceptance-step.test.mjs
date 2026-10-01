@@ -319,6 +319,25 @@ test("before the swap even an UNREPORTED item refuses — 'could not see' is fre
   assert.deepEqual(state.log, [])
 })
 
+test("a base that is DOWN before the swap refuses at once — the fulfiller is not even asked, and cannot say PASS over it", async () => {
+  const dead = http.createServer((_q, s) => { s.writeHead(503); s.end("down") })
+  await new Promise((r) => dead.listen(0, "127.0.0.1", r))
+  const deadBase = `http://127.0.0.1:${dead.address().port}`
+  try {
+    let asked = false
+    const { done, state, text, report } = await go({
+      base: deadBase,
+      acceptance: healthDecl({ fulfil: async (o) => { asked = true; return answer(o, [pass("health:login")]) } }),
+    })
+    assert.equal(done.outcome, "refused")
+    assert.equal(asked, false)
+    assert.deepEqual(state.log, [])
+    assert.match(text, /not serving/i)
+    assert.match(done.reason, /liveness/)
+    assert.equal(report.acceptance.failed.length, 1)
+  } finally { dead.close() }
+})
+
 test("a P1 health failure warns and proceeds — severity means the same thing before the swap", async () => {
   const { done, text } = await go({
     acceptance: healthDecl({

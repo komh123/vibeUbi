@@ -328,3 +328,38 @@ test("a flaky pass does not hide in the verdict's reason either", () => {
   assert.ok(cells.every((c) => c.status === "pass"))
   assert.equal(cells[0].flaky, true, "the flag lives on the cell, which is what the report writes")
 })
+
+test("a retry may only turn a FAIL into a pass — never into an absence (fail, then BLOCKED, is still a failure)", () => {
+  // Positive evidence must not be overwritten by a missing measurement. The
+  // naive fold takes the last round, and `blocked` does not gate: a P0 that
+  // failed and then could not be re-measured would ship.
+  for (const status of ["blocked", "error"]) {
+    const { cells, flaky } = foldAttempts([[cell("a", "fail"), cell("b", "pass")], [cell("a", status)]])
+    const a = cells.find((c) => c.feature === "a")
+    assert.equal(a.status, "fail", `fail then ${status}`)
+    assert.equal(a.attempts, 2)
+    assert.match(a.reason, /earlier attempt/i)
+    assert.match(a.reason, new RegExp(`a ${status}`), "the latest reason is kept too")
+    assert.equal(flaky.length, 0, "it did not pass, so it is not flaky")
+    assert.equal(verdictFor(gateCells({ cells, degraded: [] })).ship, false)
+  }
+})
+
+test("the staging exception does not extend to a phase the contract refuses", () => {
+  // preSwapBehaviourVerdict alone says `warn` here; it is the contract's phase
+  // whitelist that stops it, and the composition is what ship relies on.
+  const d = post({ phase: "pre-swap", staging: { base: "https://staging.example.com" } })
+  assert.equal(preSwapBehaviourVerdict(d, { productionBase: PROD }).refuse, false)
+  assert.equal(acceptanceContract(d, { productionBase: PROD }).ok, false)
+})
+
+test("the order does not tell a staging check that it may not assert behaviour", () => {
+  const h = acceptanceOrder({ acceptance: health(), artifactId: "o", base: "b" })
+  assert.match(h.limits, /do not assert/i)
+  const stg = acceptanceOrder({
+    acceptance: health({ healthOnly: false, staging: { base: "https://s" }, items: [{ id: "f", severity: "P0", judges: "behaviour" }] }),
+    artifactId: "o", base: "https://s",
+  })
+  assert.doesNotMatch(stg.limits ?? "", /do not assert/i)
+  assert.match(stg.limits, /staging/)
+})

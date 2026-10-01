@@ -107,6 +107,17 @@ production `base`. It is allowed, **with a warning on every run**: vibeUbi
 cannot see which build staging holds, so that is your promise and the report
 records it.
 
+**Writing the result.** Echo `order.artifactId` back as `artifactId`. Set
+`observedArtifact` **only** if you read it off the site under test — it is
+compared with the order's, and a made-up one is the same as a wrong one. Before
+the swap, `order.artifactId` is whatever the base serves *now* (the build being
+replaced); if the adapter cannot read it, it is `pre-swap:<run start>` and you
+should omit `observedArtifact`. `timeBudgetMs` is **per round**: with
+`attempts: 3` the worst case is three times the budget. A retry may turn a
+`FAIL` into a pass (reported `flaky`) and nothing else — a fail followed by
+`BLOCKED` stays a failure. Before the swap the base is also looked at first, by
+vibeUbi: a base that is down refuses without asking your function.
+
 Result states are the probe's — same judge, same `verdictFor`: only `FAIL`
 rolls back after the swap; `BLOCKED` / not reported are counted as unverified
 and printed, not rolled back (rolling back a good deploy for a broken fixture
