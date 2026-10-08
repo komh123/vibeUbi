@@ -45,7 +45,7 @@ import {
   probeOrder, orderVerdict,
   acceptanceContract, preSwapBehaviourVerdict, acceptanceOrder,
 } from "../../kernel/src/index.mjs"
-import { resolveAcceptance, judgeRounds, observeBase, acceptanceSummary } from "./acceptance.mjs"
+import { resolveAcceptance, judgePlan, observeBase, acceptanceSummary } from "./acceptance.mjs"
 const exec = promisify(execFile)
 
 export const SHIP_STEPS = [
@@ -477,14 +477,15 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
         flaky: [], rounds: 0,
       }
     } else {
-      j = await judgeRounds({
-        decl: acc, order, phase: acc.phase, timeoutMs, say,
+      // Health is one bounded budget for the whole plan (timeBudgetMs), not per round.
+      j = await judgePlan({
+        decl: acc, order, phase: acc.phase, timeoutMs, totalBudgetMs: timeoutMs, say,
         look: () => observeBase({ target, base: healthBase, withArtifact: false }),
       })
     }
     healthCells = j.cells
     for (const c of j.cells) emit({ kind: "cell", cell: c })
-    const built = acceptanceSummary({ decl: acc, source: resolved.source, order, cells: j.cells, flaky: j.flaky, rounds: j.rounds, warning: stagingWarning })
+    const built = acceptanceSummary({ decl: acc, source: resolved.source, order, cells: j.cells, flaky: j.flaky, rounds: j.rounds, warning: stagingWarning, plan: j.plan ?? null })
     accReport = built.summary
     reportProblems(say, j.cells, built.verdict, "health")
     if (!built.verdict.ship) {
@@ -750,12 +751,16 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
     const order = acceptanceOrder({ acceptance: acc, artifactId, base: config.base })
     head("acceptance", `acceptance — ${order.items.length} item(s) against the new build`)
     const timeoutMs = Math.min(acc.timeBudgetMs ?? budgetMs.acceptance, budgetMs.acceptance)
-    const j = await judgeRounds({
+    // Every item runs (a red blocks only its dependents), then the verdict. The
+    // total budget bounds how long a broken build can stay live while that happens.
+    const j = await judgePlan({
       decl: acc, order, phase: acc.phase, timeoutMs, say,
+      totalBudgetMs: Math.min(acc.totalBudgetMs ?? budgetMs.acceptance, budgetMs.acceptance),
       look: () => observeBase({ target, base: config.base, artifactId, previousId, withArtifact: true }),
     })
     for (const c of j.cells) emit({ kind: "cell", cell: c })
-    const built = acceptanceSummary({ decl: acc, source: resolved.source, order, cells: j.cells, flaky: j.flaky, rounds: j.rounds })
+    const built = acceptanceSummary({ decl: acc, source: resolved.source, order, cells: j.cells, flaky: j.flaky, rounds: j.rounds, plan: j.plan })
+    if (j.plan && !j.plan.clean) say("warn", `acceptance plan: ${j.plan.headline}`)
     accReport = built.summary
     const s = built.summary
     say(s.unverified === 0 ? "ok" : "warn",
@@ -775,8 +780,10 @@ export async function ship({ root, config, target, discovered = [], emit = () =>
     say("ok", `acceptance: ${built.verdict.reason}`)
     step(I.acceptance, "acceptance", "pass", { unverified: s.unverified, verified: s.verified })
     all.push(...j.cells)
+    const notRun = j.plan ? j.plan.items.filter((r) => r.status === "not-run").length : 0
     accTail = [
       s.unverified ? ` · ${s.unverified} acceptance item(s) could not be verified` : "",
+      notRun ? ` · ${notRun} acceptance item(s) not run (budget)` : "",
       s.warnings.length ? ` · acceptance warning(s): ${s.warnings.map((w) => w.id).join(", ")}` : "",
       s.flaky.length ? ` · flaky: ${s.flaky.map((f) => f.feature).join(", ")}` : "",
     ].join("")

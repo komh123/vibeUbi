@@ -92,6 +92,11 @@ were the same pinned version hardcoded in five places.
    merged tree, then start the gate.
 4. **Say which kind of run it was.** `diagnose` and `--only` are never
    evidence, even all green; only the full gate is (`countsAsEvidence`).
+5. **Run everything, then fix.** Acceptance is a plan with dependencies
+   (`after: [...]` per item). A red blocks only its dependents — they are
+   `blocked`, name the root failure, and wait for the next round — while every
+   independent item still runs. Read the report's `plan.fixFirst` and fix all
+   of it before the next run. A blocked P0 rolls back like a failed one.
 
 ## When a run is red
 

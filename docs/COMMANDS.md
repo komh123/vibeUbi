@@ -100,3 +100,34 @@ and even then the next command is `vibeubi ship`, because a step that ran after
 an earlier red may have tested something the red already invalidated.
 A project that keeps its own runner should ask `countsAsEvidence(report,
 { phase, sourceTree })` from `vibeubi/kernel` instead of reading `report.ok`.
+
+## Acceptance plan — run everything, then decide
+
+Acceptance items may declare what they need:
+
+```js
+acceptance: {
+  phase: "post-swap",
+  totalBudgetMs: 900_000,          // optional: how long a broken build may stay live while the plan runs
+  items: [
+    { id: "acc:login", severity: "P0" },
+    { id: "acc:cart",  severity: "P1", after: ["acc:login"] },
+    { id: "acc:search", severity: "P1" },
+  ],
+  fulfil,
+}
+```
+
+- The plan is validated before anything runs (`testPlan`): an unknown `after`
+  id, a self-dependency or a cycle refuses the config, all problems at once.
+- Items run in rounds: each round is every item whose prerequisites have
+  PASSED. A red blocks only its dependents; independent items still run.
+- `after` is a precondition, not shared state — each item still gets its own
+  session.
+- A blocked P0 gates like a failed P0 (it was never verified); a blocked
+  P1/P2 is a warning. Items left when `totalBudgetMs` is spent are `not-run`
+  and never undo a deploy on their own.
+- The report's `acceptance.plan` carries every item's status, `blockedBy`
+  (root failures), `deferred`, `fixFirst` (failures by how much they block)
+  and a one-line `headline`. Projects with their own runner use the same
+  kernel functions: `testPlan`, `readyToRun`, `planOutcome`.

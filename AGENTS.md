@@ -74,6 +74,12 @@ places, all already broken on run one. These rules are what that cost.
    failures. Its report goes to `.vibeubi/diagnostics/`, is `kind:
    "diagnostic"`, has `clean` instead of `ok`, and `countsAsEvidence()` refuses
    it. Use it to find; use the gate to prove.
+5. **Run everything, then fix.** Acceptance is a plan written before it runs:
+   every item, and for each the items it needs (`after: [...]`). A red blocks
+   only its dependents (reported `blocked`, with the root failure in
+   `blockedBy`, deferred to the next round); everything independent still runs.
+   The decision (ship / roll back) comes after the whole plan, bounded by
+   `totalBudgetMs`. Fix the `fixFirst` list in one pass, not one red per run.
 
 ## Where a change belongs
 

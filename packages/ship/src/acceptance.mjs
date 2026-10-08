@@ -7,7 +7,7 @@
  * the three things a pure function cannot do.
  */
 import {
-  acceptanceVerdict, retryItems, foldAttempts, verdictFor, gateCells,
+  acceptanceVerdict, retryItems, foldAttempts, verdictFor, gateCells, testPlan, readyToRun, planOutcome,
 } from "../../kernel/src/index.mjs"
 
 /**
@@ -108,13 +108,90 @@ export async function judgeRounds({ decl, order, phase, timeoutMs, look, say = (
 }
 
 /**
+ * Run EVERY item, in rounds, then let the caller decide — instead of one long
+ * sequence that stops at its first red.
+ *
+ * Each round asks the fulfiller about the items whose prerequisites (`after`)
+ * have all passed (`readyToRun`), through `judgeRounds`, so retries and flaky
+ * reporting are unchanged. An item whose prerequisite did not pass is never asked:
+ * it is blocked, and its cell says which root failure it waits on. A blocked P0 is
+ * a `fail` — an unverified P0 is not a pass — so it gates like one; a blocked P1/P2
+ * is a recorded warning.
+ *
+ * `totalBudgetMs` bounds the whole run, so a broken build is not left serving
+ * while the rest of the plan works through it: once spent, no new round starts (the
+ * one in flight finishes under its own per-round timeout) and
+ * every item left is `not-run`, reported as unmeasured (it never undoes a deploy
+ * on its own), and the decision proceeds on what was measured.
+ *
+ * With no `after` anywhere this is exactly one `judgeRounds` over every item.
+ *
+ * @returns {Promise<{cells: object[], flaky: object[], rounds: number, plan: ReturnType<typeof planOutcome>}>}
+ */
+export async function judgePlan({ decl, order, phase, timeoutMs, totalBudgetMs = Infinity, look, say = () => {}, now = () => Date.now() }) {
+  const items = order.items
+  const plan = testPlan(items)
+  if (!plan.ok) {
+    const reason = `the acceptance plan is invalid: ${plan.violations.join("; ")}`
+    return { cells: [{ feature: "acceptance", layer: "acceptance", priority: "P0", status: "error", reason }], flaky: [], rounds: 0, plan: planOutcome(items, {}) }
+  }
+  const byId = new Map(items.map((i) => [i.id, i]))
+  const started = now()
+  const results = {}
+  const cells = [], flaky = []
+  let rounds = 0
+  const pending = new Set(plan.order)
+  const notRun = (id, reason) => {
+    results[id] = { status: "not-run", reason }
+    cells.push({ feature: id, layer: "acceptance", priority: byId.get(id).priority, status: "blocked", reason: `not run: ${reason}` })
+    pending.delete(id)
+  }
+  while (pending.size) {
+    const ready = plan.order.filter((id) => pending.has(id) && readyToRun(byId.get(id), results))
+    if (ready.length === 0) break
+    const left = totalBudgetMs - (now() - started)
+    if (left <= 0) {
+      for (const id of plan.order.filter((x) => pending.has(x))) notRun(id, `acceptance budget of ${totalBudgetMs} ms was spent before it could start`)
+      break
+    }
+    if (rounds > 0) say("dim", `acceptance: next round — ${ready.join(", ")} (their prerequisites passed)`)
+    const sub = { ...order, items: items.filter((i) => ready.includes(i.id)) }
+    // The budget decides whether a round STARTS; a round in flight keeps its own
+    // per-round timeout, so a slow pass is not rewritten into a failure.
+    const j = await judgeRounds({ decl, order: sub, phase, timeoutMs, look, say })
+    rounds += j.rounds
+    flaky.push(...j.flaky)
+    cells.push(...j.cells)
+    const got = new Map(j.cells.filter((c) => byId.has(c.feature)).map((c) => [c.feature, c]))
+    for (const id of ready) {
+      const c = got.get(id)
+      results[id] = c?.status === "pass" ? "pass" : { status: "fail", reason: c?.reason ?? "no result for this item" }
+      pending.delete(id)
+    }
+  }
+  // Whatever is still pending waits on something that did not pass.
+  const outcome = planOutcome(items, results)
+  for (const row of outcome.items.filter((r) => r.status === "blocked")) {
+    const it = byId.get(row.id)
+    cells.push({
+      feature: row.id, layer: "acceptance", priority: it.priority, blocked: true, blockedBy: row.blockedBy,
+      // A blocked P0 gates: it was never verified, and a deploy is not judged by
+      // what nobody looked at. A blocked P1/P2 is a warning, like its failure would be.
+      status: "fail",
+      reason: `blocked: not run because ${row.blockedBy.join(", ")} did not pass — deferred to the next round`,
+    })
+  }
+  return { cells, flaky, rounds, plan: outcome }
+}
+
+/**
  * What the report and the operator are told, derived from the final cells.
  *
  * `failed` are the cells the verdict BLOCKS on — the ones that rolled back (or
  * refused). `warnings` are failures that did not gate. Both name the item,
  * because a count is not a diagnosis.
  */
-export function acceptanceSummary({ decl, source, order, cells, flaky, rounds, warning = null }) {
+export function acceptanceSummary({ decl, source, order, cells, flaky, rounds, warning = null, plan = null }) {
   const verdict = verdictFor(gateCells({ cells, degraded: [] }))
   const blocking = new Set(verdict.blocking)
   const slim = (c) => ({ id: c.feature, severity: c.priority, status: c.status, reason: c.reason, ...(c.attempts ? { attempts: c.attempts } : {}) })
@@ -131,6 +208,7 @@ export function acceptanceSummary({ decl, source, order, cells, flaky, rounds, w
       failed: cells.filter((c) => blocking.has(c)).map(slim),
       warnings: cells.filter((c) => c.status === "fail" && !blocking.has(c) && !c.volunteered).map(slim),
       flaky,
+      ...(plan ? { plan } : {}),
       ...(warning ? { stagingWarning: warning } : {}),
     },
   }

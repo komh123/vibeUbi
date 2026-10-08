@@ -463,3 +463,74 @@ test("declared in BOTH places is refused — two gates, and nobody said which is
   const r = await go({ acceptance: postSwap(), targetAcceptance: postSwap() })
   refusedUntouched(r, /both|twice|two/i)
 })
+
+/* ── run everything, then decide: a plan with dependencies ─────────────── */
+
+test("plan: a P0 red no longer stops an independent item — but its dependent is blocked, never asked, and named", async () => {
+  const asked = []
+  const { done, state, report } = await go({
+    acceptance: postSwap({
+      items: [
+        { id: "acc:login", severity: "P0" },
+        { id: "acc:search", severity: "P1" },
+        { id: "acc:cart", severity: "P1", after: ["acc:login"] },
+      ],
+      fulfil: async (o) => { asked.push(...o.items.map((i) => i.id)); return answer(o, o.items.map((i) => (i.id === "acc:login" ? fail(i.id) : pass(i.id)))) },
+    }),
+  })
+  assert.ok(asked.includes("acc:search"), "an independent P1 still runs after a P0 red")
+  assert.ok(!asked.includes("acc:cart"), "a dependent of a red is not asked")
+  assert.equal(state.rolledBack, true, "the decision comes after everything ran: P0 red → rollback")
+  const by = Object.fromEntries(report.acceptance.plan.items.map((i) => [i.id, i]))
+  assert.equal(by["acc:search"].status, "pass")
+  assert.equal(by["acc:cart"].status, "blocked")
+  assert.deepEqual(by["acc:cart"].blockedBy, ["acc:login"])
+  assert.deepEqual(report.acceptance.plan.fixFirst, [{ id: "acc:login", blocks: 1 }])
+  assert.match(done.reason, /acc:login/)
+})
+
+test("plan (the other half of the pair): when the prerequisite passes, the dependent IS asked, in a later round", async () => {
+  const rounds = []
+  const { done } = await go({
+    acceptance: postSwap({
+      items: [{ id: "acc:login", severity: "P0" }, { id: "acc:cart", severity: "P1", after: ["acc:login"] }],
+      fulfil: async (o) => { rounds.push(o.items.map((i) => i.id)); return answer(o, o.items.map((i) => pass(i.id))) },
+    }),
+  })
+  assert.deepEqual(rounds, [["acc:login"], ["acc:cart"]])
+  assert.equal(done.outcome, "shipped")
+})
+
+test("plan: a P0 blocked by a failed P1 rolls back — an unverified P0 is not a pass", async () => {
+  const { state, report } = await go({
+    acceptance: postSwap({
+      items: [{ id: "acc:seed", severity: "P1" }, { id: "acc:pay", severity: "P0", after: ["acc:seed"] }],
+      fulfil: async (o) => answer(o, o.items.map((i) => (i.id === "acc:seed" ? fail(i.id) : pass(i.id)))),
+    }),
+  })
+  assert.equal(state.rolledBack, true)
+  assert.ok(report.acceptance.failed.some((f) => f.id === "acc:pay" && /blocked/.test(f.reason)))
+})
+
+test("plan: no `after` anywhere is one round over every item — exactly the old behaviour", async () => {
+  const rounds = []
+  await go({ acceptance: postSwap({ fulfil: async (o) => { rounds.push(o.items.map((i) => i.id)); return answer(o, o.items.map((i) => pass(i.id))) } }) })
+  assert.deepEqual(rounds, [["acc:chat", "acc:export"]])
+})
+
+test("plan: a total budget — what is left when it runs out is reported not-run, and the decision proceeds", async () => {
+  const rounds = []
+  const { done, report, state } = await go({
+    acceptance: postSwap({
+      totalBudgetMs: 150,
+      items: [{ id: "acc:a", severity: "P1" }, { id: "acc:b", severity: "P1", after: ["acc:a"] }],
+      fulfil: async (o) => { rounds.push(o.items.map((i) => i.id)); await new Promise((r) => setTimeout(r, 250)); return answer(o, o.items.map((i) => pass(i.id))) },
+    }),
+  })
+  assert.deepEqual(rounds, [["acc:a"]], "nothing is started after the budget is spent")
+  const by = Object.fromEntries(report.acceptance.plan.items.map((i) => [i.id, i]))
+  assert.equal(by["acc:b"].status, "not-run")
+  assert.match(by["acc:b"].reason, /budget/)
+  assert.equal(state.rolledBack, false, "a P1 that could not be run does not undo the deploy")
+  assert.match(done.reason, /not run/)
+})

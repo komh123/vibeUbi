@@ -33,6 +33,7 @@
  */
 import { sameObserved } from "./proof.mjs"
 import { orderVerdict } from "./order.mjs"
+import { testPlan } from "./test-plan.mjs"
 
 /** Where acceptance may run. Anything else is not a position in the pipeline. */
 export const ACCEPTANCE_PHASES = Object.freeze(["post-swap", "pre-swap-health"])
@@ -107,6 +108,15 @@ export function acceptanceContract(decl, { productionBase = null } = {}) {
     }
   }
 
+  // `after` (an item runs only when the items it names passed) is checked as a
+  // whole plan here, before anything runs: an unknown id, a self-reference or a
+  // cycle would otherwise leave items that can never run and read as "blocked".
+  const named = []
+  const ids = new Set()
+  for (const it of list) if (isObj(it) && typeof it.id === "string" && it.id.trim() && !ids.has(it.id)) { ids.add(it.id); named.push(it) }
+  const plan = testPlan(named)
+  if (!plan.ok) faults.push(...plan.violations)
+
   if (pre) {
     if (typeof decl.healthOnly !== "boolean") {
       faults.push("pre-swap-health must declare `healthOnly: true` — silence is not a declaration, and this phase may not assert feature behaviour")
@@ -122,6 +132,9 @@ export function acceptanceContract(decl, { productionBase = null } = {}) {
     if (decl.staging !== undefined) faults.push("`staging` only means something for pre-swap-health — post-swap already judges the production base, after it holds the new build")
     if (decl.timeBudgetMs !== undefined && (!Number.isFinite(decl.timeBudgetMs) || decl.timeBudgetMs <= 0)) {
       faults.push("`timeBudgetMs` must be a positive number")
+    }
+    if (decl.totalBudgetMs !== undefined && (!Number.isFinite(decl.totalBudgetMs) || decl.totalBudgetMs <= 0)) {
+      faults.push("`totalBudgetMs` must be a positive number — it bounds how long a broken build can stay live while the whole plan runs")
     }
   }
 
@@ -208,9 +221,14 @@ export function preSwapBehaviourVerdict(decl, { productionBase = null } = {}) {
  */
 export function acceptanceOrder({ acceptance, artifactId, base }) {
   const phase = acceptance.phase
-  const sorted = items(acceptance)
+  const bySeverity = items(acceptance)
     .map((it) => ({ ...it, priority: it.severity }))
     .sort((a, b) => a.priority.localeCompare(b.priority) || a.id.localeCompare(b.id))
+  // P0 first and then by id, EXCEPT where `after` says otherwise: a prerequisite
+  // is never listed after the item that needs it.
+  const plan = testPlan(bySeverity)
+  const at = plan.ok ? new Map(plan.order.map((id, i) => [id, i])) : null
+  const sorted = at ? [...bySeverity].sort((a, b) => at.get(a.id) - at.get(b.id)) : bySeverity
   return {
     skill: acceptance.skill ?? "acceptance",
     artifactId, base, at: "acceptance", phase,
@@ -227,7 +245,9 @@ export function acceptanceOrder({ acceptance, artifactId, base }) {
       : {}),
     contract: {
       itemsAreIndependent: true,
-      why: "each item gets a FRESH SESSION — its own cookies, storage and auth state. An item that depends on the one before it breaks on an unrelated edit.",
+      why: "each item gets a FRESH SESSION — its own cookies, storage and auth state. An item that depends on the one before it breaks on an unrelated edit. " +
+        "`after` is not shared state: \"checkout after login\" means a checkout result only counts when login passed — checkout still logs in for itself. " +
+        "Items you are handed together have all their prerequisites passed already.",
     },
     items: sorted,
   }

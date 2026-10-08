@@ -825,3 +825,25 @@ export function diagnoseSummary(results: readonly { name: string; ok: boolean; c
 export function countsAsEvidence(report: unknown, want?: { phase?: string; sourceTree?: string }): { ok: true } | { ok: false; reason: string }
 export const DIAGNOSTIC_KIND: "diagnostic"
 export const DIAGNOSTICS_DIR: string
+
+/** Statuses a planned item can end in. `not-run` is never pass and never fail. */
+export const PLAN_STATUSES: readonly ["pass", "fail", "blocked", "not-run"]
+export type PlanStatus = "pass" | "fail" | "blocked" | "not-run"
+export interface PlanItem { id: string; after?: readonly string[]; severity?: string }
+/** Validate a test plan and order it: stable topological order (declaration order wherever
+ *  `after` allows), or every violation (duplicate, unknown `after`, self-dependency, cycle) in one pass. */
+export function testPlan(items: readonly PlanItem[]): { ok: true; order: string[] } | { ok: false; violations: string[] }
+/** True only when every `after` prerequisite has status 'pass'. */
+export function readyToRun(item: { after?: readonly string[] }, statuses?: Record<string, string | { status: string }>): boolean
+/** The round's outcome: per-item status (blocked items carry the transitive ROOT failures in `blockedBy`),
+ *  `fixFirst` (failures by how much they block), `deferred` (blocked ids), `clean` (every item passed). */
+export function planOutcome(
+  items: readonly PlanItem[],
+  results?: Record<string, "pass" | "fail" | "not-run" | { status: string; reason?: string }>,
+): {
+  items: { id: string; severity?: string; status: PlanStatus; blockedBy?: string[]; reason?: string }[]
+  fixFirst: { id: string; blocks: number }[]
+  deferred: string[]
+  clean: boolean
+  headline: string
+}
