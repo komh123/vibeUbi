@@ -485,6 +485,28 @@ const COMMANDS = {
     process.exit(res.outcome === "shipped" ? 0 : 1)
   },
 
+  /**
+   * Every verify step, past every red, nothing mutated — to find ALL that is broken in one run.
+   * The report goes to .vibeubi/diagnostics/ and is never deploy evidence (kernel/src/diagnose.mjs).
+   * Exit 0 only when every step passed; even then the next command is `ubi ship`, not a deploy.
+   */
+  async diagnose() {
+    const { config } = await boot()
+    const { diagnose } = await import("../packages/ship/src/diagnose.mjs")
+    const only = val("only", "") ? val("only", "").split(",").map((s) => s.trim()).filter(Boolean) : null
+    say(`\n${C.bold}ubi diagnose${C.off} ${C.dim}${ROOT} — every step, no stop at red, not evidence${C.off}\n`)
+    const report = await diagnose({
+      root: ROOT, config, only,
+      emit: (e) => {
+        if (e.kind !== "step" || e.state === "run") return
+        e.state === "pass" ? ok(`${e.name}  ${(e.row.ms / 1000).toFixed(0)}s`) : bad(`${e.name} — ${e.row.timedOut ? "timed out" : e.row.reason ?? `exited ${e.row.code}`}`)
+      },
+    }).catch((e) => { bad(e.message); process.exit(2) })
+    say(`\n  ${report.clean ? C.green : C.red}${report.headline}${C.off}`)
+    note(`${relativeish(report.outDir)}/report.json — diagnostic, never deploy evidence`)
+    process.exit(report.clean ? 0 : 1)
+  },
+
   async rollback() {
     const { ctx, config } = await boot()
     const target = ctx.__registry.target
@@ -584,6 +606,8 @@ ${C.bold}vibeubi${C.off} — the gate that remembers so you do not have to
             ([ ] = only if the project declares "acceptance")
   ${C.bold}probe${C.off}     order the skill step, or judge what it returned  [--judge] [--artifact ID]
             no config needed: --declared <file> --base <url> --artifact <id>
+  ${C.bold}diagnose${C.off}  run EVERY verify step, past every red, and list all failures  [--only a,b]
+            never deploy evidence — use it before a slow gate, so one run shows everything
   ${C.bold}rollback${C.off}  put the previous build back, and prove it
   ${C.bold}init${C.off}      probe the project and write a config  [--dry-run] [--force]
   ${C.bold}guard${C.off}     --action <a>   refuse a narrowing action

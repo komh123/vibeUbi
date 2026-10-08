@@ -168,7 +168,7 @@ export async function machineMemory() {
  * - a V8 OOM gets `heapOomMessage` instead of the raw stack, because the raw
  *   stack sends operators to the machine's memory, which is not what ran out.
  */
-async function runStep(id, cmd, args, { cwd, outDir, timeoutMs, heapMb = null, env = {} }) {
+export async function runStep(id, cmd, args, { cwd, outDir, timeoutMs, heapMb = null, env = {} }) {
   const t0 = Date.now()
   const file = join(outDir, `step-${id.replace(/[^\w.-]/g, "_")}.out`)
   const { openSync, readFileSync } = await import("node:fs")

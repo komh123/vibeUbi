@@ -40,6 +40,7 @@ vibeubi plan          # what a run would do; touches nothing
 ```bash
 vibeubi verify                  # offline layers only; nothing built or swapped
 vibeubi scan --base <url>       # S0–S7 on their own
+vibeubi diagnose [--only a,b]   # EVERY verify step past every red; lists all failures; never evidence
 vibeubi ship                    # the whole pipeline, automatic rollback
 vibeubi rollback                # previous build back — and proved
 vibeubi viz --format archify    # diagram IR
@@ -85,3 +86,17 @@ vibeubi guard --action <a>              # exits 1 if <a> narrows the check
 
 A run with any of these is written into the ledger as such. Six months later
 the row says **why** nobody looked, not merely that nobody did.
+
+## Diagnose — before a slow gate
+
+```bash
+vibeubi diagnose                # every verify step, no stop at the first red, nothing mutated
+vibeubi diagnose --only lib,ui  # just these
+```
+
+Writes `.vibeubi/diagnostics/<time>/report.json` with `kind: "diagnostic"`,
+`evidence: false`, every failure and its reason. Exit 0 only when all passed —
+and even then the next command is `vibeubi ship`, because a step that ran after
+an earlier red may have tested something the red already invalidated.
+A project that keeps its own runner should ask `countsAsEvidence(report,
+{ phase, sourceTree })` from `vibeubi/kernel` instead of reading `report.ok`.

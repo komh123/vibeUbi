@@ -813,3 +813,15 @@ export function foldAttempts(rounds: readonly (readonly AcceptanceCell[])[]): {
   cells: AcceptanceCell[]
   flaky: { feature: string; attempts: number; failures: string[] }[]
 }
+
+/** Every step's result from a diagnostic run (no stop at the first red). Never deploy evidence:
+ *  the report has `kind: "diagnostic"`, `evidence: false`, and `clean` instead of `ok`. */
+export function diagnoseSummary(results: readonly { name: string; ok: boolean; code?: number; timedOut?: boolean; oom?: string | null; reason?: string | null; ms?: number; passed?: number }[]): {
+  kind: "diagnostic"; evidence: false; total: number; passed: number
+  failed: { name: string; why: string }[]; clean: boolean; headline: string
+}
+/** The one question a gate asks of a report: may it count as evidence? Refuses diagnostic, narrowed,
+ *  red, wrong-phase and wrong-tree reports. */
+export function countsAsEvidence(report: unknown, want?: { phase?: string; sourceTree?: string }): { ok: true } | { ok: false; reason: string }
+export const DIAGNOSTIC_KIND: "diagnostic"
+export const DIAGNOSTICS_DIR: string

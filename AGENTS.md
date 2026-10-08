@@ -36,7 +36,7 @@ never edit the function that produced it.
 ## Commands
 
 ```bash
-npx vibeubi plan | verify | scan | ship | rollback
+npx vibeubi plan | verify | diagnose | scan | ship | rollback
 npx vibeubi init | adopt | orphans | why <id> | viz
 ```
 
@@ -46,6 +46,34 @@ npx vibeubi init | adopt | orphans | why <id> | viz
 - A deploy is done only when evidence fetched from **outside** the deployed
   process carries the new artifact id.
 - A narrowed run (`--only`, `--without`) is never a full run. Say which.
+- A diagnostic run (`vibeubi diagnose`) is never evidence, even when every step
+  passed. Gates ask `countsAsEvidence(report)`; do not read `report.ok` by hand.
+
+## Before a slow gate: find everything first
+
+A gate stops at its first red and runs its phases in order, so a chain that
+takes an hour shows **one** problem per hour. One deploy took fifteen full runs
+and ten hours that way; five of the fifteen were the same fact hardcoded in five
+places, all already broken on run one. These rules are what that cost.
+
+1. **Probe before you re-run the chain.** Before restarting a slow gate after a
+   fix, run the failed step and every step that could share its cause on their
+   own (`--only a,b`, or `vibeubi diagnose`). Re-run the whole chain only when
+   those are green. A narrowed or diagnostic run is never evidence; it is how
+   you avoid paying an hour to learn one thing.
+2. **When a shared fact changes, find every copy in one search.** A runtime or
+   dependency version, an install path, a port, a renamed tool or env var:
+   grep the whole tree (tests, fixtures, acceptance scripts, deploy scripts)
+   for the old value and for hardcoded paths *before* the first run, and fix
+   them together. Prefer one resolver everyone imports over N literals.
+3. **Do not merge other work into a tree while its gate is running.** Stop the
+   chain, merge, run `vibeubi diagnose` (or the affected `--only` steps) on the
+   merged tree, then start the chain. Merging mid-run means the evidence is for
+   neither tree.
+4. **`vibeubi diagnose` runs every verify step past every red** and lists all
+   failures. Its report goes to `.vibeubi/diagnostics/`, is `kind:
+   "diagnostic"`, has `clean` instead of `ok`, and `countsAsEvidence()` refuses
+   it. Use it to find; use the gate to prove.
 
 ## Where a change belongs
 

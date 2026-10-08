@@ -27,3 +27,4 @@ export { coveredVerdict, crossLayerNames, runtimeFloorVerdict } from "./covered.
 export { SYMPTOMS, findRule, mitigationStillPays } from "./symptoms.mjs"
 export { remediationVerdict, implementationsAgree, countIsNotFitness, populationVerdict } from "./claims.mjs"
 export { acceptanceContract, preSwapBehaviourVerdict, acceptanceOrder, acceptanceVerdict, retryItems, foldAttempts, ACCEPTANCE_PHASES, ACCEPTANCE_SEVERITIES, ACCEPTANCE_JUDGES, HEALTH_BUDGET_MAX_MS, ACCEPTANCE_MAX_ATTEMPTS } from "./acceptance.mjs"
+export { diagnoseSummary, countsAsEvidence, DIAGNOSTIC_KIND, DIAGNOSTICS_DIR } from "./diagnose.mjs"
