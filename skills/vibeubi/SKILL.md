@@ -41,6 +41,7 @@ wrong, report the verdict; do not edit the function that produced it.
 ```bash
 npx vibeubi plan                 # print what it would do; touch nothing
 npx vibeubi verify               # offline layers only — nothing is built or swapped
+npx vibeubi diagnose [--only a,b] # every verify step past every red; lists ALL failures; never evidence
 npx vibeubi scan --base <url>    # the security layers on their own
 npx vibeubi ship                 # the whole pipeline, with automatic rollback
 npx vibeubi rollback             # put the previous build back AND prove it
@@ -71,6 +72,26 @@ Six statuses, and the two counter-intuitive ones matter most:
    swap silently failed is the failure this whole project is named after.
 3. **Never call a narrowed run a full run.** `--only` and `--without` are
    recorded in the report for a reason.
+
+## Before you re-run a slow gate (owner rule, 2026-10-08)
+
+A gate stops at its first red, its phases run in order, and its evidence is
+bound to the source tree — so "fix one, re-run everything" pays the whole chain
+for one finding. One deploy took 15 runs and ~10 hours that way; five of them
+were the same pinned version hardcoded in five places.
+
+1. **Probe first.** After a fix, run the failed step and every step that could
+   share its cause on their own — `npx vibeubi diagnose` or `--only a,b` (or the
+   project's own equivalent, e.g. `npm run vibeubi:diagnose`). Start the full
+   gate only when those are green.
+2. **A shared fact changes everywhere at once.** A version, install path, port,
+   renamed tool or env var: grep the whole tree for the old value and for
+   hardcoded paths before the first run, and fix every copy together. Prefer one
+   resolver plus a guard test over N literals.
+3. **Never merge into a tree while its gate runs.** Stop, merge, diagnose the
+   merged tree, then start the gate.
+4. **Say which kind of run it was.** `diagnose` and `--only` are never
+   evidence, even all green; only the full gate is (`countsAsEvidence`).
 
 ## When a run is red
 
