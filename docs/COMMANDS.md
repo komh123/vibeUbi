@@ -169,3 +169,5 @@ acquire a matching retention lease; at most two attempts for a proven missing
 artifact race. Build failures and unknown errors are never retried as GC.
 Keep leases until successful acceptance or verified rollback; an archive alone
 is recovery material, not proof that an image still exists on the target host.
+
+Set `delivery.recordBaseline: false` for build-only workflows: preparing an artifact does not advance the deployed change baseline.

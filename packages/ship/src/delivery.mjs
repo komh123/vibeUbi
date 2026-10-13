@@ -184,7 +184,7 @@ export async function deliver({ root, config, full = false, major = '', baseline
     for (const s of steps) if (!report.steps[s.id]) report.steps[s.id] = { status: 'blocked', reason: 'Prerequisite failed or not run; see outcome' }
     report.status = steps.length > 0 && steps.every(s => report.steps[s.id].status === 'pass') ? 'passed' : 'failed'
     report.finishedAt = new Date().toISOString()
-    if (report.status === 'passed') await atomicJson(join(home, 'baseline.json'), { commit: git(root, ['rev-parse', 'HEAD']).trim(), runId, mode: report.mode })
+    if (report.status === 'passed' && config.recordBaseline !== false) await atomicJson(join(home, 'baseline.json'), { commit: git(root, ['rev-parse', 'HEAD']).trim(), runId, mode: report.mode })
     await save(); return report
   } catch (error) { report.status = 'failed'; report.error = error.message; report.finishedAt = new Date().toISOString(); await save(); return report }
   finally { clearInterval(beat); process.removeListener('SIGTERM',onTerm);process.removeListener('SIGINT',onInt);await rm(lock, { force: true }) }

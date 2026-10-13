@@ -128,3 +128,9 @@ test('interrupt records failure, kills its active command and never continues pr
  const list=JSON.parse(await readFile(join(f.root,'.vibeubi/checklist.json')))
  assert.equal(list.status,'failed');assert.equal(list.features[0].status,'fail')
 })
+
+test('build-only runs cannot advance the deployed change baseline',async t=>{
+ const f=await fixture(t);f.config.recordBaseline=false;
+ assert.equal((await deliver(f)).status,'passed');
+ await assert.rejects(readFile(join(f.root,'.vibeubi/delivery/baseline.json')),{code:'ENOENT'});
+})
