@@ -131,3 +131,41 @@ acceptance: {
   (root failures), `deferred`, `fixFirst` (failures by how much they block)
   and a one-line `headline`. Projects with their own runner use the same
   kernel functions: `testPlan`, `readyToRun`, `planOutcome`.
+
+## Incremental delivery (default for declared delivery projects)
+
+`vibeubi checklist [--since <commit>] [--watch]` refreshes the feature/step list.
+`vibeubi ship` (alias `deliver`) runs read-only preflight, affected builds, selected
+post-build checks and the project's declared promotion/proof/acceptance steps.
+`--full` or `--major "reason"` selects full verification. A normal engine change
+is not inherently major. `vibeubi status` reads the atomic checkpoint; reissuing
+`ship` resumes verified reusable outputs, never a mutation or live check.
+
+Declare `delivery.features: [{id, covers: [glob], steps: [stepId]}]` and
+`delivery.steps: [{id, cmd: [executable, ...args], after: [stepId], phase,
+inputs: [glob], outputs: [path], reuse, fullOnly, always, expectsTests, timeoutMs}]`.
+`preflight` steps are read-only, cannot depend on a build, and all independent
+ones run before build. `fullOnly` checks are a barrier only during a full run.
+All independent selected checks finish before the outcome; failed prerequisites
+block dependent promotion. Declare rollback inside the bounded promotion adapter.
+`mutates: true` prevents reuse. Reuse is opt-in and requires declared nonempty
+outputs whose current bytes match the previous success. Inputs default to the
+whole source tree; narrow them deliberately to the artifact's actual inputs.
+
+`delivery.generated` lists tracked files produced by the release itself (such as
+an append-only release ledger), so these do not look like edits during a run.
+`delivery.context` must carry external compiler/configuration version inputs not
+represented in source. Never put credentials into declarations or checkpoints.
+
+Reports live under `.vibeubi/delivery/<run>/report.json`; `status.json` is updated
+before/after every step, and `heartbeat.json` during a long step. Step logs are
+`step-<id>.out`. An interrupted process leaves running evidence, which is never
+reused; stale locks are reclaimed only when the recorded PID no longer exists.
+`countsAsFullVerification` remains false for this report type: even a full-mode
+run records explicit step evidence, rather than impersonating legacy gate output.
+
+`vibeubi/artifacts` exports `buildRetained` for adapters: build, observe identity,
+acquire a matching retention lease; at most two attempts for a proven missing
+artifact race. Build failures and unknown errors are never retried as GC.
+Keep leases until successful acceptance or verified rollback; an archive alone
+is recovery material, not proof that an image still exists on the target host.

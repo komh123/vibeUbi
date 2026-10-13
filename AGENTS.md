@@ -258,3 +258,25 @@ packages/viz         registry → diagram IR (archify, mermaid, neutral)
 skills/ commands/    harness packaging
 docs/                ARCHITECTURE, SECURITY, COMMANDS, PLUGINS, PORTING
 ```
+
+## Default delivery policy (owner 2026-10-14)
+
+- Register every implementation/fix in `config.delivery.features` (covers + steps)
+  and keep `.vibeubi/checklist.json` current with `vibeubi checklist --watch` while
+  working. Unclaimed changed files block delivery with a complete list.
+- `vibeubi ship` / `vibeubi deliver` use **incremental** delivery by default.
+  Ordinary new features and engine changes start at build, followed by their
+  declared checks, promotion, outside proof and bounded acceptance. Full verify
+  is only `--full` or `--major "concrete reason"` / declared `majorChanges`.
+  Do not classify all engine, dependency or config edits as major automatically.
+- Legacy projects without a delivery declaration must adopt it for incremental
+  delivery; `ship --full` explicitly retains the legacy full chain.
+- A failed step invalidates only dependents. Diagnose that step and related causes
+  before retrying; rerun `deliver` to resume valid artifacts, not a full chain.
+- Reuse requires identical step inputs/commands/dependencies AND observed output
+  bytes. Missing artifacts, diagnostics, failed or running results are not passes.
+  Reports say `reused`, `ran`, `blocked`, `not-selected`; incremental evidence is
+  never reported as full verification.
+- Keep the source frozen while delivering. Read `.vibeubi/delivery/status.json`
+  and per-step logs, report failures promptly, and retain candidate/rollback
+  artifacts through promotion and acceptance. Never remove another run's holds.

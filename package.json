@@ -22,7 +22,9 @@
       "default": "./packages/kernel/src/index.mjs"
     },
     "./viz": "./packages/viz/src/archify.mjs",
-    "./adapters/*": "./packages/adapters/src/*"
+    "./adapters/*": "./packages/adapters/src/*",
+    "./delivery": "./packages/ship/src/delivery.mjs",
+    "./artifacts": "./packages/ship/src/artifacts.mjs"
   },
   "scripts": {
     "test": "node --test packages/*/test/*.test.mjs",

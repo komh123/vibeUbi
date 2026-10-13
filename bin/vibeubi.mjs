@@ -91,6 +91,36 @@ async function discoverAll(ctx) {
 /* ───────────────────────────── commands ───────────────────────────── */
 
 const COMMANDS = {
+  async checklist() {
+    const config = await loadConfig()
+    if (!config?.delivery) throw Error('Declare config.delivery features and steps first')
+    const { checklist } = await import('../packages/ship/src/delivery.mjs')
+    const refresh = async () => {
+      const result = await checklist({ root: ROOT, config: config.delivery, full: flag('full'), major: val('major', ''), baseline: val('since', undefined) })
+      say(JSON.stringify(result, null, 2))
+      return result
+    }
+    await refresh()
+    if (flag('watch')) {
+      // Config is reloaded by a fresh process each tick; edits to declarations
+      // are not hidden behind the ESM import cache.
+      const { spawnSync } = await import('node:child_process')
+      setInterval(() => spawnSync(process.execPath, [new URL(import.meta.url).pathname, 'checklist', '--root', ROOT, ...(val('since', '') ? ['--since', val('since', '')] : [])], { stdio: 'inherit' }), 5000)
+    }
+  },
+  async deliver() {
+    const config = await loadConfig()
+    if (!config?.delivery) throw Error('Declare config.delivery features and steps first')
+    const { deliver } = await import('../packages/ship/src/delivery.mjs')
+    const result = await deliver({ root: ROOT, config: config.delivery, full: flag('full'), major: val('major', ''), baseline: val('since', undefined),
+      emit: e => { if (e.kind === 'step') say(`${e.id}: ${e.state}`); if (e.kind === 'failure') bad(`${e.id}: ${e.reason}`) } })
+    say(`${result.mode ?? 'planning'} delivery: ${result.status} — ${result.outDir}`)
+    if (result.error) bad(result.error)
+    process.exitCode = result.status === 'passed' ? 0 : 1
+  },
+  async status() {
+    say(await readFile(join(ROOT, '.vibeubi/delivery/status.json'), 'utf8'))
+  },
   /**
    * `vibeubi find "<what you can see>"` — the discovery map.
    *
@@ -418,6 +448,11 @@ const COMMANDS = {
   },
 
   async ship() {
+    // Projects adopting delivery use the same public ship command; it is not
+    // an unused second pipeline. Legacy adapters retain their declared chain.
+    const declared = await loadConfig()
+    if (declared?.delivery) return COMMANDS.deliver()
+    if (!flag("full")) { bad("Declare config.delivery to use the default incremental flow; --full explicitly selects the legacy full chain"); process.exitCode = 2; return }
     const { config, ctx } = await boot()
     const { ship, SHIP_STEPS } = await import("../packages/ship/src/run.mjs")
     const target = ctx.__registry.target

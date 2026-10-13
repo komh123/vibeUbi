@@ -177,9 +177,11 @@ export async function runStep(id, cmd, args, { cwd, outDir, timeoutMs, heapMb = 
   const nodeOpts = [process.env.NODE_OPTIONS, heapMb ? `--max-old-space-size=${heapMb}` : ""]
     .filter(Boolean).join(" ")
 
+  const childEnv = { ...process.env, ...env, ...(nodeOpts ? { NODE_OPTIONS: nodeOpts } : {}) }
+  delete childEnv.NODE_TEST_CONTEXT // a nested test CLI must emit its own evidence
   const child = spawn(cmd, args, {
     cwd, detached: true, stdio: ["ignore", fd, fd],
-    env: { ...process.env, ...env, ...(nodeOpts ? { NODE_OPTIONS: nodeOpts } : {}) },
+    env: childEnv,
   })
 
   let timedOut = false
