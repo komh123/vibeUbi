@@ -171,3 +171,5 @@ Keep leases until successful acceptance or verified rollback; an archive alone
 is recovery material, not proof that an image still exists on the target host.
 
 Set `delivery.recordBaseline: false` for build-only workflows: preparing an artifact does not advance the deployed change baseline.
+
+An owner-authorized narrowed feature may declare `excludedReason`; it remains visible as excluded and never inherits a different feature's pass. Full mode overrides exclusions. Do not add this to suppress a failed check without explicit owner scope.

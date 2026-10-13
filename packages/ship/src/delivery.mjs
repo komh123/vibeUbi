@@ -75,7 +75,7 @@ export async function checklist({ root, config, full = false, major = '', baseli
   for (const feature of features) {
     if (!feature.id || !feature.covers?.length || !feature.steps?.length || feature.steps.some(id => !ids.has(id))) throw Error(`Incomplete feature declaration: ${feature.id}`)
   }
-  const selectedFeatures = features.filter(f => policy.mode === 'full' || !baseline || f.always || files.some(p => matches(p, f.covers)))
+  const selectedFeatures = features.filter(f => policy.mode === 'full' || (!f.excludedReason && (!baseline || f.always || files.some(p => matches(p, f.covers)))))
   const selected = new Set(steps.filter(s => s.always || (s.fullOnly && policy.mode === 'full')).map(s => s.id))
   for (const f of selectedFeatures) for (const id of f.steps) if (!steps.find(s => s.id === id).fullOnly || policy.mode === 'full') selected.add(id)
   if (policy.mode === 'full') for (const s of steps) selected.add(s.id)
@@ -85,7 +85,7 @@ export async function checklist({ root, config, full = false, major = '', baseli
   if (policy.mode !== 'full' && steps.some(s => s.fullOnly && selected.has(s.id))) throw Error('Ordinary delivery depends on a full-only step; correct the dependency declaration')
   const uncovered = files.filter(p => !features.some(f => matches(p, f.covers)))
   const result = { kind: 'delivery-checklist', ...policy, baseline: baseline ?? null, changed: files, uncovered,
-    features: features.map(f => ({ ...f, selected: selectedFeatures.includes(f), status: selectedFeatures.includes(f) ? 'pending' : 'not-selected' })),
+    features: features.map(f => ({ ...f, selected: selectedFeatures.includes(f), status: selectedFeatures.includes(f) ? 'pending' : f.excludedReason ? 'excluded' : 'not-selected' })),
     steps: steps.map(s => ({ id: s.id, after: s.after ?? [], selected: selected.has(s.id), phase: s.phase ?? 'acceptance', fullOnly: !!s.fullOnly })),
     updatedAt: new Date().toISOString() }
   await atomicJson(join(root, '.vibeubi', 'checklist.json'), result)

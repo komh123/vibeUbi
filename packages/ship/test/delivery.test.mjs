@@ -134,3 +134,10 @@ test('build-only runs cannot advance the deployed change baseline',async t=>{
  assert.equal((await deliver(f)).status,'passed');
  await assert.rejects(readFile(join(f.root,'.vibeubi/delivery/baseline.json')),{code:'ENOENT'});
 })
+
+test('explicit feature exclusions remain visible and never inherit another feature pass; full overrides scope',async t=>{
+ const f=await fixture(t);f.config.features.find(f=>f.id==='engine').excludedReason='Owner explicitly limited this release to web';
+ const r=await deliver(f);assert.equal(r.status,'passed');assert.ok(!f.calls.includes('engine-test'));
+ assert.equal(r.plan.features.find(f=>f.id==='engine').status,'excluded');
+ f.calls.length=0;await deliver({...f,full:true});assert.ok(f.calls.includes('engine-test'));
+})
