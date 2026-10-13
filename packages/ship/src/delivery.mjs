@@ -189,3 +189,14 @@ export async function deliver({ root, config, full = false, major = '', baseline
   } catch (error) { report.status = 'failed'; report.error = error.message; report.finishedAt = new Date().toISOString(); await save(); return report }
   finally { clearInterval(beat); process.removeListener('SIGTERM',onTerm);process.removeListener('SIGINT',onInt);await rm(lock, { force: true }) }
 }
+
+/** A promotion must include the currently published source. Adapters supply
+ * their source graph (for Git: merge-base --is-ancestor published candidate).
+ * Check before expensive work and again immediately before mutating production.
+ * Explicit rollback is a separate operation, never an implicit promotion. */
+export async function assertPromotionLineage({ candidate, published, isAncestor }) {
+  if (typeof candidate !== 'string' || !candidate.trim() || typeof published !== 'string' || !published.trim()) throw Error('Both candidate and published source identities are required')
+  if (typeof isAncestor !== 'function') throw Error('A source ancestry verifier is required')
+  if (await isAncestor(published, candidate) !== true) throw Error(`Candidate ${candidate} does not include published source ${published}; merge the live changes before promotion`)
+  return { candidate, published, includesPublished: true }
+}

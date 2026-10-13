@@ -182,3 +182,10 @@ still exercise the actual target artifact. See Docker's
 Set `delivery.recordBaseline: false` for build-only workflows: preparing an artifact does not advance the deployed change baseline.
 
 An owner-authorized narrowed feature may declare `excludedReason`; it remains visible as excluded and never inherits a different feature's pass. Full mode overrides exclusions. Do not add this to suppress a failed check without explicit owner scope.
+
+A delivery adapter must protect parallel releases too. Use
+`assertPromotionLineage` from `vibeubi/delivery` in a read-only preflight, then
+repeat it immediately before promotion using the freshly observed public source
+identity. Supply `isAncestor(published, candidate)` from the project's source
+control. A candidate which omits an already published branch is refused; merge
+that source and verify the combined release. Explicit rollback is separate.
