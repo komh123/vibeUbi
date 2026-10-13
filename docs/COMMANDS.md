@@ -170,6 +170,15 @@ artifact race. Build failures and unknown errors are never retried as GC.
 Keep leases until successful acceptance or verified rollback; an archive alone
 is recovery material, not proof that an image still exists on the target host.
 
+For remote-only images on a host with kubelet image GC, prefer a direct Docker
+archive export over loading into the build host's image store. A tag can be
+deleted during a long unpack, before a container lease can be created; retrying
+does not close this window. Retain an atomic, content-hashed export file, bind
+its config bytes to the build producer's digest, then verify the transferred
+hash and the loaded target config/layers before promotion. The adapter must
+still exercise the actual target artifact. See Docker's
+[archive exporter parameters](https://docs.docker.com/build/exporters/oci-docker/).
+
 Set `delivery.recordBaseline: false` for build-only workflows: preparing an artifact does not advance the deployed change baseline.
 
 An owner-authorized narrowed feature may declare `excludedReason`; it remains visible as excluded and never inherits a different feature's pass. Full mode overrides exclusions. Do not add this to suppress a failed check without explicit owner scope.
