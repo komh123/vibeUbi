@@ -12,7 +12,9 @@ const digest = value => createHash('sha256').update(value).digest('hex')
 const json = value => JSON.stringify(value, (_key, v) => typeof v === 'function' ? v.toString() : v)
 const git = (root, args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 32 << 20 })
 export function matches(file, patterns = []) {
-  return patterns.some(pattern => {
+  const positive=patterns.filter(p=>!p.startsWith('!')), negative=patterns.filter(p=>p.startsWith('!')).map(p=>p.slice(1))
+  if (negative.length && matches(file, negative)) return false
+  return positive.some(pattern => {
     const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*/g, '\0').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]').replace(/\0\//g, '(?:.*/)?').replace(/\0/g, '.*')
     return new RegExp(`^${escaped}$`).test(file)
   })

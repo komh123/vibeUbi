@@ -28,7 +28,7 @@ async function fixture(t) {
   const calls = []
   const execute = async s => {
     calls.push(s.id)
-    if (s.outputs) { await mkdir(join(root, 'dist'), { recursive: true }); await writeFile(join(root, s.outputs[0]), await readFile(join(root, s.inputs[0].replace('**','a.js')))) }
+    if (s.outputs) { await mkdir(join(root, 'dist'), { recursive: true }); await writeFile(join(root, s.outputs[0]), await readFile(join(root, s.id.split('-')[0] + '/a.js'))) }
     return { ok: true }
   }
   return { root, config, calls, execute, changed: ['web/a.js', 'engine/a.js', '.gitignore'], baseline: git(['rev-parse', 'HEAD']) }
@@ -105,4 +105,9 @@ test('real CLI ship uses delivery declaration and persists status; never invokes
   assert.throws(() => execFileSync(process.execPath, [cli, 'ship', '--root', f.root, '--full'], { stdio: 'pipe' }))
   r = JSON.parse(await readFile(join(f.root, '.vibeubi/delivery/status.json')))
   assert.equal(r.steps['full-verify'].status, 'fail')
+})
+test('artifact input exclusions do not invalidate unrelated builds', async t => {
+ const f=await fixture(t); f.config.steps.find(s=>s.id==='web-build').inputs=['**','!engine/**'];
+ await deliver(f);await writeFile(join(f.root,'engine/a.js'),'new engine');
+ const r=await deliver(f);assert.equal(r.steps['web-build'].execution,'reused');assert.equal(r.steps['engine-build'].execution,'ran');
 })
