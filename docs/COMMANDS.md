@@ -189,3 +189,12 @@ repeat it immediately before promotion using the freshly observed public source
 identity. Supply `isAncestor(published, candidate)` from the project's source
 control. A candidate which omits an already published branch is refused; merge
 that source and verify the combined release. Explicit rollback is separate.
+
+Build-cache declarations should include unknown source paths by default (for
+example `inputs: ['**', '!docs/**']`), excluding only paths proven unrelated to
+that artifact. An allowlist of today's `app/` and `components/` directories can
+silently miss tomorrow's `utils/`, locale configuration or new source root.
+Include compiler recipes and dependency/submodule identities. Test the pair:
+a deployment/documentation edit preserves the key; a new source root changes
+it. Changing input rules must invalidate old cache receipts, not relabel their
+original provenance.
