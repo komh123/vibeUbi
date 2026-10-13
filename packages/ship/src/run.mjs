@@ -168,7 +168,7 @@ export async function machineMemory() {
  * - a V8 OOM gets `heapOomMessage` instead of the raw stack, because the raw
  *   stack sends operators to the machine's memory, which is not what ran out.
  */
-export async function runStep(id, cmd, args, { cwd, outDir, timeoutMs, heapMb = null, env = {} }) {
+export async function runStep(id, cmd, args, { cwd, outDir, timeoutMs, heapMb = null, env = {}, signal }) {
   const t0 = Date.now()
   const file = join(outDir, `step-${id.replace(/[^\w.-]/g, "_")}.out`)
   const { openSync, readFileSync } = await import("node:fs")
@@ -184,6 +184,13 @@ export async function runStep(id, cmd, args, { cwd, outDir, timeoutMs, heapMb = 
     env: childEnv,
   })
 
+  let abortTimer
+  const abort = () => {
+    try { process.kill(-child.pid, 'SIGTERM') } catch { child.kill('SIGTERM') }
+    abortTimer=setTimeout(()=>{try {process.kill(-child.pid,'SIGKILL')}catch{}},5000)
+  }
+  signal?.addEventListener('abort', abort, { once: true })
+  if (signal?.aborted) abort()
   let timedOut = false
   const timer = setTimeout(() => {
     timedOut = true
@@ -197,6 +204,8 @@ export async function runStep(id, cmd, args, { cwd, outDir, timeoutMs, heapMb = 
     child.on("exit", (c, sig) => resolve(c ?? (sig ? 1 : 0)))
   })
   clearTimeout(timer)
+  signal?.removeEventListener('abort', abort)
+  clearTimeout(abortTimer)
   try { (await import("node:fs")).closeSync(fd) } catch { /* already closed */ }
 
   let out = ""

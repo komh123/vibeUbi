@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { deliver, checklist, deliveryMode } from '../src/delivery.mjs'
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'ubi-delivery-'))
@@ -110,4 +110,21 @@ test('artifact input exclusions do not invalidate unrelated builds', async t => 
  const f=await fixture(t); f.config.steps.find(s=>s.id==='web-build').inputs=['**','!engine/**'];
  await deliver(f);await writeFile(join(f.root,'engine/a.js'),'new engine');
  const r=await deliver(f);assert.equal(r.steps['web-build'].execution,'reused');assert.equal(r.steps['engine-build'].execution,'ran');
+})
+
+test('interrupt records failure, kills its active command and never continues promotion', async t => {
+ const f=await fixture(t)
+ const payload=`require('fs').writeFileSync('.vibeubi/worker.pid',String(process.pid));setInterval(()=>{},1000)`
+ await writeFile(join(f.root,'vibeubi.config.mjs'),`export default {delivery:{features:[{id:'app',covers:['**'],steps:['build','promote']}],steps:[{id:'build',cmd:${JSON.stringify([process.execPath,'-e',payload])}},{id:'promote',after:['build'],mutates:true,cmd:${JSON.stringify([process.execPath,'-e','process.exit(0)'])}}]}}`)
+ const cli=new URL('../../../bin/vibeubi.mjs',import.meta.url).pathname.replace('/packages/bin/','/bin/')
+ const child=spawn(process.execPath,[cli,'ship','--root',f.root],{stdio:'ignore'})
+ const exited=new Promise(resolve=>child.on('exit',resolve))
+ let pid
+ for(let i=0;i<200;i++){try{pid=Number(await readFile(join(f.root,'.vibeubi/worker.pid'),'utf8'));break}catch{}await new Promise(r=>setTimeout(r,25))}
+ assert.ok(pid);child.kill('SIGTERM');assert.equal(await exited,1)
+ const r=JSON.parse(await readFile(join(f.root,'.vibeubi/delivery/status.json')))
+ assert.equal(r.status,'failed');assert.equal(r.interruptedBy,'SIGTERM');assert.equal(r.steps.promote.status,'blocked')
+ assert.throws(()=>process.kill(pid,0),{code:'ESRCH'})
+ const list=JSON.parse(await readFile(join(f.root,'.vibeubi/checklist.json')))
+ assert.equal(list.status,'failed');assert.equal(list.features[0].status,'fail')
 })

@@ -105,8 +105,21 @@ export async function deliver({ root, config, full = false, major = '', baseline
   const runId = new Date().toISOString().replace(/[:.]/g, '-') + '-' + randomUUID().slice(0, 8)
   const outDir = join(home, runId); await mkdir(outDir)
   const report = { kind: 'delivery', countsAsFullVerification: false, runId, outDir, status: 'planning', steps: {}, startedAt: new Date().toISOString() }
-  const save = async () => { report.updatedAt = new Date().toISOString(); await atomicJson(join(outDir, 'report.json'), report); await atomicJson(join(home, 'status.json'), report); emit({ kind: 'status', report }) }
+  const save = async () => {
+    if (report.plan) {
+      for (const feature of report.plan.features) {
+        if (!feature.selected) continue
+        const relevant=feature.steps.filter(id=>report.plan.steps.some(s=>s.id===id&&s.selected))
+        feature.status=relevant.some(id=>report.steps[id]?.status==='fail')?'fail':relevant.length&&relevant.every(id=>report.steps[id]?.status==='pass')?'pass':report.status==='failed'?'blocked':'pending'
+      }
+      await atomicJson(join(root,'.vibeubi/checklist.json'),{...report.plan,execution:report.steps,status:report.status})
+    }
+    report.updatedAt = new Date().toISOString(); await atomicJson(join(outDir, 'report.json'), report); await atomicJson(join(home, 'status.json'), report); emit({ kind: 'status', report }) }
   let beat
+  const controller=new AbortController()
+  const interrupted=signal=>{ report.interruptedBy=signal;controller.abort(new Error(signal)) }
+  const onTerm=()=>interrupted('SIGTERM'),onInt=()=>interrupted('SIGINT')
+  process.once('SIGTERM',onTerm);process.once('SIGINT',onInt)
   try {
     const previous = await readFile(join(home, 'baseline.json'), 'utf8').then(JSON.parse).catch(e => { if (e.code !== 'ENOENT') throw e; return null })
     const plan = await checklist({ root, config, full, major, baseline: baseline ?? previous?.commit, changed })
@@ -124,7 +137,8 @@ export async function deliver({ root, config, full = false, major = '', baseline
     const t0 = Date.now(), budget = config.totalBudgetMs ?? 3 * 60 * 60 * 1000
     const run = execute ?? (async (s, context) => {
       if (!Array.isArray(s.cmd) || !s.cmd.length) throw Error(`Missing command for ${s.id}`)
-      const r = await runStep(s.id, s.cmd[0], s.cmd.slice(1), { cwd: root, outDir, timeoutMs: context.timeoutMs, env: s.env ?? {}, heapMb: s.heapMb })
+      const r = await runStep(s.id, s.cmd[0], s.cmd.slice(1), { cwd: root, outDir, timeoutMs: context.timeoutMs, env: s.env ?? {}, heapMb: s.heapMb, signal:controller.signal })
+      if (controller.signal.aborted) throw Error('Delivery interrupted')
       if (r.code !== 0 || r.timedOut) throw Error(`${s.id}: ${r.timedOut ? 'timed out' : `exit ${r.code}`} — ${r.out.slice(-1200)}`)
       if (s.expectsTests) { const v = testRanVerdict(s.id, r.out); if (!v.ok) throw Error(v.reason) }
       return { ok: true, log: join(outDir, `step-${s.id}.out`) }
@@ -133,6 +147,7 @@ export async function deliver({ root, config, full = false, major = '', baseline
     const order = [...ordered.filter(id => steps.find(s => s.id === id).phase === 'preflight'), ...ordered.filter(id => steps.find(s => s.id === id).fullOnly && steps.find(s => s.id === id).phase !== 'preflight'), ...ordered.filter(id => !steps.find(s => s.id === id).fullOnly && steps.find(s => s.id === id).phase !== 'preflight')]
     for (const id of order) {
       const s = steps.find(s => s.id === id)
+      if(controller.signal.aborted){statuses[id]={status:'not-run',reason:'Delivery interrupted'};continue}
       if (!readyToRun(s, statuses)) continue
       if (s.phase !== 'preflight' && steps.some(p => p.phase === 'preflight' && statuses[p.id]?.status !== 'pass')) continue
       if (!s.fullOnly && s.phase !== 'preflight' && steps.some(p => p.fullOnly && statuses[p.id]?.status !== 'pass')) continue
@@ -152,7 +167,7 @@ export async function deliver({ root, config, full = false, major = '', baseline
           try { outputHash = await hashPaths(root, s.outputs, { required: true }); reused = outputHash === cached.outputHash } catch { /* missing artifacts must be rebuilt */ }
         }
         if (!reused) {
-          const result = await run(s, { root, outDir, report, timeoutMs: Math.min(s.timeoutMs ?? 30 * 60 * 1000, budget - (Date.now() - t0)), emit })
+          const result = await run(s, { root, outDir, report, signal:controller.signal, timeoutMs: Math.min(s.timeoutMs ?? 30 * 60 * 1000, budget - (Date.now() - t0)), emit })
           if (result?.ok !== true) throw Error(`${id} produced no affirmative execution evidence`)
           if (sourceBefore !== await hashPaths(root, await sourceList())) throw Error('Source changed while step ran; evidence invalidated')
           if (s.outputs?.length) outputHash = await hashPaths(root, s.outputs, { required: true })
@@ -172,5 +187,5 @@ export async function deliver({ root, config, full = false, major = '', baseline
     if (report.status === 'passed') await atomicJson(join(home, 'baseline.json'), { commit: git(root, ['rev-parse', 'HEAD']).trim(), runId, mode: report.mode })
     await save(); return report
   } catch (error) { report.status = 'failed'; report.error = error.message; report.finishedAt = new Date().toISOString(); await save(); return report }
-  finally { clearInterval(beat); await rm(lock, { force: true }) }
+  finally { clearInterval(beat); process.removeListener('SIGTERM',onTerm);process.removeListener('SIGINT',onInt);await rm(lock, { force: true }) }
 }
