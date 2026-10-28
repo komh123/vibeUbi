@@ -328,4 +328,4 @@ the credential-name list, because in that codebase they are a *unit of
 measurement*. That costs one real finding and removes nine false ones: a hole
 instead of a statement somebody signs for as real debt.
 
-Default incremental delivery: declare `config.delivery`, run `vibeubi checklist` then `vibeubi ship`. Use `--full` only when requested, or `--major "reason"` for a major change. See [delivery commands](docs/COMMANDS.md#incremental-delivery-default-for-declared-delivery-projects).
+Default incremental delivery: declare `config.delivery`, run `vibeubi checklist` then `vibeubi ship`. Use `--full` only when requested, or `--major "reason"` for a major change. See [delivery commands](docs/COMMANDS.md#incremental-delivery-default-for-declared-delivery-projects). Steps key on their own inputs: declare `delivery.testInputs` (acceptance scripts, fixtures, docs, ledgers) and a test-only edit reuses the build against its pinned artifact identity instead of rebuilding; unlisted files, lockfiles, Dockerfiles and config always count as build inputs. See [build vs test inputs](docs/COMMANDS.md#build-inputs-vs-test-inputs-a-steps-cache-key-hashes-only-its-own-inputs).

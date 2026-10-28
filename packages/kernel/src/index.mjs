@@ -29,3 +29,4 @@ export { remediationVerdict, implementationsAgree, countIsNotFitness, population
 export { acceptanceContract, preSwapBehaviourVerdict, acceptanceOrder, acceptanceVerdict, retryItems, foldAttempts, ACCEPTANCE_PHASES, ACCEPTANCE_SEVERITIES, ACCEPTANCE_JUDGES, HEALTH_BUDGET_MAX_MS, ACCEPTANCE_MAX_ATTEMPTS } from "./acceptance.mjs"
 export { diagnoseSummary, countsAsEvidence, DIAGNOSTIC_KIND, DIAGNOSTICS_DIR } from "./diagnose.mjs"
 export { testPlan, readyToRun, planOutcome, PLAN_STATUSES } from "./test-plan.mjs"
+export { globMatches, inputClass, splitInputs, ALWAYS_BUILD_INPUTS } from "./inputs.mjs"

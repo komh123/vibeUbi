@@ -107,3 +107,11 @@ const warns: boolean = rule.warn
 
 const folded = foldAttempts([[{ feature: "a", layer: "acceptance", priority: "P0", status: "fail", reason: "r" }]])
 const flakyFeature: string | undefined = folded.flaky[0]?.feature
+
+import { inputClass, splitInputs, countsAsEvidence, ALWAYS_BUILD_INPUTS } from "../../src/index.js"
+const klass: "build" | "test" = inputClass("SHIPS.md", { testInputs: ["SHIPS.md"] })
+const parts: { build: string[]; test: string[] } = splitInputs(["a"], {})
+const fixedBuild: readonly string[] = ALWAYS_BUILD_INPUTS
+const evidence = countsAsEvidence({}, { phase: "build", buildInputsHash: "b" })
+// @ts-expect-error testInputs is a list of globs, not one string.
+inputClass("a", { testInputs: "SHIPS.md" })

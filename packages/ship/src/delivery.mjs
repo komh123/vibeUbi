@@ -3,22 +3,16 @@
  * verify report. Checks are selected before execution; failures never shrink it.
  */
 import { createHash, randomUUID } from 'node:crypto'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, execFile } from 'node:child_process'
 import { mkdir, readFile, writeFile, rename, lstat, readdir, readlink, rm } from 'node:fs/promises'
 import { join, resolve, relative } from 'node:path'
-import { testPlan, readyToRun, planOutcome, testRanVerdict } from '../../kernel/src/index.mjs'
+import { testPlan, readyToRun, planOutcome, testRanVerdict, globMatches, inputClass, splitInputs } from '../../kernel/src/index.mjs'
 import { runStep } from './run.mjs'
 const digest = value => createHash('sha256').update(value).digest('hex')
 const json = value => JSON.stringify(value, (_key, v) => typeof v === 'function' ? v.toString() : v)
 const git = (root, args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 32 << 20 })
-export function matches(file, patterns = []) {
-  const positive=patterns.filter(p=>!p.startsWith('!')), negative=patterns.filter(p=>p.startsWith('!')).map(p=>p.slice(1))
-  if (negative.length && matches(file, negative)) return false
-  return positive.some(pattern => {
-    const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*/g, '\0').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]').replace(/\0\//g, '(?:.*/)?').replace(/\0/g, '.*')
-    return new RegExp(`^${escaped}$`).test(file)
-  })
-}
+// The glob matcher lives in the kernel now (inputs.mjs); this export keeps the old import path working.
+export const matches = globMatches
 export function deliveryMode({ full = false, major = '', majorChanges = [] } = {}) {
   const reasons = [major, ...majorChanges].filter(s => typeof s === 'string' && s.trim())
   return { mode: full || reasons.length ? 'full' : 'incremental', reasons: full ? ['Owner requested --full', ...reasons] : reasons.length ? reasons : ['Ordinary changes, including engine changes, start at build; selected post-build checks still required'] }
@@ -47,9 +41,18 @@ async function hashPaths(root, paths, { required = false } = {}) {
   for (const name of [...new Set(paths)].sort()) await visit(name)
   return hash.digest('hex')
 }
-export async function inputFingerprint(root, patterns, salt = '') {
+/** `keep` optionally narrows the matched files further (a step that keys on buildInputs only). */
+export async function inputFingerprint(root, patterns, salt = '', keep) {
   if (!patterns?.length) throw Error('Declare nonempty inputs; missing inputs cannot be reused')
-  return digest(await hashPaths(root, (await sourceFiles(root)).filter(f => matches(f, patterns))) + json({ patterns, salt }))
+  return digest(await hashPaths(root, (await sourceFiles(root)).filter(f => matches(f, patterns) && (!keep || keep(f)))) + json({ patterns, salt }))
+}
+const execFileAsync = (bin, args, opts) => new Promise((ok, no) => execFile(bin, args, opts, (e, stdout) => e ? no(e) : ok(stdout)))
+/** Observe a step's artifact identity (image digest, BUILD_ID, ...) from its declared `identity` command. */
+async function observeIdentity(root, s, identify) {
+  const raw = identify ? await identify(s, { root }) : await execFileAsync(s.identity[0], s.identity.slice(1), { cwd: root, encoding: 'utf8', timeout: 60000, maxBuffer: 1 << 20 })
+  const id = typeof raw === 'string' ? raw.trim() : ''
+  if (!id) throw Error(`${s.id}: identity probe returned nothing; an artifact with no observable identity cannot be pinned`)
+  return id
 }
 export async function changedFiles(root, baseline) {
   const working = git(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all']).split('\0').filter(Boolean)
@@ -91,7 +94,7 @@ export async function checklist({ root, config, full = false, major = '', baseli
   await atomicJson(join(root, '.vibeubi', 'checklist.json'), result)
   return result
 }
-export async function deliver({ root, config, full = false, major = '', baseline, changed, emit = () => {}, execute }) {
+export async function deliver({ root, config, full = false, major = '', baseline, changed, emit = () => {}, execute, identify }) {
   const home = join(root, '.vibeubi', 'delivery'); await mkdir(home, { recursive: true })
   const lock = join(home, 'lock.json')
   try { await writeFile(lock, json({ pid: process.pid }), { flag: 'wx' }) }
@@ -100,7 +103,7 @@ export async function deliver({ root, config, full = false, major = '', baseline
     const old = JSON.parse(await readFile(lock, 'utf8'))
     let alive = true; try { process.kill(old.pid, 0) } catch (err) { if (err.code === 'ESRCH') alive = false; else throw err }
     if (alive) throw Error(`Delivery already running (pid ${old.pid})`)
-    await rm(lock); return deliver({ root, config, full, major, baseline, changed, emit, execute })
+    await rm(lock); return deliver({ root, config, full, major, baseline, changed, emit, execute, identify })
   }
   const runId = new Date().toISOString().replace(/[:.]/g, '-') + '-' + randomUUID().slice(0, 8)
   const outDir = join(home, runId); await mkdir(outDir)
@@ -132,6 +135,12 @@ export async function deliver({ root, config, full = false, major = '', baseline
     const sourceList = async () => (await sourceFiles(root)).filter(f => !matches(f, config.generated ?? []))
     const files = await sourceList()
     const sourceBefore = await hashPaths(root, files)
+    // Two halves of the tree: what can change a build product, and what can only change a test.
+    // With no `testInputs` every file is a build input and the test half is empty (the old behaviour).
+    const rules = { testInputs: config.testInputs ?? [], buildInputs: config.buildInputs ?? [] }
+    const split = splitInputs(files, rules)
+    Object.assign(report, { sourceTree: sourceBefore, buildInputsHash: await hashPaths(root, split.build), testInputsHash: await hashPaths(root, split.test) })
+    await save()
     const cacheDir = join(home, 'cache'); await mkdir(cacheDir, { recursive: true })
     const statuses = {}, keys = {}
     const t0 = Date.now(), budget = config.totalBudgetMs ?? 3 * 60 * 60 * 1000
@@ -158,24 +167,36 @@ export async function deliver({ root, config, full = false, major = '', baseline
       beat = setInterval(() => { atomicJson(join(home, 'heartbeat.json'), { runId, pid: process.pid, step: id, at: new Date().toISOString() }).catch(() => {}) }, 15000)
       try {
         if (sourceBefore !== await hashPaths(root, await sourceList())) throw Error('Source changed during delivery; stop before consuming stale evidence')
-        const key = await inputFingerprint(root, s.inputs ?? ['**'], { step: s, deps: (s.after ?? []).map(d => keys[d]), runtime: process.version, context: config.context ?? {} })
+        // A build-type step keys on buildInputs only; every other step keys on build + test inputs.
+        const buildScoped = rules.testInputs.length > 0 && s.scope !== 'all' && (s.phase === 'build' || s.scope === 'build')
+        const key = await inputFingerprint(root, s.inputs ?? ['**'], { step: s, deps: (s.after ?? []).map(d => keys[d]), runtime: process.version, context: config.context ?? {}, ...(rules.testInputs.length ? { inputRules: rules } : {}) },
+          buildScoped ? f => inputClass(f, rules) === 'build' : undefined)
         const cacheFile = join(cacheDir, digest(id) + '.json')
         const cached = await readFile(cacheFile, 'utf8').then(JSON.parse).catch(e => { if (e.code !== 'ENOENT') throw e; return null })
-        const reusable = plan.mode !== 'full' && s.reuse === true && !s.mutates && s.phase !== 'preflight' && s.outputs?.length && cached?.key === key && cached?.status === 'pass'
-        let reused = false, outputHash = null
+        // Reuse needs a pin: output bytes and/or an observed artifact identity. No pin, no reuse.
+        const pinned = !!(s.outputs?.length || s.identity?.length)
+        const reusable = plan.mode !== 'full' && s.reuse === true && !s.mutates && s.phase !== 'preflight' && pinned && cached?.key === key && cached?.status === 'pass'
+        let reused = false, outputHash = null, artifactId = null
         if (reusable) {
-          try { outputHash = await hashPaths(root, s.outputs, { required: true }); reused = outputHash === cached.outputHash } catch { /* missing artifacts must be rebuilt */ }
+          // Every declared pin must be re-observed and equal to the receipt; anything unverifiable rebuilds.
+          try {
+            reused = true
+            if (s.outputs?.length) { outputHash = await hashPaths(root, s.outputs, { required: true }); reused = outputHash === cached.outputHash }
+            if (reused && s.identity?.length) { artifactId = await observeIdentity(root, s, identify); reused = artifactId === cached.artifactId }
+          } catch { reused = false /* missing artifacts / unreachable probe must be rebuilt */ }
+          if (!reused) { outputHash = null; artifactId = null }
         }
         if (!reused) {
           const result = await run(s, { root, outDir, report, signal:controller.signal, timeoutMs: Math.min(s.timeoutMs ?? 30 * 60 * 1000, budget - (Date.now() - t0)), emit })
           if (result?.ok !== true) throw Error(`${id} produced no affirmative execution evidence`)
           if (sourceBefore !== await hashPaths(root, await sourceList())) throw Error('Source changed while step ran; evidence invalidated')
           if (s.outputs?.length) outputHash = await hashPaths(root, s.outputs, { required: true })
+          if (s.identity?.length) artifactId = await observeIdentity(root, s, identify)
           row.evidence = result
-          if (s.reuse === true && s.outputs?.length && !s.mutates) await atomicJson(cacheFile, { key, outputHash, status: 'pass', runId })
+          if (s.reuse === true && pinned && !s.mutates) await atomicJson(cacheFile, { key, outputHash, ...(artifactId ? { artifactId } : {}), status: 'pass', runId })
         }
-        Object.assign(row, { status: 'pass', execution: reused ? 'reused' : 'ran', ...(reused ? { fromRun: cached.runId } : {}), key, outputHash })
-        keys[id] = s.phase === 'preflight' ? digest(json(s)) : digest(key + (outputHash ?? ''))
+        Object.assign(row, { status: 'pass', execution: reused ? 'reused' : 'ran', ...(reused ? { fromRun: cached.runId } : {}), key, outputHash, ...(artifactId ? { artifact: artifactId } : {}), ...(rules.testInputs.length ? { scope: buildScoped ? 'build' : 'all' } : {}) })
+        keys[id] = s.phase === 'preflight' ? digest(json(s)) : digest(key + (outputHash ?? '') + (artifactId ?? ''))
       } catch (error) { Object.assign(row, { status: 'fail', reason: error.message }); emit({ kind: 'failure', id, reason: error.message }) }
       finally { clearInterval(beat); row.finishedAt = new Date().toISOString(); statuses[id] = row; await save() }
     }

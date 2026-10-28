@@ -70,7 +70,10 @@ export function diagnoseSummary(results) {
  * May this report be used as evidence that a gate passed?
  *
  * @param {unknown} report
- * @param {{ phase?: string, sourceTree?: string }} [want]
+ * @param {{ phase?: string, sourceTree?: string, buildInputsHash?: string, testInputsHash?: string }} [want]
+ *   `buildInputsHash` / `testInputsHash` bind evidence to the two halves of the tree (see inputs.mjs).
+ *   A build-phase report depends on the build half only; every other phase depends on both, so
+ *   asking for acceptance evidence with only one of them is refused rather than half-checked.
  * @returns {{ ok: true } | { ok: false, reason: string }}
  */
 export function countsAsEvidence(report, want = {}) {
@@ -84,6 +87,18 @@ export function countsAsEvidence(report, want = {}) {
   if (want.phase && r.phase !== want.phase) return { ok: false, reason: `phase is ${String(r.phase)}, not ${want.phase}` }
   if (want.sourceTree && r.sourceTree !== want.sourceTree) {
     return { ok: false, reason: "the evidence is for a different source tree — any edit, even to a test, invalidates it" }
+  }
+  if (want.buildInputsHash !== undefined || want.testInputsHash !== undefined) {
+    const needsTests = want.phase !== "build"
+    if (needsTests && (want.buildInputsHash === undefined || want.testInputsHash === undefined)) {
+      return { ok: false, reason: "evidence for a non-build phase must be asked for with both buildInputsHash and testInputsHash" }
+    }
+    if (want.buildInputsHash !== undefined && r.buildInputsHash !== want.buildInputsHash) {
+      return { ok: false, reason: "the evidence is for different build inputs — source or config that can change a build product changed" }
+    }
+    if (needsTests && r.testInputsHash !== want.testInputsHash) {
+      return { ok: false, reason: "the evidence is for different test inputs — an acceptance script, fixture or ledger changed" }
+    }
   }
   return { ok: true }
 }
