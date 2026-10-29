@@ -155,6 +155,14 @@ block dependent promotion. Declare rollback inside the bounded promotion adapter
 an identity command whose observations match the previous success. Inputs default to the
 whole source tree; narrow them deliberately to the artifact's actual inputs.
 
+Output pins hash both a symbolic link and the bytes of its resolved target,
+including linked directories. Targets must exist and resolve inside the project
+root, including when a parent directory is a link. Dangling links, directory
+cycles and paths escaping the root cannot publish receipts or establish reuse.
+Multiple links to the same directory are allowed when they do not form a cycle.
+This does not change source hashing: a tracked source link pins its link text;
+external build inputs still need an explicit input/identity contract.
+
 `timeoutMs` covers the selected step's execution, reuse probes and fresh identity
 observations together; rebuilding after an invalid pin does not reset it.
 Identity commands use the smaller of 60 seconds, the step's remaining time and

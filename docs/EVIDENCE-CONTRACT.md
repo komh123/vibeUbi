@@ -135,3 +135,32 @@ fixture proves the child's handler was installed before sending the signal.
 Five additional targeted mutations falsify the new
 guards; the five original source/fingerprint mutations remain in the same suite.
 Validation and publication follow the owner-approved local plan above.
+
+## Follow-up: a link name is not observed output bytes
+
+Main `2d697aa` could reuse a declared output symlink after its target bytes
+changed, or publish success for a dangling, cyclic or outside-root target.
+`c85df14` introduced one hash function for both source and output observations;
+its symlink branch hashed only the link text. Later reuse and identity work
+retained that branch. The documentation promised observed output bytes, but the
+implementation only established where the link pointed.
+
+Required output observations now hash link text and resolved target contents,
+reject unreadable targets and enforce the root boundary on resolved paths.
+Directory ancestry detects cycles without rejecting two valid aliases to the
+same directory. Both fresh execution and reuse already call this shared entry
+point; failed observation can rebuild, but it cannot publish new evidence unless
+the resulting outputs are observable. Source-link hashing remains unchanged.
+
+The final twelve-case regression suite has one healthy alias control and eleven
+failures on the unmodified main implementation: changed file/directory/nested
+link targets, fresh/reuse dangling/cyclic/outside links, and paths escaping
+through a symlink parent. Each failure checks a decision or the preservation of
+receipts/baseline, not merely a hash helper's return value. Two targeted mutations
+remove target-byte observation and resolved containment; the corresponding
+tests must turn red. Existing source/fingerprint/lifetime mutations remain.
+
+These observations are not an atomic filesystem snapshot. Callers must keep
+artifacts stable while they are being observed, just as source must stay frozen.
+Following in-root output links does not automatically declare external build
+inputs or establish that a consumer deployment succeeded.
