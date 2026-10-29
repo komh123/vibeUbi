@@ -15,6 +15,7 @@ const contractTests = ['packages/kernel/test/evidence-contract.test.mjs', 'packa
 const lifecycleTests = ['packages/ship/test/identity-lifecycle.test.mjs']
 const outputTests = ['packages/ship/test/output-links.test.mjs']
 const barrierTests = ['packages/ship/test/delivery-barriers.test.mjs']
+const framingTests = ['packages/ship/test/fingerprint-framing.test.mjs', 'packages/security/test/fingerprint-framing.test.mjs']
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim()
 const source = await inputFingerprint(root, ['**'])
 const report = { kind: 'mutation-diagnostic', evidence: false, commit: git('rev-parse', 'HEAD'), tree: git('rev-parse', 'HEAD^{tree}'), source, runtime: process.version, results: [] }
@@ -81,13 +82,23 @@ const mutations = [
     from: 'deps: (s.after ?? []).map(d => keys[d])', to: 'deps: []',
     tests: barrierTests, pattern: 'a changed barrier declaration',
     fails: 'a changed barrier declaration invalidates dependent build receipts' },
+  { id: 'ambiguous-file-records', file: delivery,
+    from: "hash.update(kind + '\\0' + bytes.length + '\\0')\n    hash.update(bytes)",
+    to: "if (kind === 'path' || kind === 'mode') hash.update(Buffer.concat([bytes, Buffer.from('\\0')]))\n    else if (kind === 'file') hash.update(bytes)\n    else if (kind === 'link') hash.update('link:' + value)\n    else if (kind === 'missing') hash.update('missing\\0')",
+    tests: framingTests, pattern: 'input fingerprints distinguish file boundaries',
+    fails: 'input fingerprints distinguish file boundaries even when legacy streams are identical' },
+  { id: 'ambiguous-finding-fields', file: 'packages/security/src/rules.mjs',
+    from: "JSON.stringify(['vibeubi-finding-v2', String(rule), String(where), normalise(evidence)])",
+    to: '`${rule}|${where}|${normalise(evidence)}`',
+    tests: framingTests, pattern: 'finding fingerprints distinguish location',
+    fails: 'finding fingerprints distinguish location and evidence field boundaries' },
 ]
 const runTests = (tests, pattern) => spawnSync(process.execPath, ['--test', '--test-reporter=tap', ...(pattern ? ['--test-name-pattern', pattern] : []), ...tests], { cwd: sandbox, encoding: 'utf8', timeout: 60000, maxBuffer: 32 << 20 })
 try {
   await cp(join(root, 'packages'), join(sandbox, 'packages'), { recursive: true })
   await cp(join(root, 'bin'), join(sandbox, 'bin'), { recursive: true })
   await cp(join(root, 'package.json'), join(sandbox, 'package.json'))
-  const baseline = runTests([...contractTests, ...lifecycleTests, ...outputTests, ...barrierTests])
+  const baseline = runTests([...contractTests, ...lifecycleTests, ...outputTests, ...barrierTests, ...framingTests])
   const baselineOutput = (baseline.stdout ?? '') + (baseline.stderr ?? '')
   await writeFile(join(out, 'baseline.tap'), baselineOutput)
   if (baseline.status !== 0 || !/^# pass [1-9]\d*$/m.test(baselineOutput)) throw Error('Mutation baseline did not run and pass its regression tests')

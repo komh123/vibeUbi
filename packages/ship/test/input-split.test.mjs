@@ -91,17 +91,18 @@ test('acceptance steps key on build + test inputs: a test edit changes their key
   assert.notEqual(r.steps['web-test'].key, r0.steps['web-test'].key)
 })
 
-test('default (no testInputs): build key equals the pre-feature key and a test-file edit still rebuilds', async t => {
+test('default (no testInputs): the build keys on the whole input set and a test-file edit still rebuilds', async t => {
   const f = await fixture(t); delete f.config.testInputs
   const digest = v => createHash('sha256').update(v).digest('hex')
   const json = v => JSON.stringify(v, (_k, x) => typeof x === 'function' ? x.toString() : x)
   const r0 = await deliver(f)
   const preflightKey = digest(json(f.config.steps.find(s => s.id === 'preflight')))
-  const legacy = await inputFingerprint(f.root, ['**'], { step: f.config.steps.find(s => s.id === 'web-build'), deps: [preflightKey], runtime: process.version, context: {} })
-  assert.equal(r0.steps['web-build'].key, legacy, 'unchanged keys: existing consumers keep their cache')
-  assert.equal(r0.testInputsHash, digest(''), 'no test inputs configured: the test side is empty')
+  const wholeInputs = await inputFingerprint(f.root, ['**'], { step: f.config.steps.find(s => s.id === 'web-build'), deps: [preflightKey], runtime: process.version, context: {} })
+  assert.equal(r0.steps['web-build'].key, wholeInputs, 'no test-input split is applied to the key')
   await edit(f, 'SHIPS.md', 'ships-v2')
-  assert.equal((await deliver(f)).steps['web-build'].execution, 'ran')
+  const next = await deliver(f)
+  assert.equal(next.steps['web-build'].execution, 'ran')
+  assert.equal(next.testInputsHash, r0.testInputsHash, 'the empty test-input half stays unchanged')
 })
 
 test('changing the classification rules invalidates old receipts', async t => {

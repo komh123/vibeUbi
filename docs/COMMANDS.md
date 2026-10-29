@@ -162,6 +162,11 @@ block dependent promotion. Declare rollback inside the bounded promotion adapter
 an identity command whose observations match the previous success. Inputs default to the
 whole source tree; narrow them deliberately to the artifact's actual inputs.
 
+Source, input and output fingerprints use a versioned encoding of typed fields
+with byte lengths. File contents can contain arbitrary bytes without being
+confused with the next path or file's metadata. Updating from the old encoding
+invalidates old cache keys; fresh execution must establish replacement evidence.
+
 Output pins hash both a symbolic link and the bytes of its resolved target,
 including linked directories. Targets must exist and resolve inside the project
 root, including when a parent directory is a link. Dangling links, directory

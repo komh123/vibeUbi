@@ -27,28 +27,39 @@ export async function sourceFiles(root) {
 }
 async function hashPaths(root, paths, { required = false } = {}) {
   const hash = createHash('sha256')
+  hash.update('vibeubi-paths-v2\0')
+  // Hash.update boundaries are not encoded by crypto. Frame every field with
+  // its type and byte length so arbitrary file bytes cannot impersonate a path,
+  // mode or the next file. The version separates old ambiguous receipts.
+  const field = (kind, value = '') => {
+    const bytes = Buffer.isBuffer(value) ? value : Buffer.from(String(value))
+    hash.update(kind + '\0' + bytes.length + '\0')
+    hash.update(bytes)
+  }
   const outputRoot = required ? await realpath(root) : null
   const outside = path => path === '..' || path.startsWith('..' + sep) || isAbsolute(path)
   async function visit(name, ancestors = new Set()) {
     const file = resolve(root, name)
     if (outside(relative(root, file))) throw Error(`Path outside root: ${name}`)
     const stat = await lstat(file).catch(e => { if (e.code === 'ENOENT' && !required) return null; throw e })
-    hash.update(name + '\0')
-    if (!stat) { hash.update('missing\0'); return }
-    hash.update(String(stat.mode) + '\0')
+    field('path', name)
+    if (!stat) { field('missing'); return }
+    field('mode', stat.mode)
     const actual = required ? await realpath(file) : file
     if (required && outside(relative(outputRoot, actual))) throw Error(`Output resolves outside root: ${name}`)
     if (stat.isSymbolicLink()) {
-      hash.update('link:' + await readlink(file))
+      field('link', await readlink(file))
       // Source pins describe the tracked link. Output pins additionally prove
       // the bytes it resolves to; a link name alone cannot establish an artifact.
       if (required) await visit(relative(outputRoot, actual), ancestors)
     } else if (stat.isDirectory()) {
+      field('directory')
       if (ancestors.has(actual)) throw Error(`Output directory cycle: ${name}`)
       const lineage = new Set(ancestors).add(actual)
       for (const child of (await readdir(file)).sort()) await visit(join(name, child), lineage)
+      field('end-directory')
     }
-    else hash.update(await readFile(file))
+    else field('file', await readFile(file))
   }
   for (const name of [...new Set(paths)].sort()) await visit(name)
   return hash.digest('hex')
