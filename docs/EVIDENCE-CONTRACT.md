@@ -80,15 +80,19 @@ There is no compile/build step for this `.mjs` repository. The check plan is:
 | Related diagnosis, delivery and input-classification tests | `[]` |
 | Targeted mutations | fixed regression diagnostics |
 | Full Node 22 and Node 24 type/unit/smoke checks | clean diagnostics and killed mutations |
-| PR CI | published candidate commit |
-| Merge | all required PR checks successful on the current head |
-| Main CI | merge commit |
+| Publish PR head | complete local checks on the exact candidate commit |
+| Merge | published head still matches the locally verified commit |
+| Complete local main checks | fetched merge commit |
 
 Independent checks continue after failures and are reported together. Local
 Node-version suites run sequentially because existing blue-green tests share
-fixed ports. CI matrix jobs use separate runners. CI records the actual checked
-out commit/tree and logs; a PR merge-ref SHA may differ from the branch head.
-Repository checks are not consumer deployment evidence.
+fixed ports. Record the commit, tree, runtime, observed test counts and source
+fingerprint before/after the checks. Verify the fetched merge commit again;
+do not present a pre-merge result as evidence for the merged tree.
+On 2026-10-30 the owner explicitly selected local verification and repository
+pushes instead of a GitHub Actions workflow. No workflow is required for this
+PR's merge; this changes the execution location, not the checks or their pass
+criteria. Repository checks are not consumer deployment evidence.
 
 ## Limits retained deliberately
 
