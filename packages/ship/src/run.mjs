@@ -168,11 +168,15 @@ export async function machineMemory() {
  * - a V8 OOM gets `heapOomMessage` instead of the raw stack, because the raw
  *   stack sends operators to the machine's memory, which is not what ran out.
  */
-export async function runStep(id, cmd, args, { cwd, outDir, timeoutMs, heapMb = null, env = {}, signal }) {
+export async function runStep(id, cmd, args, { cwd, outDir, timeoutMs, heapMb = null, env = {}, signal, captureStdout = false }) {
   const t0 = Date.now()
   const file = join(outDir, `step-${id.replace(/[^\w.-]/g, "_")}.out`)
   const { openSync, readFileSync } = await import("node:fs")
   const fd = openSync(file, "a")
+  // Identity probes need stdout without stderr diagnostics, while retaining the
+  // same process-group termination and timeout behavior as every other step.
+  const stdoutFile = captureStdout ? `${file}.stdout` : null
+  const stdoutFd = captureStdout ? openSync(stdoutFile, "w") : fd
 
   const nodeOpts = [process.env.NODE_OPTIONS, heapMb ? `--max-old-space-size=${heapMb}` : ""]
     .filter(Boolean).join(" ")
@@ -180,14 +184,17 @@ export async function runStep(id, cmd, args, { cwd, outDir, timeoutMs, heapMb = 
   const childEnv = { ...process.env, ...env, ...(nodeOpts ? { NODE_OPTIONS: nodeOpts } : {}) }
   delete childEnv.NODE_TEST_CONTEXT // a nested test CLI must emit its own evidence
   const child = spawn(cmd, args, {
-    cwd, detached: true, stdio: ["ignore", fd, fd],
+    cwd, detached: true, stdio: ["ignore", stdoutFd, fd],
     env: childEnv,
   })
 
   let abortTimer
+  const killGroup = (killSignal) => {
+    try { process.kill(-child.pid, killSignal) } catch { try { child.kill(killSignal) } catch { /* already gone */ } }
+  }
   const abort = () => {
-    try { process.kill(-child.pid, 'SIGTERM') } catch { child.kill('SIGTERM') }
-    abortTimer=setTimeout(()=>{try {process.kill(-child.pid,'SIGKILL')}catch{}},5000)
+    killGroup('SIGTERM')
+    abortTimer=setTimeout(()=>killGroup('SIGKILL'),5000)
   }
   signal?.addEventListener('abort', abort, { once: true })
   if (signal?.aborted) abort()
@@ -196,22 +203,27 @@ export async function runStep(id, cmd, args, { cwd, outDir, timeoutMs, heapMb = 
     timedOut = true
     // The decision (kill the whole tree) lives in the kernel; this is only the
     // POSIX mechanism for it. A negative pid addresses the group.
-    try { process.kill(-child.pid, "SIGKILL") } catch { try { child.kill("SIGKILL") } catch { /* already gone */ } }
+    killGroup("SIGKILL")
   }, timeoutMs)
 
   const code = await new Promise((resolve) => {
     child.on("error", () => resolve(127))
     child.on("exit", (c, sig) => resolve(c ?? (sig ? 1 : 0)))
   })
+  // The leader can exit on SIGTERM while a descendant ignores it. Finish the
+  // interrupted group before clearing the escalation timer, even after exit.
+  if (signal?.aborted) killGroup("SIGKILL")
   clearTimeout(timer)
   signal?.removeEventListener('abort', abort)
   clearTimeout(abortTimer)
   try { (await import("node:fs")).closeSync(fd) } catch { /* already closed */ }
+  if (captureStdout) try { (await import("node:fs")).closeSync(stdoutFd) } catch { /* already closed */ }
 
   let out = ""
   try { out = readFileSync(file, "utf8") } catch { /* nothing was written */ }
   const oom = heapOomMessage({ output: out, forStep: id, heapMb, availableMb: env.__availableMb ?? 0 })
-  return { code, out, timedOut, oom, ms: Date.now() - t0 }
+  const stdout = captureStdout ? readFileSync(stdoutFile, "utf8") : undefined
+  return { code, out, timedOut, oom, ms: Date.now() - t0, ...(captureStdout ? { stdout } : {}) }
 }
 
 /**

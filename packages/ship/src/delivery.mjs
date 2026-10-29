@@ -3,7 +3,7 @@
  * verify report. Checks are selected before execution; failures never shrink it.
  */
 import { createHash, randomUUID } from 'node:crypto'
-import { execFileSync, execFile } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { mkdir, readFile, writeFile, rename, lstat, readdir, readlink, rm } from 'node:fs/promises'
 import { join, resolve, relative } from 'node:path'
 import { testPlan, readyToRun, planOutcome, testRanVerdict, globMatches, inputClass, splitInputs } from '../../kernel/src/index.mjs'
@@ -46,10 +46,42 @@ export async function inputFingerprint(root, patterns, salt = '', keep) {
   if (!patterns?.length) throw Error('Declare nonempty inputs; missing inputs cannot be reused')
   return digest(await hashPaths(root, (await sourceFiles(root)).filter(f => matches(f, patterns) && (!keep || keep(f)))) + json({ patterns, salt }))
 }
-const execFileAsync = (bin, args, opts) => new Promise((ok, no) => execFile(bin, args, opts, (e, stdout) => e ? no(e) : ok(stdout)))
+// Injected observers get the same cancellation/deadline contract as commands.
+// A callback must cooperate with its signal to stop side effects; a late return
+// can never become evidence even if the callback ignores cancellation.
+async function boundedObserver(observe, { signal, timeoutMs }) {
+  const controller = new AbortController()
+  let timer, onAbort
+  try {
+    return await new Promise((resolve, reject) => {
+      const stop = reason => { controller.abort(reason); reject(reason) }
+      onAbort = () => stop(new Error('Delivery interrupted during identity observation'))
+      if (signal.aborted) { onAbort(); return }
+      signal.addEventListener('abort', onAbort, { once: true })
+      timer = setTimeout(() => stop(new Error('Identity observation timed out')), timeoutMs)
+      Promise.resolve().then(() => observe(controller.signal)).then(resolve, reject)
+    })
+  } finally { clearTimeout(timer); signal.removeEventListener('abort', onAbort) }
+}
 /** Observe a step's artifact identity (image digest, BUILD_ID, ...) from its declared `identity` command. */
-async function observeIdentity(root, s, identify) {
-  const raw = identify ? await identify(s, { root }) : await execFileAsync(s.identity[0], s.identity.slice(1), { cwd: root, encoding: 'utf8', timeout: 60000, maxBuffer: 1 << 20 })
+async function observeIdentity(root, s, identify, { outDir, signal, timeoutMs }) {
+  if (signal.aborted) throw Error('Delivery interrupted before identity observation')
+  timeoutMs = Math.min(60000, timeoutMs)
+  if (!(timeoutMs > 0)) throw Error('Identity observation has no remaining budget')
+  let raw
+  if (identify) raw = await boundedObserver(abortSignal => identify(s, { root, signal: abortSignal, timeoutMs }), { signal, timeoutMs })
+  else {
+    // Separate attempts retain their own stdout/stderr logs; failed reuse output
+    // must not be prepended to the fresh identity after a legitimate rebuild.
+    const logs = join(outDir, 'identity', s.id, randomUUID())
+    await mkdir(logs, { recursive: true })
+    const result = await runStep('probe', s.identity[0], s.identity.slice(1), {
+      cwd: root, outDir: logs, timeoutMs, signal, env: s.env ?? {}, heapMb: s.heapMb, captureStdout: true,
+    })
+    if (signal.aborted) throw Error('Delivery interrupted during identity observation')
+    if (result.timedOut || result.code !== 0) throw Error(`${s.id}: identity ${result.timedOut ? 'timed out' : `exited ${result.code}`}`)
+    raw = result.stdout
+  }
   const id = typeof raw === 'string' ? raw.trim() : ''
   if (!id) throw Error(`${s.id}: identity probe returned nothing; an artifact with no observable identity cannot be pinned`)
   return id
@@ -147,6 +179,10 @@ export async function deliver({ root, config, full = false, major = '', baseline
     const cacheDir = join(home, 'cache'); await mkdir(cacheDir, { recursive: true })
     const statuses = {}, keys = {}
     const t0 = Date.now(), budget = config.totalBudgetMs ?? 3 * 60 * 60 * 1000
+    const assertDeliveryActive = () => {
+      if (controller.signal.aborted) throw Error('Delivery interrupted')
+      if (Date.now() - t0 >= budget) throw Error('Total delivery budget exceeded')
+    }
     const run = execute ?? (async (s, context) => {
       if (!Array.isArray(s.cmd) || !s.cmd.length) throw Error(`Missing command for ${s.id}`)
       const r = await runStep(s.id, s.cmd[0], s.cmd.slice(1), { cwd: root, outDir, timeoutMs: context.timeoutMs, env: s.env ?? {}, heapMb: s.heapMb, signal:controller.signal })
@@ -159,17 +195,25 @@ export async function deliver({ root, config, full = false, major = '', baseline
     const order = [...ordered.filter(id => steps.find(s => s.id === id).phase === 'preflight'), ...ordered.filter(id => steps.find(s => s.id === id).fullOnly && steps.find(s => s.id === id).phase !== 'preflight'), ...ordered.filter(id => !steps.find(s => s.id === id).fullOnly && steps.find(s => s.id === id).phase !== 'preflight')]
     for (const id of order) {
       const s = steps.find(s => s.id === id)
-      if(controller.signal.aborted){statuses[id]={status:'not-run',reason:'Delivery interrupted'};continue}
       if (!readyToRun(s, statuses)) continue
+      if(controller.signal.aborted){statuses[id]={status:'not-run',reason:'Delivery interrupted'};continue}
       if (s.phase !== 'preflight' && steps.some(p => p.phase === 'preflight' && statuses[p.id]?.status !== 'pass')) continue
       if (!s.fullOnly && s.phase !== 'preflight' && steps.some(p => p.fullOnly && statuses[p.id]?.status !== 'pass')) continue
       if (Date.now() - t0 >= budget) { statuses[id] = { status: 'not-run', reason: 'Total delivery budget exceeded' }; continue }
       const row = report.steps[id] = { status: 'running', phase: s.phase ?? 'acceptance', startedAt: new Date().toISOString() }
+      const deadline = Date.now() + (s.timeoutMs ?? 30 * 60 * 1000)
+      const remaining = () => Math.min(deadline - Date.now(), budget - (Date.now() - t0))
+      const assertActive = () => {
+        assertDeliveryActive()
+        if (Date.now() >= deadline) throw Error(`${id}: step budget exceeded`)
+      }
+      const identity = () => observeIdentity(root, s, identify, { outDir, signal: controller.signal, timeoutMs: remaining() })
       await save(); emit({ kind: 'step', id, state: 'run' })
       // Heartbeats update a separate file to avoid racing report snapshots.
       beat = setInterval(() => { atomicJson(join(home, 'heartbeat.json'), { runId, pid: process.pid, step: id, at: new Date().toISOString() }).catch(() => {}) }, 15000)
       try {
         await assertSourceUnchanged()
+        assertActive()
         // A build-type step keys on buildInputs only; every other step keys on build + test inputs.
         const buildScoped = rules.testInputs.length > 0 && s.scope !== 'all' && (s.phase === 'build' || s.scope === 'build')
         const key = await inputFingerprint(root, s.inputs ?? ['**'], { step: s, deps: (s.after ?? []).map(d => keys[d]), runtime: process.version, context: config.context ?? {}, ...(rules.testInputs.length ? { inputRules: rules } : {}) },
@@ -185,24 +229,29 @@ export async function deliver({ root, config, full = false, major = '', baseline
           try {
             reused = true
             if (s.outputs?.length) { outputHash = await hashPaths(root, s.outputs, { required: true }); reused = outputHash === cached.outputHash }
-            if (reused && s.identity?.length) { artifactId = await observeIdentity(root, s, identify); reused = artifactId === cached.artifactId }
+            if (reused && s.identity?.length) { artifactId = await identity(); reused = artifactId === cached.artifactId }
           } catch { reused = false /* missing artifacts / unreachable probe must be rebuilt */ }
           if (!reused) { outputHash = null; artifactId = null }
           // A failed/mismatching probe may also have overlapped a source edit.
           // That is not permission to build against the already-computed key.
+          assertActive()
           await assertSourceUnchanged()
+          assertActive()
         }
         if (!reused) {
-          const result = await run(s, { root, outDir, report, signal:controller.signal, timeoutMs: Math.min(s.timeoutMs ?? 30 * 60 * 1000, budget - (Date.now() - t0)), emit })
+          assertActive()
+          const result = await run(s, { root, outDir, report, signal:controller.signal, timeoutMs: remaining(), emit })
+          assertActive()
           if (result?.ok !== true) throw Error(`${id} produced no affirmative execution evidence`)
           await assertSourceUnchanged()
           if (s.outputs?.length) outputHash = await hashPaths(root, s.outputs, { required: true })
-          if (s.identity?.length) artifactId = await observeIdentity(root, s, identify)
+          if (s.identity?.length) artifactId = await identity()
           row.evidence = result
         }
         // Both fresh execution and reuse converge here AFTER every output/identity
         // observation. Only stable observations may publish a receipt or a pass.
         await assertSourceUnchanged()
+        assertActive()
         if (!reused && s.reuse === true && pinned && !s.mutates) await atomicJson(cacheFile, { key, outputHash, ...(artifactId ? { artifactId } : {}), status: 'pass', runId })
         Object.assign(row, { status: 'pass', execution: reused ? 'reused' : 'ran', ...(reused ? { fromRun: cached.runId } : {}), key, outputHash, ...(artifactId ? { artifact: artifactId } : {}), ...(rules.testInputs.length ? { scope: buildScoped ? 'build' : 'all' } : {}) })
         keys[id] = s.phase === 'preflight' ? digest(json(s)) : digest(key + (outputHash ?? '') + (artifactId ?? ''))
@@ -211,9 +260,10 @@ export async function deliver({ root, config, full = false, major = '', baseline
     }
     const outcome = planOutcome(steps, statuses)
     report.outcome = outcome
-    for (const s of steps) if (!report.steps[s.id]) report.steps[s.id] = { status: 'blocked', reason: 'Prerequisite failed or not run; see outcome' }
+    for (const { id, ...row } of outcome.items) if (!report.steps[id]) report.steps[id] = row
     const passed = steps.length > 0 && steps.every(s => report.steps[s.id].status === 'pass')
     if (passed) await assertSourceUnchanged()
+    if (passed) assertDeliveryActive()
     report.status = passed ? 'passed' : 'failed'
     report.finishedAt = new Date().toISOString()
     if (report.status === 'passed' && config.recordBaseline !== false) await atomicJson(join(home, 'baseline.json'), { commit: git(root, ['rev-parse', 'HEAD']).trim(), runId, mode: report.mode })

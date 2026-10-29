@@ -11,7 +11,8 @@ await mkdir(out, { recursive: true })
 const sandbox = await mkdtemp(join(tmpdir(), 'vibeubi-mutations-'))
 const kernel = 'packages/kernel/src/diagnose.mjs'
 const delivery = 'packages/ship/src/delivery.mjs'
-const tests = ['packages/kernel/test/evidence-contract.test.mjs', 'packages/ship/test/input-split.test.mjs']
+const contractTests = ['packages/kernel/test/evidence-contract.test.mjs', 'packages/ship/test/input-split.test.mjs']
+const lifecycleTests = ['packages/ship/test/identity-lifecycle.test.mjs']
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim()
 const source = await inputFingerprint(root, ['**'])
 const report = { kind: 'mutation-diagnostic', evidence: false, commit: git('rev-parse', 'HEAD'), tree: git('rev-parse', 'HEAD^{tree}'), source, runtime: process.version, results: [] }
@@ -25,21 +26,44 @@ const mutations = [
     to: 'if (want.buildInputsHash !== undefined && !sameFingerprint(r.buildInputsHash, want.buildInputsHash))',
     fails: 'build evidence needs an expected build fingerprint' },
   { id: 'reuse-fallback-with-stale-source', file: delivery,
-    from: '          await assertSourceUnchanged()\n        }\n        if (!reused)',
-    to: '        }\n        if (!reused)',
+    from: '          await assertSourceUnchanged()\n          assertActive()\n        }\n        if (!reused)',
+    to: '          assertActive()\n        }\n        if (!reused)',
     fails: 'source freeze covers the final identity observation \\(reuse-mismatch\\)' },
   { id: 'publish-before-observation-guard', file: delivery,
-    from: '        await assertSourceUnchanged()\n        if (!reused && s.reuse',
-    to: '        if (!reused && s.reuse',
+    from: '        await assertSourceUnchanged()\n        assertActive()\n        if (!reused && s.reuse',
+    to: '        assertActive()\n        if (!reused && s.reuse',
     fails: 'source freeze covers the final identity observation \\(fresh\\)' },
   { id: 'no-final-source-check', file: delivery,
     from: '    if (passed) await assertSourceUnchanged()', to: '',
     fails: 'source freeze is checked again before final success' },
+  { id: 'identity-ignores-remaining-budget', file: delivery,
+    from: 'timeoutMs = Math.min(60000, timeoutMs)', to: 'timeoutMs = 60000',
+    tests: lifecycleTests, pattern: 'identity respects the remaining step budget.*fresh',
+    fails: 'identity respects the remaining step budget before publication \\(fresh\\)' },
+  { id: 'identity-ignores-interrupt', file: delivery,
+    from: 'const identity = () => observeIdentity(root, s, identify, { outDir, signal: controller.signal, timeoutMs: remaining() })',
+    to: 'const identity = () => observeIdentity(root, s, identify, { outDir, signal: new AbortController().signal, timeoutMs: remaining() })',
+    tests: lifecycleTests, pattern: 'interrupting a final identity probe.*fresh',
+    fails: 'interrupting a final identity probe kills its process tree and cannot publish success \\(fresh\\)' },
+  { id: 'injected-observer-has-no-watchdog', file: delivery,
+    from: "timer = setTimeout(() => stop(new Error('Identity observation timed out')), timeoutMs)", to: 'timer = undefined',
+    tests: lifecycleTests, pattern: 'an injected identity observer is bounded',
+    fails: 'an injected identity observer is bounded even when it ignores the deadline' },
+  { id: 'no-final-interruption-check', file: delivery,
+    from: '    if (passed) assertDeliveryActive()', to: '',
+    tests: lifecycleTests, pattern: 'interruption at the last checkpoint',
+    fails: 'interruption at the last checkpoint prevents final success and baseline publication' },
+  { id: 'aborted-leader-leaves-descendants', file: 'packages/ship/src/run.mjs',
+    from: '  if (signal?.aborted) killGroup("SIGKILL")', to: '',
+    tests: lifecycleTests, pattern: 'interrupting a final identity probe.*fresh',
+    fails: 'interrupting a final identity probe kills its process tree and cannot publish success \\(fresh\\)' },
 ]
-const runTests = () => spawnSync(process.execPath, ['--test', '--test-reporter=tap', ...tests], { cwd: sandbox, encoding: 'utf8', timeout: 60000, maxBuffer: 32 << 20 })
+const runTests = (tests, pattern) => spawnSync(process.execPath, ['--test', '--test-reporter=tap', ...(pattern ? ['--test-name-pattern', pattern] : []), ...tests], { cwd: sandbox, encoding: 'utf8', timeout: 60000, maxBuffer: 32 << 20 })
 try {
   await cp(join(root, 'packages'), join(sandbox, 'packages'), { recursive: true })
-  const baseline = runTests()
+  await cp(join(root, 'bin'), join(sandbox, 'bin'), { recursive: true })
+  await cp(join(root, 'package.json'), join(sandbox, 'package.json'))
+  const baseline = runTests([...contractTests, ...lifecycleTests])
   const baselineOutput = (baseline.stdout ?? '') + (baseline.stderr ?? '')
   await writeFile(join(out, 'baseline.tap'), baselineOutput)
   if (baseline.status !== 0 || !/^# pass [1-9]\d*$/m.test(baselineOutput)) throw Error('Mutation baseline did not run and pass its regression tests')
@@ -50,7 +74,7 @@ try {
     await writeFile(file, original.replace(mutation.from, mutation.to))
     const syntax = spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' })
     if (syntax.status !== 0) throw Error(`${mutation.id}: invalid syntax is not a killed semantic mutation`)
-    const result = runTests()
+    const result = runTests(mutation.tests ?? contractTests, mutation.pattern)
     const output = (result.stdout ?? '') + (result.stderr ?? '')
     await writeFile(join(out, `${mutation.id}.tap`), output)
     const killed = result.status === 1 && new RegExp(`^not ok \\d+ - ${mutation.fails}`, 'm').test(output)
