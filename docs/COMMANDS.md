@@ -174,7 +174,8 @@ delivery: {
       outputs: ['dist/web'],                       // pin 1: output bytes
       identity: ['docker', 'image', 'inspect', '--format', '{{.Id}}', 'app:web'] },  // pin 2: artifact identity (stdout)
     // every other step keys on build + test inputs
-    { id: 'web-accept', after: ['web-build'], cmd: ['node', '--test', 'scripts/acceptance'] },
+    { id: 'web-accept', after: ['web-build'],
+      cmd: ['node', '--test', '--test-reporter=tap', 'scripts/acceptance/web.test.mjs'], expectsTests: true },
   ],
 }
 ```

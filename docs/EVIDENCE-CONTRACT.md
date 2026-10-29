@@ -61,6 +61,15 @@ On the original PR code, the new cases produced seven failing tests. Run
 copies and verify that the corresponding regression tests turn red. The working
 tree is never mutated by that command.
 
+The first full Node 24 run also exposed an existing CLI-fixture defect: the
+nested `node --test` command used the default reporter, so `testRanVerdict`
+correctly refused its missing machine-readable count. The suite completed
+456/457, with typecheck, smoke and mutations still run. The fixture, root test
+script and command example now explicitly request TAP; the verdict was not
+relaxed. The search covered all tracked code, fixtures, scripts, examples and
+docs (plus the prepared workflow). README already described this runtime
+difference: another case of a known contract not reaching a new call site.
+
 ## Verification plan
 
 There is no compile/build step for this `.mjs` repository. The check plan is:
