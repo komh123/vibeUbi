@@ -4,8 +4,8 @@
  */
 import { createHash, randomUUID } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
-import { mkdir, readFile, writeFile, rename, lstat, readdir, readlink, rm } from 'node:fs/promises'
-import { join, resolve, relative } from 'node:path'
+import { mkdir, readFile, writeFile, rename, lstat, readdir, readlink, realpath, rm } from 'node:fs/promises'
+import { join, resolve, relative, sep, isAbsolute } from 'node:path'
 import { testPlan, readyToRun, planOutcome, testRanVerdict, globMatches, inputClass, splitInputs } from '../../kernel/src/index.mjs'
 import { runStep } from './run.mjs'
 const digest = value => createHash('sha256').update(value).digest('hex')
@@ -27,15 +27,27 @@ export async function sourceFiles(root) {
 }
 async function hashPaths(root, paths, { required = false } = {}) {
   const hash = createHash('sha256')
-  async function visit(name) {
+  const outputRoot = required ? await realpath(root) : null
+  const outside = path => path === '..' || path.startsWith('..' + sep) || isAbsolute(path)
+  async function visit(name, ancestors = new Set()) {
     const file = resolve(root, name)
-    if (relative(root, file).startsWith('..')) throw Error(`Path outside root: ${name}`)
+    if (outside(relative(root, file))) throw Error(`Path outside root: ${name}`)
     const stat = await lstat(file).catch(e => { if (e.code === 'ENOENT' && !required) return null; throw e })
     hash.update(name + '\0')
     if (!stat) { hash.update('missing\0'); return }
     hash.update(String(stat.mode) + '\0')
-    if (stat.isSymbolicLink()) hash.update('link:' + await readlink(file))
-    else if (stat.isDirectory()) for (const child of (await readdir(file)).sort()) await visit(join(name, child))
+    const actual = required ? await realpath(file) : file
+    if (required && outside(relative(outputRoot, actual))) throw Error(`Output resolves outside root: ${name}`)
+    if (stat.isSymbolicLink()) {
+      hash.update('link:' + await readlink(file))
+      // Source pins describe the tracked link. Output pins additionally prove
+      // the bytes it resolves to; a link name alone cannot establish an artifact.
+      if (required) await visit(relative(outputRoot, actual), ancestors)
+    } else if (stat.isDirectory()) {
+      if (ancestors.has(actual)) throw Error(`Output directory cycle: ${name}`)
+      const lineage = new Set(ancestors).add(actual)
+      for (const child of (await readdir(file)).sort()) await visit(join(name, child), lineage)
+    }
     else hash.update(await readFile(file))
   }
   for (const name of [...new Set(paths)].sort()) await visit(name)

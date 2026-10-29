@@ -13,6 +13,7 @@ const kernel = 'packages/kernel/src/diagnose.mjs'
 const delivery = 'packages/ship/src/delivery.mjs'
 const contractTests = ['packages/kernel/test/evidence-contract.test.mjs', 'packages/ship/test/input-split.test.mjs']
 const lifecycleTests = ['packages/ship/test/identity-lifecycle.test.mjs']
+const outputTests = ['packages/ship/test/output-links.test.mjs']
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim()
 const source = await inputFingerprint(root, ['**'])
 const report = { kind: 'mutation-diagnostic', evidence: false, commit: git('rev-parse', 'HEAD'), tree: git('rev-parse', 'HEAD^{tree}'), source, runtime: process.version, results: [] }
@@ -57,13 +58,21 @@ const mutations = [
     from: '  if (signal?.aborted) killGroup("SIGKILL")', to: '',
     tests: lifecycleTests, pattern: 'interrupting a final identity probe.*fresh',
     fails: 'interrupting a final identity probe kills its process tree and cannot publish success \\(fresh\\)' },
+  { id: 'output-link-ignores-target-bytes', file: delivery,
+    from: 'if (required) await visit(relative(outputRoot, actual), ancestors)', to: '',
+    tests: outputTests, pattern: 'output links pin target bytes.*file',
+    fails: 'output links pin target bytes before reuse \\(file\\)' },
+  { id: 'output-parent-escapes-root', file: delivery,
+    from: 'if (required && outside(relative(outputRoot, actual))) throw Error(`Output resolves outside root: ${name}`)', to: '',
+    tests: outputTests, pattern: 'output paths cannot escape through a symlink parent.*fresh',
+    fails: 'output paths cannot escape through a symlink parent \\(fresh\\)' },
 ]
 const runTests = (tests, pattern) => spawnSync(process.execPath, ['--test', '--test-reporter=tap', ...(pattern ? ['--test-name-pattern', pattern] : []), ...tests], { cwd: sandbox, encoding: 'utf8', timeout: 60000, maxBuffer: 32 << 20 })
 try {
   await cp(join(root, 'packages'), join(sandbox, 'packages'), { recursive: true })
   await cp(join(root, 'bin'), join(sandbox, 'bin'), { recursive: true })
   await cp(join(root, 'package.json'), join(sandbox, 'package.json'))
-  const baseline = runTests([...contractTests, ...lifecycleTests])
+  const baseline = runTests([...contractTests, ...lifecycleTests, ...outputTests])
   const baselineOutput = (baseline.stdout ?? '') + (baseline.stderr ?? '')
   await writeFile(join(out, 'baseline.tap'), baselineOutput)
   if (baseline.status !== 0 || !/^# pass [1-9]\d*$/m.test(baselineOutput)) throw Error('Mutation baseline did not run and pass its regression tests')
