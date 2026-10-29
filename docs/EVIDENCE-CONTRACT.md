@@ -105,3 +105,33 @@ None of these assumptions is strengthened by setting `ok:true` on a report.
 
 This repair does not change acceptance severity, add exclusions, relax a P0,
 rewrite the legacy pipeline, or infer deployment semantics from phase names.
+
+## Follow-up: observations also have a lifetime
+
+On main `dd669b4`, source checks were intact but a final identity command could
+finish after a step/total deadline or interruption and still publish success.
+The original PR had introduced a separate `execFile` path with a fixed 60-second
+timeout; it bypassed the cancellation and process-group control used by ordinary
+commands. The same missing boundary affected injected observers. Nine initial
+regression cases failed on that main revision, using actual subprocesses and
+unchanged input/artifact controls.
+
+Identity commands now reuse `runStep` with a separate stdout capture, so stderr
+cannot become part of an artifact identity. Each attempt retains its own logs.
+Execution, a reuse probe, fallback and fresh observation share one step deadline
+and the remaining total budget. Active-state checks precede fallback/publication
+and final baseline publication. Injected observers get a signal and watchdog;
+ignoring that signal cannot turn a late return into evidence. Existing valid
+receipts remain intact when a later observation is aborted.
+
+Outcome rows now come from `planOutcome`, preserving the distinction between
+unstarted independent work (`not-run`) and failed dependencies (`blocked`).
+Tests exercise both step and total deadlines, fresh/reuse interruption with a
+real grandchild, injected callbacks, independent continuation and interruption
+at the last checkpoint. A further two failing cases exposed that clearing the
+abort escalation timer when the leader exited left SIGTERM-ignoring descendants
+alive. Interrupted groups are now forcibly completed after leader exit; the
+fixture proves the child's handler was installed before sending the signal.
+Five additional targeted mutations falsify the new
+guards; the five original source/fingerprint mutations remain in the same suite.
+Validation and publication follow the owner-approved local plan above.

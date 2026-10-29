@@ -155,6 +155,22 @@ block dependent promotion. Declare rollback inside the bounded promotion adapter
 an identity command whose observations match the previous success. Inputs default to the
 whole source tree; narrow them deliberately to the artifact's actual inputs.
 
+`timeoutMs` covers the selected step's execution, reuse probes and fresh identity
+observations together; rebuilding after an invalid pin does not reset it.
+Identity commands use the smaller of 60 seconds, the step's remaining time and
+the remaining `delivery.totalBudgetMs`. They share process-group termination
+with ordinary steps. stdout alone identifies the artifact; stderr is retained
+separately in the run's `identity/<step>/<attempt>/` logs. Interruption or an
+exhausted budget prevents fallback builds and new success/baseline publication.
+An independent check still runs after a step timeout while total time remains;
+an unstarted independent check is `not-run` once the total budget expires, and
+dependents of a failed prerequisite are `blocked` with `blockedBy`.
+
+Programmatic `identify(step, { root, signal, timeoutMs })` observers receive
+cancellation and a bounded wait. Their late result cannot become evidence.
+Callbacks must honor `signal` to stop their own side effects; the runner cannot
+forcibly terminate arbitrary JavaScript executing inside its process.
+
 ### Build inputs vs test inputs (a step's cache key hashes only its own inputs)
 
 One whole-tree hash means an edit to an acceptance script re-triggers a rebuild
