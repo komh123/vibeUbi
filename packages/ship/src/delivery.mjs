@@ -3,6 +3,7 @@
  * verify report. Checks are selected before execution; failures never shrink it.
  */
 import { createHash, randomUUID } from 'node:crypto'
+import { isUtf8 } from 'node:buffer'
 import { execFileSync } from 'node:child_process'
 import { mkdir, readFile, writeFile, rename, lstat, readdir, readlink, realpath, rm } from 'node:fs/promises'
 import { join, resolve, relative, sep, isAbsolute } from 'node:path'
@@ -10,7 +11,14 @@ import { testPlan, readyToRun, planOutcome, testRanVerdict, globMatches, inputCl
 import { runStep } from './run.mjs'
 const digest = value => createHash('sha256').update(value).digest('hex')
 const json = value => JSON.stringify(value, (_key, v) => typeof v === 'function' ? v.toString() : v)
-const git = (root, args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 32 << 20 })
+// Globs and path APIs use strings. Refuse undecodable names rather than observe
+// a different file with the Unicode replacement character in its name.
+const utf8 = (bytes, what) => {
+  if (!isUtf8(bytes)) throw Error(`${what} is not valid UTF-8; cannot identify filesystem paths without loss`)
+  return bytes.toString('utf8')
+}
+const git = (root, args) => utf8(execFileSync('git', args, { cwd: root, maxBuffer: 32 << 20 }), 'Git output')
+const observedRealpath = async file => utf8(await realpath(file, { encoding: 'buffer' }), 'Resolved path')
 // The glob matcher lives in the kernel now (inputs.mjs); this export keeps the old import path working.
 export const matches = globMatches
 export function deliveryMode({ full = false, major = '', majorChanges = [] } = {}) {
@@ -36,7 +44,7 @@ async function hashPaths(root, paths, { required = false } = {}) {
     hash.update(kind + '\0' + bytes.length + '\0')
     hash.update(bytes)
   }
-  const outputRoot = required ? await realpath(root) : null
+  const outputRoot = required ? await observedRealpath(root) : null
   const outside = path => path === '..' || path.startsWith('..' + sep) || isAbsolute(path)
   async function visit(name, ancestors = new Set()) {
     const file = resolve(root, name)
@@ -45,10 +53,10 @@ async function hashPaths(root, paths, { required = false } = {}) {
     field('path', name)
     if (!stat) { field('missing'); return }
     field('mode', stat.mode)
-    const actual = required ? await realpath(file) : file
+    const actual = required ? await observedRealpath(file) : file
     if (required && outside(relative(outputRoot, actual))) throw Error(`Output resolves outside root: ${name}`)
     if (stat.isSymbolicLink()) {
-      field('link', await readlink(file))
+      field('link', await readlink(file, { encoding: 'buffer' }))
       // Source pins describe the tracked link. Output pins additionally prove
       // the bytes it resolves to; a link name alone cannot establish an artifact.
       if (required) await visit(relative(outputRoot, actual), ancestors)
@@ -56,7 +64,8 @@ async function hashPaths(root, paths, { required = false } = {}) {
       field('directory')
       if (ancestors.has(actual)) throw Error(`Output directory cycle: ${name}`)
       const lineage = new Set(ancestors).add(actual)
-      for (const child of (await readdir(file)).sort()) await visit(join(name, child), lineage)
+      const children = (await readdir(file, { encoding: 'buffer' })).map(child => utf8(child, 'Directory entry')).sort()
+      for (const child of children) await visit(join(name, child), lineage)
       field('end-directory')
     }
     else field('file', await readFile(file))

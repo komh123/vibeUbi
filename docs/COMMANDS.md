@@ -167,6 +167,11 @@ with byte lengths. File contents can contain arbitrary bytes without being
 confused with the next path or file's metadata. Updating from the old encoding
 invalidates old cache keys; fresh execution must establish replacement evidence.
 
+Filesystem path names must be valid UTF-8; undecodable names fail observation.
+File contents and source-link targets are hashed as raw bytes. Scanner baseline
+reports use `unmatched` for absent old IDs; absence does not prove remediation.
+See [the byte contract and migration audit](PR5-FINGERPRINT-AUDIT.md).
+
 Output pins hash both a symbolic link and the bytes of its resolved target,
 including linked directories. Targets must exist and resolve inside the project
 root, including when a parent directory is a link. Dangling links, directory

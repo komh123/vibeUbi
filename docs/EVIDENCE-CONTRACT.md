@@ -230,3 +230,9 @@ the actual delivery and baseline decisions. Two semantic mutations restore the
 ambiguous encodings and must turn the corresponding cases red. These checks do
 not claim cryptographic collision resistance is perfect or create an atomic
 filesystem snapshot; sources and artifacts still must remain stable while read.
+
+## PR #5 byte contract and upgrade audit
+
+The [fingerprint audit](PR5-FINGERPRINT-AUDIT.md) specifies the exact encoding,
+producer/consumer paths, old-version counterexamples and migration checks. It
+separates ambiguous serialization from lossy observation and hash collisions.
