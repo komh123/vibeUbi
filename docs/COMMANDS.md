@@ -139,7 +139,9 @@ acceptance: {
 post-build checks and the project's declared promotion/proof/acceptance steps.
 `--full` or `--major "reason"` selects full verification. A normal engine change
 is not inherently major. `vibeubi status` reads the atomic checkpoint; reissuing
-`ship` resumes verified reusable outputs, never a mutation or live check.
+`ship` resumes verified reusable outputs. Mutation steps must declare `mutates: true`;
+live observations must leave `reuse` false. The runner cannot infer these semantics
+from an arbitrary command.
 
 Declare `delivery.features: [{id, covers: [glob], steps: [stepId]}]` and
 `delivery.steps: [{id, cmd: [executable, ...args], after: [stepId], phase,
@@ -149,8 +151,8 @@ and, optionally, `delivery.testInputs: [glob]` / `delivery.buildInputs: [glob]` 
 ones run before build. `fullOnly` checks are a barrier only during a full run.
 All independent selected checks finish before the outcome; failed prerequisites
 block dependent promotion. Declare rollback inside the bounded promotion adapter.
-`mutates: true` prevents reuse. Reuse is opt-in and requires declared nonempty
-outputs whose current bytes match the previous success. Inputs default to the
+`mutates: true` prevents reuse. Reuse is opt-in and requires output paths and/or
+an identity command whose observations match the previous success. Inputs default to the
 whole source tree; narrow them deliberately to the artifact's actual inputs.
 
 ### Build inputs vs test inputs (a step's cache key hashes only its own inputs)
@@ -195,17 +197,25 @@ Rules:
    or changed output, a failing/empty/different identity probe, or a step with
    neither pin means the step **runs**. A build that runs but yields no observable
    identity fails (an artifact nobody can identify cannot be pinned later).
-4. **Acceptance always re-runs** (it has no `reuse`) and its dependency key
-   includes the pinned identity, so it is tied to the artifact it ran against.
+4. **Acceptance in this example always re-runs** (it has no `reuse`) and its
+   dependency key includes the pinned identity, so it is tied to the artifact it
+   ran against. The generic runner does not prohibit `reuse` by phase name;
+   projects must not opt live observations into reuse.
 5. Changing `testInputs`/`buildInputs` changes every key: old receipts are not
    relabelled.
 
 Reports carry `buildInputsHash` and `testInputsHash` (and `sourceTree`, the whole
 tree), and each step row records `execution: "ran" | "reused"`, `key`,
-`outputHash`, `artifact` (the pinned identity) and `scope`. Gates ask
-`countsAsEvidence(report, { phase, buildInputsHash, testInputsHash })`: a
-`phase: "build"` report is checked against `buildInputsHash` only; every other
-phase against both, and asking for it with only one is refused. Kernel helpers:
+`outputHash`, `artifact` (the pinned identity) and `scope`. A gate-shaped report
+with `ok` and `phase` is checked using
+`countsAsEvidence(report, { phase, buildInputsHash, testInputsHash })`: build
+requires a nonempty expected AND observed `buildInputsHash`; every other phase
+requires both hashes. Empty, whitespace-only and non-string fingerprints are
+unreadable, even if equal. A nonempty `sourceTree` binding can instead bind the
+whole tree; an explicitly requested split binding must still be satisfied.
+Build/split reports without a requested binding are refused. Legacy reports
+without fingerprints and without a requested binding receive only an eligibility
+check, not source validation or proof of a deployment. Kernel helpers:
 `inputClass`, `splitInputs`, `ALWAYS_BUILD_INPUTS`, `globMatches`.
 
 `delivery.generated` lists tracked files produced by the release itself (such as
@@ -219,6 +229,19 @@ before/after every step, and `heartbeat.json` during a long step. Step logs are
 reused; stale locks are reclaimed only when the recorded PID no longer exists.
 `countsAsFullVerification` remains false for this report type: even a full-mode
 run records explicit step evidence, rather than impersonating legacy gate output.
+It has `status`, not `ok`/`phase`, and cannot be passed directly to
+`countsAsEvidence` as a full gate report. Do not synthesize `ok: true` to erase
+that distinction. `--full` selects all configured delivery steps; it does not
+invent missing promotion, external proof or rollback steps. Those remain the
+project adapter's contract.
+
+Source is checked before work, after a reuse probe (including failed probes),
+after fresh execution and all output/identity observations, and before final
+success/baseline publication. A source edit invalidates the observation before
+it can publish a new receipt. These checks cover the source files enumerated by
+Git except `delivery.generated`; they are observations, not an OS write lock.
+Keep the worktree frozen. Ignored/external inputs and useful artifact identities
+must still be declared correctly. See [the evidence contract review](EVIDENCE-CONTRACT.md).
 
 `vibeubi/artifacts` exports `buildRetained` for adapters: build, observe identity,
 acquire a matching retention lease; at most two attempts for a proven missing

@@ -3,7 +3,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
@@ -137,4 +137,66 @@ test('a reusable step with neither outputs nor identity has nothing pinning it: 
   const f = await fixture(t); delete f.config.steps.find(s => s.id === 'web-build').outputs
   await deliver(f); await edit(f, 'SHIPS.md', 'ships-v2')
   assert.equal((await deliver(f)).steps['web-build'].execution, 'ran')
+})
+
+// The last step matters: there is no later step whose pre-check can accidentally
+// hide a missing publication check. Use a real identity subprocess, not a stub.
+for (const path of ['fresh', 'reuse', 'reuse-mismatch', 'reuse-error']) {
+  test(`source freeze covers the final identity observation (${path}) before receipts or baseline are published`, async t => {
+    const f = await fixture(t)
+    const web = f.config.steps.find(s => s.id === 'web-build')
+    web.after = []
+    web.identity = [process.execPath, '-e', `
+      const fs = require('node:fs');
+      if (fs.existsSync('.vibeubi/mutate')) {
+        fs.writeFileSync('web/a.js', 'changed-during-observation');
+        if (${JSON.stringify(path)} === 'reuse-error') process.exit(1);
+        if (${JSON.stringify(path)} === 'reuse-mismatch') { console.log('different'); process.exit(0); }
+      }
+      console.log('artifact-a');
+    `]
+    f.config.steps = [web]
+    f.config.features[0].steps = [web.id]
+    const home = join(f.root, '.vibeubi/delivery')
+    const baseline = () => readFile(join(home, 'baseline.json'), 'utf8').catch(e => { if (e.code === 'ENOENT') return null; throw e })
+    const receipts = async () => Promise.all((await readdir(join(home, 'cache'))).sort().map(async name => [name, await readFile(join(home, 'cache', name), 'utf8')]))
+    let previousReceipts = []
+    if (path !== 'fresh') {
+      const first = await deliver(f)
+      assert.equal(first.status, 'passed')
+      assert.equal(first.steps[web.id].execution, 'ran')
+      const second = await deliver(f)
+      assert.equal(second.status, 'passed')
+      assert.equal(second.steps[web.id].execution, 'reused', 'unchanged source and artifact are a valid reuse')
+      previousReceipts = await receipts()
+    }
+    const previousBaseline = await baseline()
+    await mkdir(join(f.root, '.vibeubi'), { recursive: true })
+    await writeFile(join(f.root, '.vibeubi/mutate'), 'yes')
+    f.calls.length = 0
+    const result = await deliver(f)
+    assert.equal(result.status, 'failed')
+    assert.equal(result.steps[web.id].status, 'fail')
+    assert.match(result.steps[web.id].reason, /Source changed/)
+    assert.deepEqual(await receipts(), previousReceipts, 'invalid observation must not publish or replace a receipt')
+    assert.equal(await baseline(), previousBaseline, 'invalid observation must not advance the baseline')
+    if (path !== 'fresh') assert.deepEqual(f.calls, [], 'a changed source must not fall back into a build with stale inputs')
+    await rm(join(f.root, '.vibeubi/mutate'))
+    await edit(f, 'web/a.js', 'web-v1')
+    const restored = await deliver(f)
+    assert.equal(restored.status, 'passed')
+    assert.equal(restored.steps[web.id].execution, path === 'fresh' ? 'ran' : 'reused')
+  })
+}
+
+test('source freeze is checked again before final success, after the last step checkpoint', async t => {
+  const f = await fixture(t)
+  const result = await deliver({ ...f, emit: ({ kind, report }) => {
+    if (kind === 'status' && report.status === 'running' && report.steps['web-test']?.status === 'pass') {
+      execFileSync(process.execPath, ['-e', "require('fs').writeFileSync('web/a.js','changed-after-checkpoint')"], { cwd: f.root })
+    }
+  } })
+  assert.equal(result.status, 'failed')
+  assert.match(result.error, /Source changed/)
+  await assert.rejects(readFile(join(f.root, '.vibeubi/delivery/baseline.json')), { code: 'ENOENT' })
 })

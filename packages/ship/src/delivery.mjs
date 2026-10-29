@@ -135,6 +135,9 @@ export async function deliver({ root, config, full = false, major = '', baseline
     const sourceList = async () => (await sourceFiles(root)).filter(f => !matches(f, config.generated ?? []))
     const files = await sourceList()
     const sourceBefore = await hashPaths(root, files)
+    const assertSourceUnchanged = async () => {
+      if (sourceBefore !== await hashPaths(root, await sourceList())) throw Error('Source changed during delivery; evidence invalidated')
+    }
     // Two halves of the tree: what can change a build product, and what can only change a test.
     // With no `testInputs` every file is a build input and the test half is empty (the old behaviour).
     const rules = { testInputs: config.testInputs ?? [], buildInputs: config.buildInputs ?? [] }
@@ -166,7 +169,7 @@ export async function deliver({ root, config, full = false, major = '', baseline
       // Heartbeats update a separate file to avoid racing report snapshots.
       beat = setInterval(() => { atomicJson(join(home, 'heartbeat.json'), { runId, pid: process.pid, step: id, at: new Date().toISOString() }).catch(() => {}) }, 15000)
       try {
-        if (sourceBefore !== await hashPaths(root, await sourceList())) throw Error('Source changed during delivery; stop before consuming stale evidence')
+        await assertSourceUnchanged()
         // A build-type step keys on buildInputs only; every other step keys on build + test inputs.
         const buildScoped = rules.testInputs.length > 0 && s.scope !== 'all' && (s.phase === 'build' || s.scope === 'build')
         const key = await inputFingerprint(root, s.inputs ?? ['**'], { step: s, deps: (s.after ?? []).map(d => keys[d]), runtime: process.version, context: config.context ?? {}, ...(rules.testInputs.length ? { inputRules: rules } : {}) },
@@ -185,16 +188,22 @@ export async function deliver({ root, config, full = false, major = '', baseline
             if (reused && s.identity?.length) { artifactId = await observeIdentity(root, s, identify); reused = artifactId === cached.artifactId }
           } catch { reused = false /* missing artifacts / unreachable probe must be rebuilt */ }
           if (!reused) { outputHash = null; artifactId = null }
+          // A failed/mismatching probe may also have overlapped a source edit.
+          // That is not permission to build against the already-computed key.
+          await assertSourceUnchanged()
         }
         if (!reused) {
           const result = await run(s, { root, outDir, report, signal:controller.signal, timeoutMs: Math.min(s.timeoutMs ?? 30 * 60 * 1000, budget - (Date.now() - t0)), emit })
           if (result?.ok !== true) throw Error(`${id} produced no affirmative execution evidence`)
-          if (sourceBefore !== await hashPaths(root, await sourceList())) throw Error('Source changed while step ran; evidence invalidated')
+          await assertSourceUnchanged()
           if (s.outputs?.length) outputHash = await hashPaths(root, s.outputs, { required: true })
           if (s.identity?.length) artifactId = await observeIdentity(root, s, identify)
           row.evidence = result
-          if (s.reuse === true && pinned && !s.mutates) await atomicJson(cacheFile, { key, outputHash, ...(artifactId ? { artifactId } : {}), status: 'pass', runId })
         }
+        // Both fresh execution and reuse converge here AFTER every output/identity
+        // observation. Only stable observations may publish a receipt or a pass.
+        await assertSourceUnchanged()
+        if (!reused && s.reuse === true && pinned && !s.mutates) await atomicJson(cacheFile, { key, outputHash, ...(artifactId ? { artifactId } : {}), status: 'pass', runId })
         Object.assign(row, { status: 'pass', execution: reused ? 'reused' : 'ran', ...(reused ? { fromRun: cached.runId } : {}), key, outputHash, ...(artifactId ? { artifact: artifactId } : {}), ...(rules.testInputs.length ? { scope: buildScoped ? 'build' : 'all' } : {}) })
         keys[id] = s.phase === 'preflight' ? digest(json(s)) : digest(key + (outputHash ?? '') + (artifactId ?? ''))
       } catch (error) { Object.assign(row, { status: 'fail', reason: error.message }); emit({ kind: 'failure', id, reason: error.message }) }
@@ -203,7 +212,9 @@ export async function deliver({ root, config, full = false, major = '', baseline
     const outcome = planOutcome(steps, statuses)
     report.outcome = outcome
     for (const s of steps) if (!report.steps[s.id]) report.steps[s.id] = { status: 'blocked', reason: 'Prerequisite failed or not run; see outcome' }
-    report.status = steps.length > 0 && steps.every(s => report.steps[s.id].status === 'pass') ? 'passed' : 'failed'
+    const passed = steps.length > 0 && steps.every(s => report.steps[s.id].status === 'pass')
+    if (passed) await assertSourceUnchanged()
+    report.status = passed ? 'passed' : 'failed'
     report.finishedAt = new Date().toISOString()
     if (report.status === 'passed' && config.recordBaseline !== false) await atomicJson(join(home, 'baseline.json'), { commit: git(root, ['rev-parse', 'HEAD']).trim(), runId, mode: report.mode })
     await save(); return report

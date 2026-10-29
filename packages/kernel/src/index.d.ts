@@ -820,8 +820,10 @@ export function diagnoseSummary(results: readonly { name: string; ok: boolean; c
   kind: "diagnostic"; evidence: false; total: number; passed: number
   failed: { name: string; why: string }[]; clean: boolean; headline: string
 }
-/** The one question a gate asks of a report: may it count as evidence? Refuses diagnostic, narrowed,
- *  red, wrong-phase and wrong-tree reports. */
+/** Gate-report eligibility, not external deployment proof. Refuses diagnostic, narrowed,
+ *  red, wrong-phase and wrong-tree reports. Build/split reports require a requested nonempty
+ *  buildInputsHash (both hashes for non-build phases), or a nonempty whole sourceTree binding.
+ *  Every requested fingerprint must also be observed in the report. */
 export function countsAsEvidence(report: unknown, want?: { phase?: string; sourceTree?: string; buildInputsHash?: string; testInputsHash?: string }): { ok: true } | { ok: false; reason: string }
 
 /** How a project splits its tree: `testInputs` globs are test-only; `buildInputs` are extra always-build globs. */

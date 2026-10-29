@@ -29,7 +29,16 @@
  * convention and conventions get forgotten.
  */
 
+import { sameObserved } from "./proof.mjs"
+
 export const DIAGNOSTIC_KIND = "diagnostic"
+
+// Fingerprints are strings. Reuse the kernel's unreadable-value semantics;
+// equality of null, empty strings, numbers or objects cannot establish identity.
+const sameFingerprint = (a, b) => sameObserved(
+  typeof a === "string" ? a : null,
+  typeof b === "string" ? b : null,
+).same
 
 /** Where diagnostic reports go, relative to the project root. Never where gate reports live. */
 export const DIAGNOSTICS_DIR = ".vibeubi/diagnostics"
@@ -74,6 +83,8 @@ export function diagnoseSummary(results) {
  *   `buildInputsHash` / `testInputsHash` bind evidence to the two halves of the tree (see inputs.mjs).
  *   A build-phase report depends on the build half only; every other phase depends on both, so
  *   asking for acceptance evidence with only one of them is refused rather than half-checked.
+ *   Build/split reports require a requested fingerprint binding (or a whole-tree binding).
+ *   Every requested fingerprint must be a nonempty string on both sides.
  * @returns {{ ok: true } | { ok: false, reason: string }}
  */
 export function countsAsEvidence(report, want = {}) {
@@ -85,19 +96,22 @@ export function countsAsEvidence(report, want = {}) {
   if (r.narrowed === true) return { ok: false, reason: "a narrowed run (--only) covers some steps, not the gate" }
   if (r.ok !== true) return { ok: false, reason: "the run did not pass" }
   if (want.phase && r.phase !== want.phase) return { ok: false, reason: `phase is ${String(r.phase)}, not ${want.phase}` }
-  if (want.sourceTree && r.sourceTree !== want.sourceTree) {
-    return { ok: false, reason: "the evidence is for a different source tree — any edit, even to a test, invalidates it" }
+  const wholeTree = Object.hasOwn(want, "sourceTree")
+  if (wholeTree && !sameFingerprint(r.sourceTree, want.sourceTree)) {
+    return { ok: false, reason: "the evidence is unreadable or for a different source tree — any edit, even to a test, invalidates it" }
   }
-  if (want.buildInputsHash !== undefined || want.testInputsHash !== undefined) {
+  const split = Object.hasOwn(want, "buildInputsHash") || Object.hasOwn(want, "testInputsHash") ||
+    (!wholeTree && ((want.phase ?? r.phase) === "build" || Object.hasOwn(r, "buildInputsHash") || Object.hasOwn(r, "testInputsHash")))
+  if (split) {
     const needsTests = want.phase !== "build"
-    if (needsTests && (want.buildInputsHash === undefined || want.testInputsHash === undefined)) {
-      return { ok: false, reason: "evidence for a non-build phase must be asked for with both buildInputsHash and testInputsHash" }
+    if (needsTests && (!Object.hasOwn(want, "buildInputsHash") || !Object.hasOwn(want, "testInputsHash"))) {
+      return { ok: false, reason: "evidence for a non-build phase must be asked for with both buildInputsHash and testInputsHash as nonempty strings" }
     }
-    if (want.buildInputsHash !== undefined && r.buildInputsHash !== want.buildInputsHash) {
-      return { ok: false, reason: "the evidence is for different build inputs — source or config that can change a build product changed" }
+    if (!sameFingerprint(r.buildInputsHash, want.buildInputsHash)) {
+      return { ok: false, reason: "the build inputs are unreadable or different — a nonempty buildInputsHash must be observed and requested" }
     }
-    if (needsTests && r.testInputsHash !== want.testInputsHash) {
-      return { ok: false, reason: "the evidence is for different test inputs — an acceptance script, fixture or ledger changed" }
+    if (needsTests && !sameFingerprint(r.testInputsHash, want.testInputsHash)) {
+      return { ok: false, reason: "the test inputs are unreadable or different — an acceptance script, fixture or ledger changed" }
     }
   }
   return { ok: true }
