@@ -107,6 +107,18 @@ export async function changedFiles(root, baseline) {
   const committed = baseline ? git(root, ['diff', '--name-only', '--no-renames', '-z', baseline, 'HEAD']).split('\0').filter(Boolean) : await sourceFiles(root)
   return [...new Set([...committed, ...unstaged, ...untracked])].sort()
 }
+function withAfter(step, after) {
+  const declared = step.after ?? []
+  return after.length === declared.length && after.every((id, i) => id === declared[i]) ? step : { ...step, after }
+}
+// Barriers are prerequisites, not a second scheduler hidden from the plan.
+// Compile selected steps only: full-only checks are absent in incremental runs.
+function deliveryPlanSteps(steps) {
+  const preflight = steps.filter(s => s.phase === 'preflight').map(s => s.id)
+  const full = steps.filter(s => s.fullOnly).map(s => s.id)
+  return steps.map(s => s.phase === 'preflight' ? s : withAfter(s,
+    [...new Set([...(s.after ?? []), ...preflight, ...(s.fullOnly ? [] : full)])]))
+}
 export async function checklist({ root, config, full = false, major = '', baseline, changed }) {
   const policy = deliveryMode({ full, major, majorChanges: config.majorChanges })
   const files = changed ?? await changedFiles(root, baseline)
@@ -130,10 +142,14 @@ export async function checklist({ root, config, full = false, major = '', baseli
   for (const id of selected) visit(id)
   // Full-only prerequisites must not accidentally drag full verify into normal builds.
   if (policy.mode !== 'full' && steps.some(s => s.fullOnly && selected.has(s.id))) throw Error('Ordinary delivery depends on a full-only step; correct the dependency declaration')
+  const planned = deliveryPlanSteps(steps.filter(s => selected.has(s.id)))
+  const effective = testPlan(planned)
+  if (!effective.ok) throw Error(`Invalid delivery barriers: ${effective.violations.join('\n')}`)
+  const plannedById = new Map(planned.map(s => [s.id, s]))
   const uncovered = files.filter(p => !features.some(f => matches(p, f.covers)))
   const result = { kind: 'delivery-checklist', ...policy, baseline: baseline ?? null, changed: files, uncovered,
     features: features.map(f => ({ ...f, selected: selectedFeatures.includes(f), status: selectedFeatures.includes(f) ? 'pending' : f.excludedReason ? 'excluded' : 'not-selected' })),
-    steps: steps.map(s => ({ id: s.id, after: s.after ?? [], selected: selected.has(s.id), phase: s.phase ?? 'acceptance', fullOnly: !!s.fullOnly })),
+    steps: steps.map(s => ({ id: s.id, after: (plannedById.get(s.id) ?? s).after ?? [], selected: selected.has(s.id), phase: s.phase ?? 'acceptance', fullOnly: !!s.fullOnly })),
     updatedAt: new Date().toISOString() }
   await atomicJson(join(root, '.vibeubi', 'checklist.json'), result)
   return result
@@ -174,7 +190,8 @@ export async function deliver({ root, config, full = false, major = '', baseline
     await save()
     if (plan.uncovered.length) throw Error(`Update feature checklist for uncovered paths: ${plan.uncovered.join(', ')}`)
     const selected = new Set(plan.steps.filter(s => s.selected).map(s => s.id))
-    const steps = config.steps.filter(s => selected.has(s.id))
+    const plannedById = new Map(plan.steps.map(s => [s.id, s]))
+    const steps = config.steps.filter(s => selected.has(s.id)).map(s => withAfter(s, plannedById.get(s.id).after))
     const ordered = testPlan(steps).order
     const sourceList = async () => (await sourceFiles(root)).filter(f => !matches(f, config.generated ?? []))
     const files = await sourceList()
@@ -203,14 +220,11 @@ export async function deliver({ root, config, full = false, major = '', baseline
       if (s.expectsTests) { const v = testRanVerdict(s.id, r.out); if (!v.ok) throw Error(v.reason) }
       return { ok: true, log: join(outDir, `step-${s.id}.out`) }
     })
-    // Preflight is read-only. Run every independent prerequisite before any build.
-    const order = [...ordered.filter(id => steps.find(s => s.id === id).phase === 'preflight'), ...ordered.filter(id => steps.find(s => s.id === id).fullOnly && steps.find(s => s.id === id).phase !== 'preflight'), ...ordered.filter(id => !steps.find(s => s.id === id).fullOnly && steps.find(s => s.id === id).phase !== 'preflight')]
-    for (const id of order) {
+    // One validated graph controls execution, cache dependencies and outcomes.
+    for (const id of ordered) {
       const s = steps.find(s => s.id === id)
       if (!readyToRun(s, statuses)) continue
       if(controller.signal.aborted){statuses[id]={status:'not-run',reason:'Delivery interrupted'};continue}
-      if (s.phase !== 'preflight' && steps.some(p => p.phase === 'preflight' && statuses[p.id]?.status !== 'pass')) continue
-      if (!s.fullOnly && s.phase !== 'preflight' && steps.some(p => p.fullOnly && statuses[p.id]?.status !== 'pass')) continue
       if (Date.now() - t0 >= budget) { statuses[id] = { status: 'not-run', reason: 'Total delivery budget exceeded' }; continue }
       const row = report.steps[id] = { status: 'running', phase: s.phase ?? 'acceptance', startedAt: new Date().toISOString() }
       const deadline = Date.now() + (s.timeoutMs ?? 30 * 60 * 1000)

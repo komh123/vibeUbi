@@ -164,3 +164,29 @@ These observations are not an atomic filesystem snapshot. Callers must keep
 artifacts stable while they are being observed, just as source must stay frozen.
 Following in-root output links does not automatically declare external build
 inputs or establish that a consumer deployment succeeded.
+
+## Follow-up: the declared graph must include the barriers the runner enforces
+
+On main `3208ad6`, preflight and full-only barriers lived in separate scheduler
+conditions introduced in `c85df14`. The checklist, cache keys and `planOutcome`
+only saw declared `after` edges. As a result, blocked work could appear as
+`not-run`, `fixFirst` undercounted the affected work, and changing an implicit
+prerequisite did not invalidate dependent receipts. Reordering the topological
+result by phase could also hide a contradictory barrier dependency until after
+some steps had run.
+
+The selected graph now expands the existing barriers once during checklist
+construction. Execution, key construction and outcome attribution consume its
+edges. Kernel verdicts are unchanged; full-only checks remain absent from normal
+incremental runs, and all independent checks within a barrier still execute.
+Expanded cycles are rejected before execution. Declarations are not mutated,
+and already-explicit dependency lists retain their existing key representation.
+
+Nine project-neutral fixtures cover incremental/full plan visibility, failure
+attribution, independent continuation, valid ordering, cycle refusal and cache
+invalidation. Seven failed against the unmodified main; two healthy ordering
+controls passed. Three semantic mutations remove the plan edge, discard the
+effective graph in execution, and drop prerequisite evidence from cache keys.
+The related diagnostic selection covers delivery, input classification and
+identity lifetime alongside the new cases. No consumer-specific paths, names
+or policy exceptions are part of the implementation or tests.
