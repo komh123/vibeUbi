@@ -190,3 +190,43 @@ effective graph in execution, and drop prerequisite evidence from cache keys.
 The related diagnostic selection covers delivery, input classification and
 identity lifetime alongside the new cases. No consumer-specific paths, names
 or policy exceptions are part of the implementation or tests.
+
+## Follow-up: preserve field boundaries before hashing
+
+Research checked on 2026-10-30:
+
+- [Node Hash API](https://nodejs.org/docs/latest-v22.x/api/crypto.html#hashupdatedata-inputencoding)
+  describes successive updates as streamed data. Calling `update` separately
+  does not encode a record boundary.
+- [Git object storage](https://git-scm.com/book/en/v2/Git-Internals-Git-Objects)
+  describes a header containing object type and content byte length. This is a
+  reference for explicit encoding, not a reason to change VibeUbi's hash algorithm.
+
+On main `693311b`, the path hasher introduced in `c85df14` concatenated names,
+modes and raw file contents. A binary payload could include the next file's
+header. Moving that header between two files produced the exact same byte stream
+before SHA-256, despite independently different Git blob identities. Regressions
+reproduced stale build reuse, missed source changes during fresh/reused identity
+observation, and unchanged output evidence for different artifact bytes.
+
+Searching all production hash constructors found the same boundary problem in
+the security finding fingerprint from `80cbd08`: `rule|where|evidence` cannot
+distinguish a pipe in a path from one in the evidence. Distinct findings could
+therefore share baseline admission. The kernel's tool fingerprint already uses
+structured JSON; fixed-width digest prefixes and single-value hashes do not
+have this demonstrated ambiguity and were not changed.
+
+The path hasher now frames every field with its type and byte length, including
+paths, modes, file bytes, link targets and directory boundaries, under a v2 domain
+marker. Finding fingerprints use a v2 JSON tuple while retaining intended date
+and whitespace normalization. Hash algorithms, severity and admission verdicts
+are unchanged. Old receipts and security baseline IDs are intentionally not
+silently migrated; see [the upgrade guide](UPGRADING.md).
+
+The nine new generic cases produced eight assertion failures on original main
+and one valid normalization control. Tests prove identical legacy streams before
+hashing, independently confirm different file objects with Git, then exercise
+the actual delivery and baseline decisions. Two semantic mutations restore the
+ambiguous encodings and must turn the corresponding cases red. These checks do
+not claim cryptographic collision resistance is perfect or create an atomic
+filesystem snapshot; sources and artifacts still must remain stable while read.
