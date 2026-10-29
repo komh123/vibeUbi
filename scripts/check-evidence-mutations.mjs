@@ -1,0 +1,72 @@
+/** Targeted falsification of the PR #1 guards, in disposable copies only. */
+import { cp, mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { spawnSync, execFileSync } from 'node:child_process'
+import { inputFingerprint } from '../packages/ship/src/delivery.mjs'
+
+const root = resolve(import.meta.dirname, '..')
+const out = join(root, '.vibeubi/evidence-mutations')
+await mkdir(out, { recursive: true })
+const sandbox = await mkdtemp(join(tmpdir(), 'vibeubi-mutations-'))
+const kernel = 'packages/kernel/src/diagnose.mjs'
+const delivery = 'packages/ship/src/delivery.mjs'
+const tests = ['packages/kernel/test/evidence-contract.test.mjs', 'packages/ship/test/input-split.test.mjs']
+const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim()
+const source = await inputFingerprint(root, ['**'])
+const report = { kind: 'mutation-diagnostic', evidence: false, commit: git('rev-parse', 'HEAD'), tree: git('rev-parse', 'HEAD^{tree}'), source, runtime: process.version, results: [] }
+const mutations = [
+  { id: 'unreadable-equality', file: kernel,
+    from: 'const sameFingerprint = (a, b) => sameObserved(\n  typeof a === "string" ? a : null,\n  typeof b === "string" ? b : null,\n).same',
+    to: 'const sameFingerprint = (a, b) => a === b',
+    fails: 'fingerprint equality is meaningful' },
+  { id: 'optional-build-binding', file: kernel,
+    from: 'if (!sameFingerprint(r.buildInputsHash, want.buildInputsHash))',
+    to: 'if (want.buildInputsHash !== undefined && !sameFingerprint(r.buildInputsHash, want.buildInputsHash))',
+    fails: 'build evidence needs an expected build fingerprint' },
+  { id: 'reuse-fallback-with-stale-source', file: delivery,
+    from: '          await assertSourceUnchanged()\n        }\n        if (!reused)',
+    to: '        }\n        if (!reused)',
+    fails: 'source freeze covers the final identity observation \\(reuse-mismatch\\)' },
+  { id: 'publish-before-observation-guard', file: delivery,
+    from: '        await assertSourceUnchanged()\n        if (!reused && s.reuse',
+    to: '        if (!reused && s.reuse',
+    fails: 'source freeze covers the final identity observation \\(fresh\\)' },
+  { id: 'no-final-source-check', file: delivery,
+    from: '    if (passed) await assertSourceUnchanged()', to: '',
+    fails: 'source freeze is checked again before final success' },
+]
+const runTests = () => spawnSync(process.execPath, ['--test', '--test-reporter=tap', ...tests], { cwd: sandbox, encoding: 'utf8', timeout: 60000, maxBuffer: 32 << 20 })
+try {
+  await cp(join(root, 'packages'), join(sandbox, 'packages'), { recursive: true })
+  const baseline = runTests()
+  const baselineOutput = (baseline.stdout ?? '') + (baseline.stderr ?? '')
+  await writeFile(join(out, 'baseline.tap'), baselineOutput)
+  if (baseline.status !== 0 || !/^# pass [1-9]\d*$/m.test(baselineOutput)) throw Error('Mutation baseline did not run and pass its regression tests')
+  for (const mutation of mutations) {
+    const file = join(sandbox, mutation.file)
+    const original = await readFile(file, 'utf8')
+    if (original.split(mutation.from).length !== 2) throw Error(`${mutation.id}: mutation target must occur exactly once`)
+    await writeFile(file, original.replace(mutation.from, mutation.to))
+    const syntax = spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' })
+    if (syntax.status !== 0) throw Error(`${mutation.id}: invalid syntax is not a killed semantic mutation`)
+    const result = runTests()
+    const output = (result.stdout ?? '') + (result.stderr ?? '')
+    await writeFile(join(out, `${mutation.id}.tap`), output)
+    const killed = result.status === 1 && new RegExp(`^not ok \\d+ - ${mutation.fails}`, 'm').test(output)
+    report.results.push({ id: mutation.id, killed, exit: result.status, expectedFailure: mutation.fails })
+    console.log(`${killed ? 'killed' : 'SURVIVED'} ${mutation.id}`)
+    await writeFile(file, original)
+  }
+  report.sourceUnchanged = source === await inputFingerprint(root, ['**'])
+  report.clean = report.sourceUnchanged && report.results.length === mutations.length && report.results.every(r => r.killed)
+} catch (error) {
+  report.clean = false
+  report.error = error.message
+  console.error(error.message)
+} finally {
+  await rm(sandbox, { recursive: true, force: true })
+  await writeFile(join(out, 'report.json'), JSON.stringify(report, null, 2) + '\n')
+}
+console.log(`mutation diagnostic: ${report.results.filter(r => r.killed).length}/${mutations.length} killed; ${out}/report.json`)
+process.exitCode = report.clean ? 0 : 1

@@ -96,7 +96,7 @@ test('changed command/inputs invalidates cached evidence; source drift fails bef
 })
 test('real CLI ship uses delivery declaration and persists status; never invokes full verify by default', async t => {
   const f = await fixture(t)
-  await writeFile(join(f.root, 'vibeubi.config.mjs'), `export default {delivery: {features:[{id:'app',covers:['**'],steps:['build','accept']}],steps:[{id:'full-verify',fullOnly:true,cmd:['${process.execPath}','-e','process.exit(17)']},{id:'build',cmd:['${process.execPath}','-e','console.log("built")']},{id:'accept',after:['build'],cmd:['${process.execPath}','--test','test.mjs'],expectsTests:true}]}}`)
+  await writeFile(join(f.root, 'vibeubi.config.mjs'), `export default {delivery: {features:[{id:'app',covers:['**'],steps:['build','accept']}],steps:[{id:'full-verify',fullOnly:true,cmd:['${process.execPath}','-e','process.exit(17)']},{id:'build',cmd:['${process.execPath}','-e','console.log("built")']},{id:'accept',after:['build'],cmd:['${process.execPath}','--test','--test-reporter=tap','test.mjs'],expectsTests:true}]}}`)
   await writeFile(join(f.root, 'test.mjs'), "import test from 'node:test'; test('actual',()=>{})")
   const cli = new URL('../../../bin/vibeubi.mjs', import.meta.url).pathname.replace('/packages/bin/', '/bin/')
   try { execFileSync(process.execPath, [cli, 'ship', '--root', f.root], { stdio: 'pipe' }) } catch (e) { throw Error(e.stdout?.toString() + e.stderr?.toString()) }

@@ -55,7 +55,9 @@ export default {
   gateTokens: ["requireAuth", "verifyToken", "req.user"],
 
   /** Offline checks that must pass before anything is built. `expectsTests`
-   *  makes the step prove it RAN tests — exit 0 with zero tests is not a pass. */
+   *  makes the step prove it RAN tests — exit 0 with zero tests is not a pass.
+   *  Configure a machine-readable reporter in YOUR test script (for node:test,
+   *  --test-reporter=tap); Node 24's default reporter does not expose TAP counts. */
   verify: [
     { name: "unit", cmd: "npm test", expectsTests: true },
   ],

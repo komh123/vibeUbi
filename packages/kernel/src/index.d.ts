@@ -820,9 +820,21 @@ export function diagnoseSummary(results: readonly { name: string; ok: boolean; c
   kind: "diagnostic"; evidence: false; total: number; passed: number
   failed: { name: string; why: string }[]; clean: boolean; headline: string
 }
-/** The one question a gate asks of a report: may it count as evidence? Refuses diagnostic, narrowed,
- *  red, wrong-phase and wrong-tree reports. */
-export function countsAsEvidence(report: unknown, want?: { phase?: string; sourceTree?: string }): { ok: true } | { ok: false; reason: string }
+/** Gate-report eligibility, not external deployment proof. Refuses diagnostic, narrowed,
+ *  red, wrong-phase and wrong-tree reports. Build/split reports require a requested nonempty
+ *  buildInputsHash (both hashes for non-build phases), or a nonempty whole sourceTree binding.
+ *  Every requested fingerprint must also be observed in the report. */
+export function countsAsEvidence(report: unknown, want?: { phase?: string; sourceTree?: string; buildInputsHash?: string; testInputsHash?: string }): { ok: true } | { ok: false; reason: string }
+
+/** How a project splits its tree: `testInputs` globs are test-only; `buildInputs` are extra always-build globs. */
+export interface InputRules { testInputs?: readonly string[]; buildInputs?: readonly string[] }
+/** Glob match (`**`, `*`, `?`, `!negation`). */
+export function globMatches(file: string, patterns?: readonly string[]): boolean
+/** Fail-safe classification: a file is "test" only if a testInputs glob matches it AND it is not in ALWAYS_BUILD_INPUTS / buildInputs. */
+export function inputClass(file: string, rules?: InputRules): "build" | "test"
+export function splitInputs(files: readonly string[], rules?: InputRules): { build: string[]; test: string[] }
+/** Lockfiles, Dockerfiles, framework config and env templates: always build inputs. */
+export const ALWAYS_BUILD_INPUTS: readonly string[]
 export const DIAGNOSTIC_KIND: "diagnostic"
 export const DIAGNOSTICS_DIR: string
 
