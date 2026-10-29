@@ -14,6 +14,7 @@ const delivery = 'packages/ship/src/delivery.mjs'
 const contractTests = ['packages/kernel/test/evidence-contract.test.mjs', 'packages/ship/test/input-split.test.mjs']
 const lifecycleTests = ['packages/ship/test/identity-lifecycle.test.mjs']
 const outputTests = ['packages/ship/test/output-links.test.mjs']
+const barrierTests = ['packages/ship/test/delivery-barriers.test.mjs']
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim()
 const source = await inputFingerprint(root, ['**'])
 const report = { kind: 'mutation-diagnostic', evidence: false, commit: git('rev-parse', 'HEAD'), tree: git('rev-parse', 'HEAD^{tree}'), source, runtime: process.version, results: [] }
@@ -66,13 +67,27 @@ const mutations = [
     from: 'if (required && outside(relative(outputRoot, actual))) throw Error(`Output resolves outside root: ${name}`)', to: '',
     tests: outputTests, pattern: 'output paths cannot escape through a symlink parent.*fresh',
     fails: 'output paths cannot escape through a symlink parent \\(fresh\\)' },
+  { id: 'preflight-missing-from-plan', file: delivery,
+    from: '...(s.after ?? []), ...preflight, ...(s.fullOnly ? [] : full)',
+    to: '...(s.after ?? []), ...(s.fullOnly ? [] : full)',
+    tests: barrierTests, pattern: 'the published plan includes every active barrier.*incremental',
+    fails: 'the published plan includes every active barrier \\(incremental\\)' },
+  { id: 'runner-discards-effective-dependencies', file: delivery,
+    from: 'config.steps.filter(s => selected.has(s.id)).map(s => withAfter(s, plannedById.get(s.id).after))',
+    to: 'config.steps.filter(s => selected.has(s.id))',
+    tests: barrierTests, pattern: 'a failed barrier reports.*incremental',
+    fails: 'a failed barrier reports its blocked dependents and still runs its sibling \\(incremental\\)' },
+  { id: 'cache-discards-prerequisite-evidence', file: delivery,
+    from: 'deps: (s.after ?? []).map(d => keys[d])', to: 'deps: []',
+    tests: barrierTests, pattern: 'a changed barrier declaration',
+    fails: 'a changed barrier declaration invalidates dependent build receipts' },
 ]
 const runTests = (tests, pattern) => spawnSync(process.execPath, ['--test', '--test-reporter=tap', ...(pattern ? ['--test-name-pattern', pattern] : []), ...tests], { cwd: sandbox, encoding: 'utf8', timeout: 60000, maxBuffer: 32 << 20 })
 try {
   await cp(join(root, 'packages'), join(sandbox, 'packages'), { recursive: true })
   await cp(join(root, 'bin'), join(sandbox, 'bin'), { recursive: true })
   await cp(join(root, 'package.json'), join(sandbox, 'package.json'))
-  const baseline = runTests([...contractTests, ...lifecycleTests, ...outputTests])
+  const baseline = runTests([...contractTests, ...lifecycleTests, ...outputTests, ...barrierTests])
   const baselineOutput = (baseline.stdout ?? '') + (baseline.stderr ?? '')
   await writeFile(join(out, 'baseline.tap'), baselineOutput)
   if (baseline.status !== 0 || !/^# pass [1-9]\d*$/m.test(baselineOutput)) throw Error('Mutation baseline did not run and pass its regression tests')

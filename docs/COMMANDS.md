@@ -149,6 +149,13 @@ inputs: [glob], outputs: [path], identity: [cmd], scope, reuse, fullOnly, always
 and, optionally, `delivery.testInputs: [glob]` / `delivery.buildInputs: [glob]` (below).
 `preflight` steps are read-only, cannot depend on a build, and all independent
 ones run before build. `fullOnly` checks are a barrier only during a full run.
+The checklist expands these barriers into the selected steps' `after` lists.
+That same graph controls execution, cache dependencies and outcome attribution;
+a failed barrier appears in dependents' `blockedBy` and in `fixFirst` counts.
+Independent checks within a barrier still run after a sibling fails. A full-only
+check depending on an ordinary post-barrier step creates a cycle and is rejected
+before any execution. Declare post-build acceptance as an ordinary step with
+`after: [buildId]`; `fullOnly` denotes the pre-build full-verification barrier.
 All independent selected checks finish before the outcome; failed prerequisites
 block dependent promotion. Declare rollback inside the bounded promotion adapter.
 `mutates: true` prevents reuse. Reuse is opt-in and requires output paths and/or
