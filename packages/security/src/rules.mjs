@@ -14,7 +14,7 @@ import { createHash } from "node:crypto"
 export const fingerprint = (rule, where, evidence) =>
   createHash("sha256").update(JSON.stringify(['vibeubi-finding-v2', String(rule), String(where), normalise(evidence)])).digest("hex").slice(0, 32)
 
-/** Line numbers move and timestamps always differ; neither may enter a fingerprint. */
+/** Normalize evidence whitespace and date-shaped tokens; rule/location stay exact. */
 const normalise = (s) => String(s ?? "").replace(/\s+/g, " ").replace(/\b\d{4}-\d{2}-\d{2}\b/g, "<date>").trim()
 
 /** Never print a secret. A scanner that writes a key into a CI log IS an incident. */

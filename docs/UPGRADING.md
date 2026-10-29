@@ -28,6 +28,15 @@ and package-import checks do not establish that the consumer has been deployed.
   a v2 structured encoding: old baseline IDs will not match. Re-run the scanner
   and review baseline changes under the project's existing admission policy;
   do not automatically accept findings just to restore the previous green result.
+- The PR #5 audit follow-up preserves raw source-link target bytes. Valid v2
+  receipts retain their keys; receipts affected by earlier lossy decoding must
+  rebuild. Git paths, directory entries and resolved output paths must be valid
+  UTF-8. Undecodable names now fail observation instead of aliasing a different
+  file. Arbitrary binary file contents and source-link targets remain supported.
+- Scanner reports rename `baseline.resolved` to `baseline.unmatched`. Update
+  report consumers: an absent old ID can mean an encoding change or moved finding,
+  not remediation. Kernel baseline decisions and admission rules are unchanged.
+  No automatic receipt rewriting or baseline acceptance is performed.
 - Check output links: targets must exist inside the project root and directory
   links must not form cycles. Use an explicit identity observation for external
   artifacts instead of assuming an outside-root symlink proves their contents.

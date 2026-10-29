@@ -16,6 +16,7 @@ const lifecycleTests = ['packages/ship/test/identity-lifecycle.test.mjs']
 const outputTests = ['packages/ship/test/output-links.test.mjs']
 const barrierTests = ['packages/ship/test/delivery-barriers.test.mjs']
 const framingTests = ['packages/ship/test/fingerprint-framing.test.mjs', 'packages/security/test/fingerprint-framing.test.mjs']
+const byteTests = ['packages/ship/test/fingerprint-bytes.test.mjs', 'packages/ship/test/fingerprint-reference.test.mjs', 'packages/security/test/fingerprint-reference.test.mjs', 'packages/security/test/baseline-transition.test.mjs']
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim()
 const source = await inputFingerprint(root, ['**'])
 const report = { kind: 'mutation-diagnostic', evidence: false, commit: git('rev-parse', 'HEAD'), tree: git('rev-parse', 'HEAD^{tree}'), source, runtime: process.version, results: [] }
@@ -92,13 +93,32 @@ const mutations = [
     to: '`${rule}|${where}|${normalise(evidence)}`',
     tests: framingTests, pattern: 'finding fingerprints distinguish location',
     fails: 'finding fingerprints distinguish location and evidence field boundaries' },
+  { id: 'lossy-source-link-bytes', file: delivery,
+    from: "field('link', await readlink(file, { encoding: 'buffer' }))",
+    to: "field('link', await readlink(file))",
+    tests: byteTests, pattern: 'source link identity preserves',
+    fails: 'source link identity preserves distinct non-UTF8 target bytes' },
+  { id: 'lossy-filesystem-paths', file: delivery,
+    from: '  if (!isUtf8(bytes)) throw Error(`${what} is not valid UTF-8; cannot identify filesystem paths without loss`)',
+    to: '',
+    tests: byteTests, pattern: 'source names with invalid UTF8',
+    fails: 'source names with invalid UTF8 cannot alias a real replacement-character name' },
+  { id: 'code-units-as-byte-length', file: delivery,
+    from: "hash.update(kind + '\\0' + bytes.length + '\\0')",
+    to: "hash.update(kind + '\\0' + String(value).length + '\\0')",
+    tests: byteTests, pattern: '32 deterministic binary',
+    fails: '32 deterministic binary/Unicode manifests match an independent encoder and decode losslessly' },
+  { id: 'identity-absence-labelled-remediation', file: 'packages/security/src/run.mjs',
+    from: 'unmatched: diff.resolved.length', to: 'resolved: diff.resolved.length',
+    tests: byteTests, pattern: 'unmatched baseline IDs',
+    fails: 'unmatched baseline IDs are not reported as remediated findings during an encoding upgrade' },
 ]
 const runTests = (tests, pattern) => spawnSync(process.execPath, ['--test', '--test-reporter=tap', ...(pattern ? ['--test-name-pattern', pattern] : []), ...tests], { cwd: sandbox, encoding: 'utf8', timeout: 60000, maxBuffer: 32 << 20 })
 try {
   await cp(join(root, 'packages'), join(sandbox, 'packages'), { recursive: true })
   await cp(join(root, 'bin'), join(sandbox, 'bin'), { recursive: true })
   await cp(join(root, 'package.json'), join(sandbox, 'package.json'))
-  const baseline = runTests([...contractTests, ...lifecycleTests, ...outputTests, ...barrierTests, ...framingTests])
+  const baseline = runTests([...contractTests, ...lifecycleTests, ...outputTests, ...barrierTests, ...framingTests, ...byteTests])
   const baselineOutput = (baseline.stdout ?? '') + (baseline.stderr ?? '')
   await writeFile(join(out, 'baseline.tap'), baselineOutput)
   if (baseline.status !== 0 || !/^# pass [1-9]\d*$/m.test(baselineOutput)) throw Error('Mutation baseline did not run and pass its regression tests')

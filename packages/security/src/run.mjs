@@ -197,7 +197,9 @@ export async function runScan({ root, config = {}, layers, base = "", discovered
     findings, skipped, counts,
     coverage,
     grade: grade(findings, coverage.unmeasured),
-    baseline: { new: diff.new.length, known: diff.known.length, resolved: diff.resolved.length },
+    // A missing ID may reflect an encoding upgrade or a moved finding. Identity
+    // comparison alone cannot establish that the underlying issue was fixed.
+    baseline: { new: diff.new.length, known: diff.known.length, unmatched: diff.resolved.length },
     blocking: diff.blocking,
     precision: fitness.precision,
     falsePositives: lexDropped,
