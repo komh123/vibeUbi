@@ -234,11 +234,15 @@ export async function deliver({ root, config, full = false, major = '', baseline
     }
     const run = execute ?? (async (s, context) => {
       if (!Array.isArray(s.cmd) || !s.cmd.length) throw Error(`Missing command for ${s.id}`)
+      // The full output is already on disk; a failure names it (`logPath`) because
+      // `reason` carries only the last 1200 characters.
+      const logPath = join(outDir, `step-${s.id.replace(/[^\w.-]/g, '_')}.out`)
+      const fail = message => Object.assign(Error(message), { logPath })
       const r = await runStep(s.id, s.cmd[0], s.cmd.slice(1), { cwd: root, outDir, timeoutMs: context.timeoutMs, env: s.env ?? {}, heapMb: s.heapMb, signal:controller.signal })
       if (controller.signal.aborted) throw Error('Delivery interrupted')
-      if (r.code !== 0 || r.timedOut) throw Error(`${s.id}: ${r.timedOut ? 'timed out' : `exit ${r.code}`} — ${stripAnsi(r.out).slice(-1200)}`)
-      if (s.expectsTests) { const v = testRanVerdict(s.id, r.out); if (!v.ok) throw Error(v.reason) }
-      return { ok: true, log: join(outDir, `step-${s.id}.out`) }
+      if (r.code !== 0 || r.timedOut) throw fail(`${s.id}: ${r.timedOut ? 'timed out' : `exit ${r.code}`} — ${stripAnsi(r.out).slice(-1200)}`)
+      if (s.expectsTests) { const v = testRanVerdict(s.id, r.out); if (!v.ok) throw fail(v.reason) }
+      return { ok: true, log: logPath }
     })
     // One validated graph controls execution, cache dependencies and outcomes.
     for (const id of ordered) {
@@ -253,6 +257,7 @@ export async function deliver({ root, config, full = false, major = '', baseline
         assertDeliveryActive()
         if (Date.now() >= deadline) throw Error(`${id}: step budget exceeded`)
       }
+      let evidenceLog // where this attempt's output went, once it has run
       const identity = () => observeIdentity(root, s, identify, { outDir, signal: controller.signal, timeoutMs: remaining() })
       await save(); emit({ kind: 'step', id, state: 'run' })
       // Heartbeats update a separate file to avoid racing report snapshots.
@@ -288,7 +293,8 @@ export async function deliver({ root, config, full = false, major = '', baseline
           assertActive()
           const result = await run(s, { root, outDir, report, signal:controller.signal, timeoutMs: remaining(), emit })
           assertActive()
-          if (result?.ok !== true) throw Error(`${id} produced no affirmative execution evidence`)
+          if (typeof result?.log === 'string') evidenceLog = result.log
+          if (result?.ok !== true) throw Object.assign(Error(`${id} produced no affirmative execution evidence`), typeof result?.log === 'string' ? { logPath: result.log } : {})
           await assertSourceUnchanged()
           if (s.outputs?.length) outputHash = await hashPaths(root, s.outputs, { required: true })
           if (s.identity?.length) artifactId = await identity()
@@ -301,7 +307,11 @@ export async function deliver({ root, config, full = false, major = '', baseline
         if (!reused && s.reuse === true && pinned && !s.mutates) await atomicJson(cacheFile, { key, outputHash, ...(artifactId ? { artifactId } : {}), status: 'pass', runId })
         Object.assign(row, { status: 'pass', execution: reused ? 'reused' : 'ran', ...(reused ? { fromRun: cached.runId } : {}), key, outputHash, ...(artifactId ? { artifact: artifactId } : {}), ...(rules.testInputs.length ? { scope: buildScoped ? 'build' : 'all' } : {}) })
         keys[id] = s.phase === 'preflight' ? digest(json(s)) : digest(key + (outputHash ?? '') + (artifactId ?? ''))
-      } catch (error) { Object.assign(row, { status: 'fail', reason: error.message }); emit({ kind: 'failure', id, reason: error.message }) }
+      } catch (error) {
+        // A failed row keeps pointing at its full evidence, so it can still be found after a rollback.
+        const logPath = [error.logPath, evidenceLog].find(p => typeof p === 'string' && p)
+        Object.assign(row, { status: 'fail', reason: error.message, ...(logPath ? { logPath } : {}) }); emit({ kind: 'failure', id, reason: error.message })
+      }
       finally { clearInterval(beat); row.finishedAt = new Date().toISOString(); statuses[id] = row; await save() }
     }
     const outcome = planOutcome(steps, statuses)
