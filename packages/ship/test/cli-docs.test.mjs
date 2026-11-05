@@ -15,11 +15,11 @@ import { stripAnsi } from '../../kernel/src/index.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
 const source = await readFile(join(ROOT, 'bin/vibeubi.mjs'), 'utf8')
-const commands = [...source.matchAll(/^  (?:async )?([a-z]+)\(\) \{/gm)].map(m => m[1])
+const commands = [...source.matchAll(/^  (?:async )?(?:"([a-z-]+)"|([a-z]+))\(\) \{/gm)].map(m => m[1] ?? m[2])
 
 test('the command table was actually found (a vacuous list proves nothing)', () => {
   assert.ok(commands.length >= 16, commands.join(','))
-  for (const c of ['adopt', 'ship', 'rollback', 'checklist', 'deliver', 'status', 'find', 'probe', 'diagnose']) assert.ok(commands.includes(c), c)
+  for (const c of ['adopt', 'ship', 'rollback', 'checklist', 'deliver', 'status', 'find', 'probe', 'diagnose', 'coverage-gap']) assert.ok(commands.includes(c), c)
 })
 
 test('`help` lists every command', () => {
@@ -32,7 +32,7 @@ for (const file of ['README.md', 'docs/INIT.md']) {
   test(`${file}: its implemented-commands list names every command and none that does not exist`, async () => {
     const text = await readFile(join(ROOT, file), 'utf8')
     // The list is the fenced block made only of command names that contains `init` and `orphans`.
-    const block = [...text.matchAll(/```\n((?:[a-z·\s]+\n)+)```/g)].map(m => m[1]).find(b => /\binit\b/.test(b) && /\borphans\b/.test(b)) ?? ''
+    const block = [...text.matchAll(/```\n((?:[a-z·\s-]+\n)+)```/g)].map(m => m[1]).find(b => /\binit\b/.test(b) && /\borphans\b/.test(b)) ?? ''
     const listed = block.split(/[·\s]+/).filter(Boolean)
     assert.ok(listed.length > 10, `could not find the list in ${file}`)
     assert.deepEqual(commands.filter(c => !listed.includes(c)), [], 'implemented but not listed')

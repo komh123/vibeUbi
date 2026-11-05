@@ -101,6 +101,7 @@ rule load-bearing:
 | wire a test file into a suite | `--without` — skip a layer |
 | write build / swap / sessionFor | `accept-debt` — absorb a finding |
 | | unpin a tool · lower a P0 |
+| | `coverage-gap --ack` — acknowledge commits nobody wrote a test for |
 
 Everything in the right column makes a red light disappear **without fixing
 anything** — the cheapest move available to a model optimising for "the command
@@ -163,7 +164,7 @@ npm run verify    # typecheck + unit tests + the end-to-end smoke checks
 
 ```
 init · orphans · adopt · plan · scan · roster · viz · find · probe
-checklist · deliver · status · ship · diagnose · rollback · guard · help
+checklist · deliver · status · ship · diagnose · rollback · guard · coverage-gap · help
 ```
 
 `vibeubi help` lists them; `docs/COMMANDS.md` describes each. `ship` and

@@ -132,6 +132,15 @@ acceptance: {
   and a one-line `headline`. Projects with their own runner use the same
   kernel functions: `testPlan`, `readyToRun`, `planOutcome`.
 
+## Coverage gap from commits
+
+`vibeubi coverage-gap --base <ref> [--head <ref>] [--format md|json] [--fail-on-uncovered [all|foreign]]
+[--authors-not <a,b>] [--drafts-dir DIR] [--tree head|<ref>|worktree]` reads the commits in `base..head`
+and lists the files and new routes/pages/components/APIs that no acceptance item exercises, with a
+`record()` draft for each. Exit 0 nothing blocks, 1 blocking gaps, 2 bad usage/config. A person
+acknowledges a list with `--ack --by <name> --note <why>`; the acknowledgement expires when the list
+or any gapped file changes. Full design and config: [COVERAGE-GAP.md](COVERAGE-GAP.md).
+
 ## Incremental delivery (default for declared delivery projects)
 
 `vibeubi checklist [--since <commit>] [--watch]` refreshes the feature/step list.

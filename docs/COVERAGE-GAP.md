@@ -77,6 +77,31 @@ report says what changed. `coverage-ack` is in `NARROWING_ACTIONS`, so `vibeubi 
 --action coverage-ack` tells an agent hook to refuse: acknowledging a gap makes a red
 light go away without writing the test.
 
+## Config (`vibeubi.config.mjs`)
+
+```js
+export default {
+  // ...
+  coverageGap: {
+    ownAuthors: ["agent@example.com", "AI Agent System"], // strings (exact name/email, or * glob over "Name <email>") or RegExp
+    claims: [{ id: "chat", covers: ["components/**"], selfPaths: ["scripts/acceptance/chat.mjs"] }], // plus delivery.features[].covers
+    ignored: ["docs/**", "work/**"],            // never a gap
+    evidence: ["scripts/acceptance/**"],        // files whose text may mention a surface (default: e2e/spec files)
+    classifier: { rules: [{ class: "page", match: ["content/help/*.json"] }], classify: (file, dflt) => undefined },
+    exemptClasses: ["docs", "test", "config"],  // default
+    broadThreshold: 25,                          // a claim matching more tracked files than this is "wide"
+    templateFiles: { default: "scripts/templates/record-draft.tmpl", component: "..." }, // or templates: { default: "..." }
+    ackFile: ".vibeubi/coverage-ack.json",
+    defaultBase: ({ root }) => "origin/main",   // when --base is not given
+    tree: "head",                                // where breadth/evidence are read: "head" | a ref | "worktree"
+  },
+}
+```
+
+Library entry points: `vibeubi/kernel` (`classifyFile`, `computeGaps`, `draftFor`, `gapsHash`,
+`ackVerdict`, ...) and `vibeubi/coverage-gap` (`commitsSince`, `runCoverageGap`,
+`readAcks`, `writeAck`, `gateOutcome`, `renderMarkdown`).
+
 ## Limits
 
 - Text matching is a heuristic. A script that mentions `status-band` in a comment

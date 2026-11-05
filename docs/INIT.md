@@ -92,5 +92,5 @@ today is:
 
 ```
 init · orphans · adopt · plan · scan · roster · viz · find · probe
-checklist · deliver · status · ship · diagnose · rollback · guard · help
+checklist · deliver · status · ship · diagnose · rollback · guard · coverage-gap · help
 ```
