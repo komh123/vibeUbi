@@ -39,7 +39,7 @@ vibeubi plan          # what a run would do; touches nothing
 
 ```bash
 vibeubi verify                  # offline layers only; nothing built or swapped
-vibeubi scan --base <url>       # S0–S7 on their own
+vibeubi scan                    # S0 S1 S2 S4 by default; --layer S0,S1,S2,S3,S4 --base <url> adds S3 (S5 = vibeubi roster; S6/S7 not implemented)
 vibeubi diagnose [--only a,b]   # EVERY verify step past every red; lists all failures; never evidence
 vibeubi ship                    # the whole pipeline, automatic rollback
 vibeubi rollback                # previous build back — and proved
@@ -283,6 +283,15 @@ Build/split reports without a requested binding are refused. Legacy reports
 without fingerprints and without a requested binding receive only an eligibility
 check, not source validation or proof of a deployment. Kernel helpers:
 `inputClass`, `splitInputs`, `ALWAYS_BUILD_INPUTS`, `globMatches`.
+
+**Failed rows keep their evidence.** A failed step's `reason` is only the last
+1200 characters of its output. The row also carries `logPath`, the absolute path
+of the full `step-<id>.out` under `.vibeubi/delivery/<run>/`, persisted in
+`report.json` and `status.json`, so the evidence can still be found after a
+rollback. An injected `execute` can supply its own path (`error.logPath` on a
+thrown error, or `log` in an `{ ok: false }` result); no path is invented when
+there is none. Output is read with terminal colour codes stripped (`stripAnsi`),
+so an inherited `FORCE_COLOR` cannot change a verdict.
 
 **Skipped (opt-in).** An executor may report a step it could not run because of
 the environment, not the change (an unfixed permission, an unprovisioned site):

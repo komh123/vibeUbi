@@ -145,27 +145,35 @@ export function apply(ctx, config = {}) {
 ## Layout
 
 ```
-packages/kernel      every decision, zero I/O, 91 tests — the product
+packages/kernel      every decision, zero I/O — the product
 packages/registry    discovery + declaration + the orphan rule
-packages/security    S0–S7 rule catalogue
+packages/security    S0–S4 rules (S5 is the roster in the kernel; S6/S7 are documented, not implemented)
+packages/ship        the pipeline and incremental delivery: I/O and order, no decisions
 packages/adapters    per-stack plugins
 packages/viz         registry → diagram IR (archify · mermaid · neutral)
 bin/vibeubi.mjs     the CLI every harness can fall back to
 ```
 
 ```bash
-npm run verify    # 91 unit tests + 5 end-to-end smoke checks
+npm test          # the unit tests (node --test, TAP); the count is whatever it prints
+npm run verify    # typecheck + unit tests + the end-to-end smoke checks
 ```
 
 ### What is implemented today
 
-`init · orphans · scan · roster · viz · plan · guard`
+```
+init · orphans · adopt · plan · scan · roster · viz · find · probe
+checklist · deliver · status · ship · diagnose · rollback · guard · help
+```
 
-`adopt`, `add`, `intent`, `why`, `verify`, `ship` and `rollback` are the
-intended flow, described in the skills and in `docs/COMMANDS.md`, and the
-kernel decisions they need are built and tested — but those CLI subcommands
-are not written yet. Where a document describes them, it is describing the
-design, not the current binary.
+`vibeubi help` lists them; `docs/COMMANDS.md` describes each. `ship` and
+`rollback` run against a target adapter (`proofClaim`), `deliver`/`checklist`/
+`status` are the incremental delivery path (`docs/COMMANDS.md`, `docs/EVIDENCE-CONTRACT.md`).
+
+Not written as CLI subcommands: `add`, `intent`, `why`, and a stand-alone
+`verify` (verification is a phase of `ship`, and `diagnose` runs the same steps
+without stopping at the first red). Where a document describes them, it is
+describing the design, not the current binary.
 
 MIT.
 
@@ -177,7 +185,7 @@ MIT.
 |---|---|
 | [`docs/WHY.html`](docs/WHY.html) | the full argument — ten kinds of remembering, three axioms, the security model, the commercial split. Open it in a browser. |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | rings, statuses, why judging early is provably safe |
-| [`docs/SECURITY.md`](docs/SECURITY.md) | S0–S7, the agent surface, ASI mapping |
+| [`docs/SECURITY.md`](docs/SECURITY.md) | the S0–S7 design (S0–S4 implemented), the agent surface, ASI mapping |
 | [`docs/COMMANDS.md`](docs/COMMANDS.md) | every command, and which ones need a human |
 | [`docs/PLUGINS.md`](docs/PLUGINS.md) | the DSH-shaped extension contract |
 | [`docs/INIT.md`](docs/INIT.md) | what `ubi init` works out on its own, and the one field it refuses to invent |
@@ -202,19 +210,19 @@ someone else.
 engines: ">=22.0.0"
 ```
 
-| | status on 2026-09-17 | tests | typecheck | smoke | CLI |
+| | status on 2026-11-05 | tests | typecheck | smoke | CLI |
 | --- | --- | --- | --- | --- | --- |
 | Node 18.19 | **EOL 2025-04-30** | refused at startup | — | — | refused |
 | Node 20 | **EOL 2026-04-30** | not run | | | |
-| **Node 22.22** | supported to 2027-04-30 | 279 pass | ✓ | 5/5 | ✓ |
-| **Node 24.21** | supported to 2028-04-30 | 279 pass | ✓ | 5/5 | ✓ |
+| **Node 22.22** | supported to 2027-04-30 | 551 pass | ✓ | 5/5 | ✓ |
+| **Node 24.21** | supported to 2028-04-30 | 551 pass | ✓ | 5/5 | ✓ |
 
 The floor is 22 and not 18, even though everything passes on 18, because **a
 security gate should not declare support for a runtime that stopped receiving
-security fixes seventeen months ago.** 20 went end-of-life in April 2026 as well.
+security fixes eighteen months ago.** 20 went end-of-life in April 2026 as well.
 
-The floor is 22 and not 24 for the opposite reason: 24 enters maintenance on
-2026-10-20 and 26 becomes LTS eight days later, so a 24 floor would be pinned to
+The floor is 22 and not 24 for the opposite reason: 24 entered maintenance on
+2026-10-20 and 26 became LTS eight days later, so a 24 floor would be pinned to
 a version on its way out while excluding every team on a currently supported
 LTS. VibeUbi runs other people's pipelines; raising the floor costs them and
 buys nothing here.

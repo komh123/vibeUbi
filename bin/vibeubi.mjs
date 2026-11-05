@@ -643,6 +643,9 @@ ${C.bold}vibeubi${C.off} — the gate that remembers so you do not have to
             no config needed: --declared <file> --base <url> --artifact <id>
   ${C.bold}diagnose${C.off}  run EVERY verify step, past every red, and list all failures  [--only a,b]
             never deploy evidence — use it before a slow gate, so one run shows everything
+  ${C.bold}checklist${C.off} print the incremental delivery checklist (which declared steps this change selects)  [--full] [--major R] [--since SHA] [--watch]
+  ${C.bold}deliver${C.off}   run the selected delivery steps; reuse pinned builds, never skip a selected check  [--full] [--major R] [--since SHA]
+  ${C.bold}status${C.off}    print .vibeubi/delivery/status.json (the delivery in progress, or the last one)
   ${C.bold}rollback${C.off}  put the previous build back, and prove it
   ${C.bold}init${C.off}      probe the project and write a config  [--dry-run] [--force]
   ${C.bold}guard${C.off}     --action <a>   refuse a narrowing action

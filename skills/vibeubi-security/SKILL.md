@@ -1,6 +1,6 @@
 ---
 name: vibeubi-security
-description: Run and interpret the VibeUbi security layers S0-S7, including the agent and MCP attack surface. Use when the user asks about security scanning, secrets in git history, exposed ports, attack surface, SAST/DAST, MCP tool poisoning, prompt injection defences, agent permissions, OWASP LLM or Agentic (ASI) risks, or asks "is this safe to expose".
+description: Run and interpret the VibeUbi security layers (S0-S4 implemented, S5 roster rules implemented, S6-S7 specified only), including the agent and MCP attack surface. Use when the user asks about security scanning, secrets in git history, exposed ports, attack surface, SAST/DAST, MCP tool poisoning, prompt injection defences, agent permissions, OWASP LLM or Agentic (ASI) risks, or asks "is this safe to expose".
 ---
 
 # Security — the same three axioms, a second coordinate system
@@ -12,9 +12,9 @@ So security uses the identical structure: **discover the surface → declare
 what is deliberate → get evidence from outside.**
 
 ```bash
-npx vibeubi scan                       # offline: S0 S1 S2 S5 S6 S7
-npx vibeubi scan --base https://host   # adds S3 (DAST) and S4 (exposure)
-npx vibeubi scan --layer S5            # the agent surface on its own
+npx vibeubi scan                       # default layers: S0 S1 S2 S4
+npx vibeubi scan --layer S0,S1,S2,S3,S4 --base https://host   # adds S3 (DAST), which needs --base
+npx vibeubi roster                     # the agent surface (S5): pins, drift, poison
 ```
 
 ## The layers

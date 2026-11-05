@@ -83,11 +83,14 @@ ubi viz         # the diagram IR
 
 ## Not implemented yet
 
-`adopt`, `add`, `intent`, `why`, `verify`, `ship`, `rollback` are described in
-the skills and in `docs/COMMANDS.md` as the intended flow, and the kernel
-decisions they need are built and tested — but the CLI subcommands are not
-written. The working set today is:
+`add`, `intent`, `why` and a stand-alone `verify` are described in the skills
+and in `docs/COMMANDS.md` as the intended flow, and the kernel decisions they
+need are built and tested — but those CLI subcommands are not written
+(verification is a phase of `ship`; `diagnose` runs its steps without stopping at
+the first red). `adopt`, `ship` and `rollback` ARE implemented. The working set
+today is:
 
 ```
-init · orphans · scan · roster · viz · plan · guard · help
+init · orphans · adopt · plan · scan · roster · viz · find · probe
+checklist · deliver · status · ship · diagnose · rollback · guard · help
 ```

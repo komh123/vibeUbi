@@ -250,9 +250,9 @@ that way. To identify a real process, read `/proc/<pid>/exe`, not its argv.
 ## Repo layout
 
 ```
-packages/kernel      every decision, zero I/O, 46 tests — the product
+packages/kernel      every decision, zero I/O — the product
 packages/registry    discovery + declaration + the orphan rule
-packages/security    S0–S7, including the agent/MCP surface
+packages/security    S0–S4 (the agent/MCP surface, S5, is the roster in the kernel; S6/S7 are specified only)
 packages/adapters    per-stack plugins (DSH/cordis shape: name + apply)
 packages/viz         registry → diagram IR (archify, mermaid, neutral)
 skills/ commands/    harness packaging
