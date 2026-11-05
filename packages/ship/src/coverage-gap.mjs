@@ -272,7 +272,7 @@ export function renderMarkdown(report) {
     const who = g.authors.map((a) => `${a.name}${a.own ? " (ours)" : ""}`).join(", ") || "unknown"
     lines.push(`## ${g.severity === "red" ? "RED" : "warn"} ${g.kind}: \`${g.path}\``, "",
       `- class ${g.class}, ${g.status === "A" ? "new file" : "changed"}${g.route ? `, route \`${g.route}\`` : ""}; by ${who}`,
-      `- claimed by: ${g.claimedBy.map((c) => `\`${c.glob}\` (${c.id}, ${c.breadth} files)`).join(", ") || "nothing"}`,
+      `- claimed by: ${g.claimedBy.map((c) => `\`${c.glob}\` (${c.breadth} files; ${c.ids.length} claim(s), e.g. ${c.ids.slice(0, 2).join(", ")})`).join(", ") || "nothing"}`,
       ...(g.tokens.length ? [`- looked for in evidence, found none: ${g.tokens.map((t) => `\`${t}\``).join(", ")}`] : []),
       ...g.commits.map((c) => `- ${c.sha.slice(0, 7)} ${c.author}: ${c.subject}`), "",
       "```js", g.draft.source.trimEnd(), "```", "")

@@ -913,7 +913,8 @@ export function authorIsOwn(author: Author, patterns?: readonly (string | RegExp
 
 export interface ChangedFile { path: string; oldPath?: string; status: "A" | "M" | "R" | "C" | "D" | "T" | (string & {}); addedText?: string }
 export interface ClaimInput { id?: string; covers?: readonly string[]; selfPaths?: readonly string[]; globs?: readonly string[] }
-export interface ClaimedBy { id: string; glob: string; breadth: number }
+/** One entry per glob; `ids` are every claim that declares it, `id` the first. */
+export interface ClaimedBy { id: string; ids: string[]; glob: string; breadth: number }
 export interface Gap {
   key: string
   kind: "unclaimed" | "new-surface"

@@ -103,7 +103,7 @@ export function extractSurface(text, { class: cls = "other" } = {}) {
   const named = [
     ...hit(/export\s+(?:default\s+)?(?:async\s+)?(?:function|class)\s+([A-Z]\w*)/g, src, (m) => m[1]),
     ...hit(/export\s+const\s+([A-Z]\w*)\s*[=:]/g, src, (m) => m[1]),
-  ].filter((n) => !HTTP.has(n))
+  ].filter((n) => !HTTP.has(n) && /^[A-Z][A-Za-z0-9]*$/.test(n) && /[a-z]/.test(n)) // PascalCase: not RANGE_TONE, not GET
   return {
     testIds: uniq(testIds), ariaLabels: uniq(ariaLabels), apiCalls: uniq(apiCalls),
     httpMethods: uniq(methods), exports: cls === "component" || cls === "page" ? uniq(named) : [],
@@ -161,6 +161,17 @@ export function surfaceTokens({ path, class: cls, route, surface }) {
 const mentionRegex = (token) =>
   new RegExp(`${token.startsWith("/") ? "" : "(?<![A-Za-z0-9_-])"}${escapeRe(token)}(?![A-Za-z0-9_-])`)
 
+/** One entry per glob (the same wide glob is declared by dozens of acceptance items): `ids` lists who declares it. */
+const groupClaims = (matched) => {
+  const byGlob = new Map()
+  for (const c of matched) {
+    const g = byGlob.get(c.glob) ?? { id: c.id, ids: [], glob: c.glob, breadth: c.breadth }
+    if (!g.ids.includes(c.id)) g.ids.push(c.id)
+    byGlob.set(c.glob, g)
+  }
+  return [...byGlob.values()]
+}
+
 const normalizeClaims = (claims) => claims.flatMap((c) => {
   const id = typeof c === "string" ? c : String(c.id ?? c.name ?? "(claim)")
   const globs = typeof c === "string" ? [c] : [...(c.covers ?? []), ...(c.selfPaths ?? []), ...(c.globs ?? [])]
@@ -204,7 +215,7 @@ export function computeGaps({
     const cls = classifyFile(f.path, classifier)
     if (exemptClasses.includes(cls) || isIgnored(f.path)) { stats.exempt++; continue }
 
-    const claimedBy = claimGlobs.filter((c) => c.test(f.path)).map((c) => ({ id: c.id, glob: c.glob, breadth: breadth(c) }))
+    const claimedBy = groupClaims(claimGlobs.filter((c) => c.test(f.path)).map((c) => ({ id: c.id, glob: c.glob, breadth: breadth(c) })))
     const isNew = f.status === "A" || f.status === "C"
     const surface = extractSurface(f.addedText ?? "", { class: cls })
     const surfaceClass = surfaceClasses.includes(cls)
@@ -308,7 +319,7 @@ function selectorLines(gap) {
 
 const why = (gap) => gap.kind === "unclaimed"
   ? "no acceptance item claims this file at all"
-  : `new ${gap.class} that no acceptance script exercises (claimed only by ${gap.claimedBy.map((c) => `${c.glob} [${c.breadth} files]`).join(", ") || "nothing"})`
+  : `new ${gap.class} that no acceptance script exercises (claimed only by ${gap.claimedBy.map((c) => `${c.glob} [${c.breadth} files, ${c.ids.length} claim(s)]`).join(", ") || "nothing"})`
 
 /**
  * A `record()` skeleton for a gap. `templates` is a string, or `{ default?, <class>? }`; placeholders are

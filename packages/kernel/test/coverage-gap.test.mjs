@@ -73,6 +73,7 @@ test("extractSurface pulls selectors, methods, exports and api calls out of text
   const src = `
     export function StatusBand() { return <div data-testid="status-band" aria-label="Task status"><b data-testid={'inner'} /><i data-testid={\`row-\${id}\`} /></div> }
     export const UndoToast = () => null
+    export const RANGE_TONE = 3
     export default function Page() {}
     export async function GET(req) {}
     export const POST = async () => {}
@@ -148,6 +149,7 @@ test("FALSIFIABLE PAIR: a wide glob contains a NEW component; with no script men
   assert.equal(gap.gaps[0].kind, "new-surface")
   assert.equal(gap.gaps[0].specificClaim, false)
   assert.deepEqual(gap.gaps[0].claimedBy.map((c) => c.id), ["chat"], "it IS claimed, by a wide glob")
+  assert.deepEqual(gap.gaps[0].claimedBy[0].ids, ["chat"])
   assert.equal(gap.gaps[0].claimedBy[0].breadth > 25, true)
 
   const mentioned = computeGaps({
@@ -156,6 +158,14 @@ test("FALSIFIABLE PAIR: a wide glob contains a NEW component; with no script men
   })
   assert.deepEqual(mentioned.gaps, [])
   assert.equal(mentioned.stats.exercisedByMention, 1)
+})
+
+test("the same wide glob declared by many claims is ONE claimedBy entry listing them", () => {
+  const files = [{ path: "components/agent-next/status-band.tsx", status: "A", addedText: "export function StatusBand(){}" }]
+  const claims = Array.from({ length: 30 }, (_, i) => ({ id: `item-${i}`, covers: ["components/**"] }))
+  const r = computeGaps({ ...base, claims, files, authorsByFile: {} })
+  assert.equal(r.gaps[0].claimedBy.length, 1)
+  assert.equal(r.gaps[0].claimedBy[0].ids.length, 30)
 })
 
 test("a mention must respect token boundaries (status-band must not satisfy status-bandit)", () => {
