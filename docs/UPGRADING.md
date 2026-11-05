@@ -12,6 +12,10 @@ and package-import checks do not establish that the consumer has been deployed.
   Installing a new package cannot update copied functions. Compare those copies
   against the upstream contract; run valid/invalid evidence pairs before changing
   a consumer's gate. Do not replace predicates merely to make a red disappear.
+  A copied output-hash recipe (`sha256(path, mode, bytes)`) is the sharpest case:
+  it disagrees with the `vibeubi-paths-v2` encoding. Import `outputIdentityOf` /
+  `fileOutputIdentity` from `vibeubi/delivery` instead (docs/COMMANDS.md), and
+  compare `row.outputHashVersion` with `OUTPUT_HASH_VERSION`.
 - Confirm that subprocess tests emit a machine-readable test count. For Node's
   test runner, explicitly use `--test --test-reporter=tap`; a runtime's default
   reporter is not an evidence contract.

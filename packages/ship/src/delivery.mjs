@@ -7,8 +7,12 @@ import { isUtf8 } from 'node:buffer'
 import { execFileSync } from 'node:child_process'
 import { mkdir, readFile, writeFile, rename, lstat, readdir, readlink, realpath, rm } from 'node:fs/promises'
 import { join, resolve, relative, sep, isAbsolute } from 'node:path'
-import { testPlan, readyToRun, planOutcome, testRanVerdict, globMatches, inputClass, splitInputs } from '../../kernel/src/index.mjs'
+import { testPlan, readyToRun, planOutcome, testRanVerdict, stripAnsi, globMatches, inputClass, splitInputs } from '../../kernel/src/index.mjs'
 import { runStep } from './run.mjs'
+/** An executor's explicit opt-in: this step could not run because of the environment. Never a pass. */
+class StepSkipped extends Error {
+  constructor(reason, category) { super(reason); this.category = category }
+}
 const digest = value => createHash('sha256').update(value).digest('hex')
 const json = value => JSON.stringify(value, (_key, v) => typeof v === 'function' ? v.toString() : v)
 // Globs and path APIs use strings. Refuse undecodable names rather than observe
@@ -33,17 +37,24 @@ export async function atomicJson(file, data) {
 export async function sourceFiles(root) {
   return [...new Set(git(root, ['ls-files', '--cached', '--others', '--exclude-standard', '-z']).split('\0').filter(Boolean))].sort()
 }
-async function hashPaths(root, paths, { required = false } = {}) {
+/** The encoding every path/output fingerprint uses. Rows record it as `outputHashVersion`. */
+export const OUTPUT_HASH_VERSION = 'vibeubi-paths-v2'
+// Hash.update boundaries are not encoded by crypto. Frame every field with its
+// type and byte length so arbitrary file bytes cannot impersonate a path, mode
+// or the next file. The version separates old ambiguous receipts. This is the
+// ONLY place the framing is written: hashPaths and fileOutputIdentity share it.
+function framedHash() {
   const hash = createHash('sha256')
-  hash.update('vibeubi-paths-v2\0')
-  // Hash.update boundaries are not encoded by crypto. Frame every field with
-  // its type and byte length so arbitrary file bytes cannot impersonate a path,
-  // mode or the next file. The version separates old ambiguous receipts.
+  hash.update(OUTPUT_HASH_VERSION + '\0')
   const field = (kind, value = '') => {
     const bytes = Buffer.isBuffer(value) ? value : Buffer.from(String(value))
     hash.update(kind + '\0' + bytes.length + '\0')
     hash.update(bytes)
   }
+  return { field, digest: () => hash.digest('hex') }
+}
+async function hashPaths(root, paths, { required = false } = {}) {
+  const { field, digest: finish } = framedHash()
   const outputRoot = required ? await observedRealpath(root) : null
   const outside = path => path === '..' || path.startsWith('..' + sep) || isAbsolute(path)
   async function visit(name, ancestors = new Set()) {
@@ -71,7 +82,38 @@ async function hashPaths(root, paths, { required = false } = {}) {
     else field('file', await readFile(file))
   }
   for (const name of [...new Set(paths)].sort()) await visit(name)
-  return hash.digest('hex')
+  return finish()
+}
+/**
+ * The identity of declared build outputs, exactly as `deliver()` records it in a
+ * row's `outputHash` (and re-observes before reusing a receipt). Consumers that
+ * verify an artifact against a row import this instead of re-deriving the hash.
+ *
+ * Output rules apply: every path must exist, links must resolve to bytes inside
+ * `root` (an outside-root link throws `Output resolves outside root`), cycles
+ * throw, and path names must be valid UTF-8. Order and duplicates do not matter.
+ * @param {string} root project root the output paths are relative to
+ * @param {readonly string[]} paths the step's `outputs`, as declared (relative to `root`)
+ * @returns {Promise<string>} hex sha256, `OUTPUT_HASH_VERSION` encoding
+ */
+export async function outputIdentityOf(root, paths) {
+  if (!Array.isArray(paths) || !paths.length || paths.some(p => typeof p !== 'string' || !p)) throw Error('outputIdentityOf needs at least one output path')
+  return hashPaths(root, paths, { required: true })
+}
+/**
+ * `outputIdentityOf` for ONE regular file whose bytes and mode the caller has
+ * already read (for example to also copy it), without touching the filesystem.
+ * Equals `outputHash` of a row whose `outputs` is `[path]` and names a regular file.
+ * @param {{ path: string, mode: number, bytes: Buffer | Uint8Array }} file
+ *   `path` as declared in `outputs`; `mode` from `lstat` (type bits included); `bytes` the file contents
+ */
+export function fileOutputIdentity({ path, mode, bytes } = {}) {
+  if (typeof path !== 'string' || !path) throw Error('fileOutputIdentity needs the declared output path')
+  if (!Number.isInteger(mode)) throw Error('fileOutputIdentity needs the lstat mode (an integer)')
+  if (!(bytes instanceof Uint8Array)) throw Error('fileOutputIdentity needs the file bytes (Buffer or Uint8Array)')
+  const { field, digest: finish } = framedHash()
+  field('path', path); field('mode', mode); field('file', Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength))
+  return finish()
 }
 /** `keep` optionally narrows the matched files further (a step that keys on buildInputs only). */
 export async function inputFingerprint(root, patterns, salt = '', keep) {
@@ -234,11 +276,15 @@ export async function deliver({ root, config, full = false, major = '', baseline
     }
     const run = execute ?? (async (s, context) => {
       if (!Array.isArray(s.cmd) || !s.cmd.length) throw Error(`Missing command for ${s.id}`)
+      // The full output is already on disk; a failure names it (`logPath`) because
+      // `reason` carries only the last 1200 characters.
+      const logPath = join(outDir, `step-${s.id.replace(/[^\w.-]/g, '_')}.out`)
+      const fail = message => Object.assign(Error(message), { logPath })
       const r = await runStep(s.id, s.cmd[0], s.cmd.slice(1), { cwd: root, outDir, timeoutMs: context.timeoutMs, env: s.env ?? {}, heapMb: s.heapMb, signal:controller.signal })
       if (controller.signal.aborted) throw Error('Delivery interrupted')
-      if (r.code !== 0 || r.timedOut) throw Error(`${s.id}: ${r.timedOut ? 'timed out' : `exit ${r.code}`} — ${r.out.slice(-1200)}`)
-      if (s.expectsTests) { const v = testRanVerdict(s.id, r.out); if (!v.ok) throw Error(v.reason) }
-      return { ok: true, log: join(outDir, `step-${s.id}.out`) }
+      if (r.code !== 0 || r.timedOut) throw fail(`${s.id}: ${r.timedOut ? 'timed out' : `exit ${r.code}`} — ${stripAnsi(r.out).slice(-1200)}`)
+      if (s.expectsTests) { const v = testRanVerdict(s.id, r.out); if (!v.ok) throw fail(v.reason) }
+      return { ok: true, log: logPath }
     })
     // One validated graph controls execution, cache dependencies and outcomes.
     for (const id of ordered) {
@@ -253,6 +299,7 @@ export async function deliver({ root, config, full = false, major = '', baseline
         assertDeliveryActive()
         if (Date.now() >= deadline) throw Error(`${id}: step budget exceeded`)
       }
+      let evidenceLog // where this attempt's output went, once it has run
       const identity = () => observeIdentity(root, s, identify, { outDir, signal: controller.signal, timeoutMs: remaining() })
       await save(); emit({ kind: 'step', id, state: 'run' })
       // Heartbeats update a separate file to avoid racing report snapshots.
@@ -288,7 +335,14 @@ export async function deliver({ root, config, full = false, major = '', baseline
           assertActive()
           const result = await run(s, { root, outDir, report, signal:controller.signal, timeoutMs: remaining(), emit })
           assertActive()
-          if (result?.ok !== true) throw Error(`${id} produced no affirmative execution evidence`)
+          if (typeof result?.log === 'string') evidenceLog = result.log
+          if (result?.status === 'skipped') {
+            // Opt-in only: `{ ok: false, status: 'skipped', reason, category? }`. Anything ambiguous is a failure.
+            if (result.ok === true) throw Error(`${id}: a result with ok: true cannot also be skipped; the two contradict`)
+            if (typeof result.reason !== 'string' || !result.reason.trim()) throw Error(`${id}: a skipped step must say why (a non-empty reason)`)
+            throw new StepSkipped(result.reason, typeof result.category === 'string' && result.category ? result.category : undefined)
+          }
+          if (result?.ok !== true) throw Object.assign(Error(`${id} produced no affirmative execution evidence`), typeof result?.log === 'string' ? { logPath: result.log } : {})
           await assertSourceUnchanged()
           if (s.outputs?.length) outputHash = await hashPaths(root, s.outputs, { required: true })
           if (s.identity?.length) artifactId = await identity()
@@ -299,12 +353,23 @@ export async function deliver({ root, config, full = false, major = '', baseline
         await assertSourceUnchanged()
         assertActive()
         if (!reused && s.reuse === true && pinned && !s.mutates) await atomicJson(cacheFile, { key, outputHash, ...(artifactId ? { artifactId } : {}), status: 'pass', runId })
-        Object.assign(row, { status: 'pass', execution: reused ? 'reused' : 'ran', ...(reused ? { fromRun: cached.runId } : {}), key, outputHash, ...(artifactId ? { artifact: artifactId } : {}), ...(rules.testInputs.length ? { scope: buildScoped ? 'build' : 'all' } : {}) })
+        Object.assign(row, { status: 'pass', execution: reused ? 'reused' : 'ran', ...(reused ? { fromRun: cached.runId } : {}), key, outputHash, ...(outputHash ? { outputHashVersion: OUTPUT_HASH_VERSION } : {}), ...(artifactId ? { artifact: artifactId } : {}), ...(rules.testInputs.length ? { scope: buildScoped ? 'build' : 'all' } : {}) })
         keys[id] = s.phase === 'preflight' ? digest(json(s)) : digest(key + (outputHash ?? '') + (artifactId ?? ''))
-      } catch (error) { Object.assign(row, { status: 'fail', reason: error.message }); emit({ kind: 'failure', id, reason: error.message }) }
+      } catch (error) {
+        const logPath = [error.logPath, evidenceLog].find(p => typeof p === 'string' && p)
+        if (error instanceof StepSkipped) {
+          // Not a pass and not a fault in the change: no receipt, dependents blocked, never evidence.
+          Object.assign(row, { status: 'skipped', reason: error.message, ...(error.category ? { category: error.category } : {}), ...(logPath ? { logPath } : {}) })
+          emit({ kind: 'skipped', id, reason: error.message, ...(error.category ? { category: error.category } : {}) })
+        } else {
+          // A failed row keeps pointing at its full evidence, so it can still be found after a rollback.
+          Object.assign(row, { status: 'fail', reason: error.message, ...(logPath ? { logPath } : {}) })
+          emit({ kind: 'failure', id, reason: error.message })
+        }
+      }
       finally { clearInterval(beat); row.finishedAt = new Date().toISOString(); statuses[id] = row; await save() }
     }
-    const outcome = planOutcome(steps, statuses)
+    const outcome = planOutcome(steps, statuses, { skipped: true })
     report.outcome = outcome
     for (const { id, ...row } of outcome.items) if (!report.steps[id]) report.steps[id] = row
     const passed = steps.length > 0 && steps.every(s => report.steps[s.id].status === 'pass')

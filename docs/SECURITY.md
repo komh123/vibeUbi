@@ -33,6 +33,13 @@ where agentic attacks land.
 | **S6** agent config | `.claude/`, `.cursor/`, `AGENTS.md`, hooks, installed plugins | A | new ≥ HIGH |
 | **S7** provenance | signed releases for anything loaded at runtime | B | unsigned component |
 
+**What is implemented today.** `vibeubi scan` runs **S0–S4** (default layers
+`S0,S1,S2,S4`; S3 needs `--layer ...S3... --base <url>`; `packages/security`).
+**S5** is implemented as the tool-roster rules `S5.mcp.*` in the kernel and runs
+with `vibeubi roster`; the other S5 rows below (egress, identity, memory,
+approval, killswitch, blast, ASI) and the whole of **S6** and **S7** are the
+design, with no code behind them yet. A clean `scan` says nothing about S5–S7.
+
 **S0 scans history, not just the tree.** A key deleted in the next commit is
 still a key: on the first day this ran against a real repo it returned an F
 from 28 credentials that existed only in `git log`.

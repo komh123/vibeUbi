@@ -63,6 +63,7 @@ export const NARROWING_ACTIONS = Object.freeze([
   "accept-debt",       // absorb a security finding into the baseline
   "unpin",             // drop a tool-definition pin
   "lower-priority",    // P0 → P1 is a gate change wearing a metadata costume
+  "coverage-ack",      // acknowledge a coverage gap: the red light goes away and no test was written
 ])
 
 /** @param {string} action */

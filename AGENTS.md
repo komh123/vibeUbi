@@ -38,7 +38,11 @@ never edit the function that produced it.
 ```bash
 npx vibeubi plan | verify | diagnose | scan | ship | rollback
 npx vibeubi init | adopt | orphans | why <id> | viz
+npx vibeubi coverage-gap --base <ref> [--fail-on-uncovered]   # what the commits added that no acceptance item exercises
 ```
+
+`coverage-gap --ack` (acknowledging that list) is a human action: `vibeubi guard --action coverage-ack` refuses it.
+An agent writes the missing acceptance items from the drafts instead.
 
 ## Rules for reporting
 
@@ -250,9 +254,9 @@ that way. To identify a real process, read `/proc/<pid>/exe`, not its argv.
 ## Repo layout
 
 ```
-packages/kernel      every decision, zero I/O, 46 tests — the product
+packages/kernel      every decision, zero I/O — the product
 packages/registry    discovery + declaration + the orphan rule
-packages/security    S0–S7, including the agent/MCP surface
+packages/security    S0–S4 (the agent/MCP surface, S5, is the roster in the kernel; S6/S7 are specified only)
 packages/adapters    per-stack plugins (DSH/cordis shape: name + apply)
 packages/viz         registry → diagram IR (archify, mermaid, neutral)
 skills/ commands/    harness packaging

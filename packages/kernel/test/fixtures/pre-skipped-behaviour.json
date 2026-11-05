@@ -1,0 +1,441 @@
+{
+ "note": "Recorded from a6bf9ce BEFORE the optional skipped status existed. Regenerate only on a deliberate behaviour change.",
+ "items": [
+  {
+   "id": "a"
+  },
+  {
+   "id": "b",
+   "after": [
+    "a"
+   ],
+   "severity": "P0"
+  },
+  {
+   "id": "c",
+   "after": [
+    "b"
+   ]
+  },
+  {
+   "id": "d"
+  },
+  {
+   "id": "e",
+   "after": [
+    "d",
+    "a"
+   ]
+  }
+ ],
+ "plans": {
+  "allPass": {
+   "a": "pass",
+   "b": "pass",
+   "c": "pass",
+   "d": "pass",
+   "e": "pass"
+  },
+  "rootFail": {
+   "a": {
+    "status": "fail",
+    "reason": "boom"
+   },
+   "d": "pass"
+  },
+  "mixed": {
+   "a": "pass",
+   "b": {
+    "status": "fail",
+    "reason": "x"
+   },
+   "d": "not-run"
+  },
+  "empty": {},
+  "skippedWithoutOptIn": {
+   "a": {
+    "status": "skipped",
+    "reason": "env",
+    "category": "environment-blocked"
+   },
+   "d": "pass"
+  },
+  "unknownStatus": {
+   "a": "weird",
+   "d": "pass"
+  }
+ },
+ "reports": {
+  "green": [
+   {
+    "ok": true,
+    "phase": "build",
+    "sourceTree": "t",
+    "buildInputsHash": "h"
+   },
+   {
+    "phase": "build",
+    "sourceTree": "t",
+    "buildInputsHash": "h"
+   }
+  ],
+  "deliveryShape": [
+   {
+    "kind": "delivery",
+    "status": "passed",
+    "steps": {
+     "a": {
+      "status": "pass"
+     }
+    }
+   },
+   {}
+  ],
+  "okWithStepsArray": [
+   {
+    "ok": true,
+    "steps": [
+     {
+      "name": "a",
+      "ok": true
+     }
+    ]
+   },
+   {}
+  ],
+  "okWithStepsObject": [
+   {
+    "ok": true,
+    "steps": {
+     "a": {
+      "status": "pass",
+      "execution": "ran"
+     },
+     "b": {
+      "status": "fail"
+     }
+    }
+   },
+   {}
+  ],
+  "okWithSkippedArray": [
+   {
+    "ok": true,
+    "skipped": [
+     "S3 — needs base"
+    ]
+   },
+   {}
+  ],
+  "failed": [
+   {
+    "ok": false
+   },
+   {}
+  ],
+  "narrowed": [
+   {
+    "ok": true,
+    "narrowed": true
+   },
+   {}
+  ],
+  "diagnostic": [
+   {
+    "kind": "diagnostic",
+    "ok": true
+   },
+   {}
+  ]
+ },
+ "expected": {
+  "planOutcome": {
+   "empty": {
+    "items": [
+     {
+      "id": "a",
+      "status": "not-run"
+     },
+     {
+      "id": "b",
+      "severity": "P0",
+      "status": "blocked",
+      "blockedBy": [
+       "a"
+      ]
+     },
+     {
+      "id": "c",
+      "status": "blocked",
+      "blockedBy": [
+       "a"
+      ]
+     },
+     {
+      "id": "d",
+      "status": "not-run"
+     },
+     {
+      "id": "e",
+      "status": "blocked",
+      "blockedBy": [
+       "d",
+       "a"
+      ]
+     }
+    ],
+    "fixFirst": [],
+    "deferred": [
+     "b",
+     "c",
+     "e"
+    ],
+    "clean": false,
+    "headline": "0/5 passed · 3 blocked (deferred to the next round) · 2 not run"
+   },
+   "allPass": {
+    "items": [
+     {
+      "id": "a",
+      "status": "pass"
+     },
+     {
+      "id": "b",
+      "severity": "P0",
+      "status": "pass"
+     },
+     {
+      "id": "c",
+      "status": "pass"
+     },
+     {
+      "id": "d",
+      "status": "pass"
+     },
+     {
+      "id": "e",
+      "status": "pass"
+     }
+    ],
+    "fixFirst": [],
+    "deferred": [],
+    "clean": true,
+    "headline": "5/5 passed"
+   },
+   "rootFail": {
+    "items": [
+     {
+      "id": "a",
+      "status": "fail",
+      "reason": "boom"
+     },
+     {
+      "id": "b",
+      "severity": "P0",
+      "status": "blocked",
+      "blockedBy": [
+       "a"
+      ]
+     },
+     {
+      "id": "c",
+      "status": "blocked",
+      "blockedBy": [
+       "a"
+      ]
+     },
+     {
+      "id": "d",
+      "status": "pass"
+     },
+     {
+      "id": "e",
+      "status": "blocked",
+      "blockedBy": [
+       "a"
+      ]
+     }
+    ],
+    "fixFirst": [
+     {
+      "id": "a",
+      "blocks": 3
+     }
+    ],
+    "deferred": [
+     "b",
+     "c",
+     "e"
+    ],
+    "clean": false,
+    "headline": "1/5 passed · 1 failed · 3 blocked (deferred to the next round) — fix first: a (blocks 3)"
+   },
+   "mixed": {
+    "items": [
+     {
+      "id": "a",
+      "status": "pass"
+     },
+     {
+      "id": "b",
+      "severity": "P0",
+      "status": "fail",
+      "reason": "x"
+     },
+     {
+      "id": "c",
+      "status": "blocked",
+      "blockedBy": [
+       "b"
+      ]
+     },
+     {
+      "id": "d",
+      "status": "not-run"
+     },
+     {
+      "id": "e",
+      "status": "blocked",
+      "blockedBy": [
+       "d"
+      ]
+     }
+    ],
+    "fixFirst": [
+     {
+      "id": "b",
+      "blocks": 1
+     }
+    ],
+    "deferred": [
+     "c",
+     "e"
+    ],
+    "clean": false,
+    "headline": "1/5 passed · 1 failed · 2 blocked (deferred to the next round) · 1 not run — fix first: b (blocks 1)"
+   },
+   "skippedWithoutOptIn": {
+    "items": [
+     {
+      "id": "a",
+      "status": "not-run",
+      "reason": "env"
+     },
+     {
+      "id": "b",
+      "severity": "P0",
+      "status": "blocked",
+      "blockedBy": [
+       "a"
+      ]
+     },
+     {
+      "id": "c",
+      "status": "blocked",
+      "blockedBy": [
+       "a"
+      ]
+     },
+     {
+      "id": "d",
+      "status": "pass"
+     },
+     {
+      "id": "e",
+      "status": "blocked",
+      "blockedBy": [
+       "a"
+      ]
+     }
+    ],
+    "fixFirst": [],
+    "deferred": [
+     "b",
+     "c",
+     "e"
+    ],
+    "clean": false,
+    "headline": "1/5 passed · 3 blocked (deferred to the next round) · 1 not run"
+   },
+   "unknownStatus": {
+    "items": [
+     {
+      "id": "a",
+      "status": "not-run"
+     },
+     {
+      "id": "b",
+      "severity": "P0",
+      "status": "blocked",
+      "blockedBy": [
+       "a"
+      ]
+     },
+     {
+      "id": "c",
+      "status": "blocked",
+      "blockedBy": [
+       "a"
+      ]
+     },
+     {
+      "id": "d",
+      "status": "pass"
+     },
+     {
+      "id": "e",
+      "status": "blocked",
+      "blockedBy": [
+       "a"
+      ]
+     }
+    ],
+    "fixFirst": [],
+    "deferred": [
+     "b",
+     "c",
+     "e"
+    ],
+    "clean": false,
+    "headline": "1/5 passed · 3 blocked (deferred to the next round) · 1 not run"
+   },
+   "noItems": {
+    "items": [],
+    "fixFirst": [],
+    "deferred": [],
+    "clean": false,
+    "headline": "nothing was planned — an empty plan proves nothing"
+   }
+  },
+  "countsAsEvidence": {
+   "green": {
+    "ok": true
+   },
+   "deliveryShape": {
+    "ok": false,
+    "reason": "the run did not pass"
+   },
+   "okWithStepsArray": {
+    "ok": true
+   },
+   "okWithStepsObject": {
+    "ok": true
+   },
+   "okWithSkippedArray": {
+    "ok": true
+   },
+   "failed": {
+    "ok": false,
+    "reason": "the run did not pass"
+   },
+   "narrowed": {
+    "ok": false,
+    "reason": "a narrowed run (--only) covers some steps, not the gate"
+   },
+   "diagnostic": {
+    "ok": false,
+    "reason": "a diagnostic run is never deploy evidence — it ran steps past a red on purpose"
+   }
+  }
+ }
+}

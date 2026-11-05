@@ -24,6 +24,7 @@
     "./viz": "./packages/viz/src/archify.mjs",
     "./adapters/*": "./packages/adapters/src/*",
     "./delivery": "./packages/ship/src/delivery.mjs",
+    "./coverage-gap": "./packages/ship/src/coverage-gap.mjs",
     "./artifacts": "./packages/ship/src/artifacts.mjs"
   },
   "scripts": {

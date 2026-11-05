@@ -113,7 +113,7 @@ const COMMANDS = {
     if (!config?.delivery) throw Error('Declare config.delivery features and steps first')
     const { deliver } = await import('../packages/ship/src/delivery.mjs')
     const result = await deliver({ root: ROOT, config: config.delivery, full: flag('full'), major: val('major', ''), baseline: val('since', undefined),
-      emit: e => { if (e.kind === 'step') say(`${e.id}: ${e.state}`); if (e.kind === 'failure') bad(`${e.id}: ${e.reason}`) } })
+      emit: e => { if (e.kind === 'step') say(`${e.id}: ${e.state}`); if (e.kind === 'failure') bad(`${e.id}: ${e.reason}`); if (e.kind === 'skipped') say(`${e.id}: skipped${e.category ? ` (${e.category})` : ''} — ${e.reason}`) } })
     say(`${result.mode ?? 'planning'} delivery: ${result.status} — ${result.outDir}`)
     if (result.error) bad(result.error)
     process.exitCode = result.status === 'passed' ? 0 : 1
@@ -616,6 +616,55 @@ const COMMANDS = {
     say(`       ubi scan      →  S0–S4 against what you just wired${C.off}\n`)
   },
 
+  /**
+   * `vibeubi coverage-gap` — read the commits since a base and list what they added that no acceptance item exercises.
+   * Decisions: packages/kernel/src/coverage-gap.mjs. Git, ack file and output: packages/ship/src/coverage-gap.mjs. Design: docs/COVERAGE-GAP.md.
+   * Exit: 0 nothing blocks · 1 blocking gaps · 2 bad usage/config · 3 unexpected.
+   */
+  async "coverage-gap"() {
+    const config = await loadConfig()
+    if (!config) { bad("no vibeubi.config.mjs here — coverage-gap reads its `coverageGap` section."); process.exit(2) }
+    const cg = await import("../packages/ship/src/coverage-gap.mjs")
+    const fail = (message) => { bad(message); process.exit(2) }
+    const cfg = config.coverageGap ?? {}
+    let base = val("base", "")
+    if (!base && cfg.defaultBase) base = typeof cfg.defaultBase === "function" ? await cfg.defaultBase({ root: ROOT }) : cfg.defaultBase
+    const failOn = flag("fail-on-uncovered") ? (val("fail-on-uncovered", "all")) : false
+    if (failOn && !["all", "foreign"].includes(failOn)) fail(`--fail-on-uncovered takes "all" or "foreign", not "${failOn}"`)
+    const format = val("format", "md")
+    if (!["md", "json"].includes(format)) fail(`--format is md or json, not "${format}"`)
+    const authorsNot = val("authors-not", "") ? val("authors-not", "").split(",").map((s) => s.trim()).filter(Boolean) : undefined
+    const ackFile = resolve(ROOT, val("ack-file", cfg.ackFile ?? cg.DEFAULT_ACK_FILE))
+
+    let report
+    try {
+      report = await cg.runCoverageGap({ root: ROOT, config, base, head: val("head", "HEAD"), authorsNot, tree: val("tree", undefined), ackFile })
+    } catch (err) {
+      if (err?.code === "COVERAGE_GAP_USAGE") fail(err.message)
+      throw err
+    }
+
+    if (flag("ack")) {
+      if (!val("by", "")) fail("--ack needs --by <who>: an acknowledgement is a person saying they looked")
+      if (report.gaps.length === 0) { ok("no gaps — nothing to acknowledge"); return }
+      const ack = await cg.writeAck(ackFile, report, { by: val("by", ""), note: val("note", "") })
+      ok(`acknowledged ${report.gaps.length} gap(s) as ${ack.by} → ${relativeish(ackFile)}`)
+      note("the acknowledgement is only valid for exactly this list of gaps and these file contents")
+      return
+    }
+
+    const gate = cg.gateOutcome(report, failOn)
+    if (val("drafts-dir", "")) await cg.writeDrafts(resolve(ROOT, val("drafts-dir", "")), report)
+    if (format === "json") say(JSON.stringify({ ...report, gate: { failOn, blocked: gate.blocked, reason: gate.reason } }, null, 2))
+    else {
+      say(cg.renderMarkdown(report))
+      say("")
+      gate.blocked ? bad(`BLOCKED — ${gate.reason}`) : note(`not blocking — ${gate.reason}`)
+      if (gate.blocked) note(`a person who has read the list can acknowledge it:  vibeubi coverage-gap --base ${base} --ack --by <name> --note <why>`)
+    }
+    process.exitCode = gate.blocked ? 1 : 0
+  },
+
   async guard() {
     // Used by hooks: refuse a narrowing action that no human approved.
     const action = val("action", "")
@@ -643,9 +692,15 @@ ${C.bold}vibeubi${C.off} — the gate that remembers so you do not have to
             no config needed: --declared <file> --base <url> --artifact <id>
   ${C.bold}diagnose${C.off}  run EVERY verify step, past every red, and list all failures  [--only a,b]
             never deploy evidence — use it before a slow gate, so one run shows everything
+  ${C.bold}checklist${C.off} print the incremental delivery checklist (which declared steps this change selects)  [--full] [--major R] [--since SHA] [--watch]
+  ${C.bold}deliver${C.off}   run the selected delivery steps; reuse pinned builds, never skip a selected check  [--full] [--major R] [--since SHA]
+  ${C.bold}status${C.off}    print .vibeubi/delivery/status.json (the delivery in progress, or the last one)
   ${C.bold}rollback${C.off}  put the previous build back, and prove it
   ${C.bold}init${C.off}      probe the project and write a config  [--dry-run] [--force]
   ${C.bold}guard${C.off}     --action <a>   refuse a narrowing action
+  ${C.bold}coverage-gap${C.off}  list what the commits since --base added that no acceptance item exercises, with a draft per gap
+            [--head R] [--format md|json] [--fail-on-uncovered [all|foreign]] [--authors-not A,B] [--drafts-dir D]
+            a person acknowledges a list:  --ack --by <name> --note <why>   (docs/COVERAGE-GAP.md)
   ${C.bold}find${C.off}      which rule catches THIS?  vibeubi find "<what you can see>"
             takes no config and needs no project — you need it before you have one
 

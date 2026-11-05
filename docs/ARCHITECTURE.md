@@ -54,9 +54,9 @@ this deploy happen" demands a fact observed from outside the deployed process.
 │ ADAPTERS   per stack, per deployment         │  community
 │ build · swap · proof · session · discover    │
 │ ┌──────────────────────────────────────────┐ │
-│ │ LAYERS / RULES   L0–L6 · S0–S7           │ │  extensible
+│ │ LAYERS / RULES   L0–L6 · S0–S4           │ │  extensible
 │ │ ┌──────────────────────────────────────┐ │ │
-│ │ │ KERNEL   pure, zero I/O, 46 tests    │ │ │  the product
+│ │ │ KERNEL   pure, zero I/O              │ │ │  the product
 │ │ │ verdictFor · deployProof             │ │ │  read-only to agents
 │ │ │ testRanVerdict · attributedVerdict   │ │ │
 │ │ │ prereqVerdict · reapDecision         │ │ │

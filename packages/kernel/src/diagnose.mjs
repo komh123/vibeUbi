@@ -87,6 +87,15 @@ export function diagnoseSummary(results) {
  *   Every requested fingerprint must be a nonempty string on both sides.
  * @returns {{ ok: true } | { ok: false, reason: string }}
  */
+/** Does any step row in this report say `skipped`? Looks only at the shapes that carry per-step status. */
+function hasSkippedStep(r) {
+  const rows = [
+    ...(Array.isArray(r.steps) ? r.steps : r.steps && typeof r.steps === "object" ? Object.values(r.steps) : []),
+    ...(Array.isArray(r.outcome?.items) ? r.outcome.items : []),
+  ]
+  return rows.some((row) => row && typeof row === "object" && row.status === "skipped")
+}
+
 export function countsAsEvidence(report, want = {}) {
   if (!report || typeof report !== "object") return { ok: false, reason: "no report" }
   const r = /** @type {Record<string, unknown>} */ (report)
@@ -95,6 +104,7 @@ export function countsAsEvidence(report, want = {}) {
   }
   if (r.narrowed === true) return { ok: false, reason: "a narrowed run (--only) covers some steps, not the gate" }
   if (r.ok !== true) return { ok: false, reason: "the run did not pass" }
+  if (hasSkippedStep(r)) return { ok: false, reason: "a step was skipped (environment-blocked); a skipped step proves nothing, so neither does the run" }
   if (want.phase && r.phase !== want.phase) return { ok: false, reason: `phase is ${String(r.phase)}, not ${want.phase}` }
   const wholeTree = Object.hasOwn(want, "sourceTree")
   if (wholeTree && !sameFingerprint(r.sourceTree, want.sourceTree)) {

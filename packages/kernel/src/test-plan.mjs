@@ -29,7 +29,20 @@
 /** Statuses an item can end in. `not-run` is never pass and never fail. */
 export const PLAN_STATUSES = Object.freeze(["pass", "fail", "blocked", "not-run"])
 
+/**
+ * Statuses a consumer may opt into (`planOutcome(items, results, { skipped: true })`).
+ * Kept apart from `PLAN_STATUSES` so nothing that enumerated the defaults sees a
+ * new member it never asked for.
+ *
+ * `skipped`: the item could not run because of the ENVIRONMENT (a permission the
+ * owner has not fixed, a site that is not provisioned), not because of the change.
+ * It is not a pass, it is not a failure to fix, it blocks its dependents like any
+ * red does, and it can never be evidence (`countsAsEvidence` refuses it).
+ */
+export const OPTIONAL_PLAN_STATUSES = Object.freeze(["skipped"])
+
 const statusOf = (r) => (r === undefined || r === null ? undefined : typeof r === "string" ? r : r.status)
+const categoryOf = (r) => (r && typeof r === "object" && typeof r.category === "string" && r.category ? r.category : undefined)
 const reasonOf = (r) => (r && typeof r === "object" && typeof r.reason === "string" ? r.reason : undefined)
 const afterOf = (it) => (Array.isArray(it?.after) ? it.after : [])
 
@@ -109,9 +122,13 @@ export function readyToRun(item, statuses = {}) {
  * parent, so the fix list points at what to fix. Otherwise it is `not-run`.
  *
  * @param {readonly {id: string, after?: readonly string[], severity?: string}[]} items
- * @param {Record<string, "pass" | "fail" | "not-run" | {status: string, reason?: string}>} results
+ * `{ skipped: true }` opts into the `skipped` status (see OPTIONAL_PLAN_STATUSES). Without it
+ * every result is read exactly as it always was, including a result that says `skipped`.
+ *
+ * @param {Record<string, "pass" | "fail" | "not-run" | {status: string, reason?: string, category?: string}>} results
+ * @param {{skipped?: boolean}} [options]
  */
-export function planOutcome(items, results = {}) {
+export function planOutcome(items, results = {}, { skipped: allowSkipped = false } = {}) {
   const list = (Array.isArray(items) ? items : []).filter((it) => it && typeof it.id === "string")
   const byId = new Map(list.map((it) => [it.id, it]))
   const memo = new Map()
@@ -121,7 +138,7 @@ export function planOutcome(items, results = {}) {
     if (memo.has(id)) return memo.get(id)
     const own = statusOf(results[id])
     let out
-    if (own === "pass" || own === "fail" || own === "not-run") out = { status: own, roots: own === "pass" ? [] : [id] }
+    if (own === "pass" || own === "fail" || own === "not-run" || (allowSkipped && own === "skipped")) out = { status: own, roots: own === "pass" ? [] : [id] }
     else if (trail.has(id)) out = { status: "not-run", roots: [id] }
     else {
       trail.add(id)
@@ -144,6 +161,7 @@ export function planOutcome(items, results = {}) {
       ...(it.severity ? { severity: it.severity } : {}),
       status: r.status,
       ...(r.status === "blocked" ? { blockedBy: r.roots } : {}),
+      ...(r.status === "skipped" && categoryOf(results[it.id]) ? { category: categoryOf(results[it.id]) } : {}),
       ...(reasonOf(results[it.id]) ? { reason: reasonOf(results[it.id]) } : {}),
     }
   })
@@ -154,7 +172,7 @@ export function planOutcome(items, results = {}) {
     .map((r) => ({ id: r.id, blocks: blocks.get(r.id) ?? 0 }))
     .sort((a, b) => b.blocks - a.blocks || order.get(a.id) - order.get(b.id))
   const count = (s) => rows.filter((r) => r.status === s).length
-  const passed = count("pass"), failed = count("fail"), blocked = count("blocked"), notRun = count("not-run")
+  const passed = count("pass"), failed = count("fail"), blocked = count("blocked"), notRun = count("not-run"), skipped = count("skipped")
   const clean = rows.length > 0 && passed === rows.length
   const headline = rows.length === 0
     ? "nothing was planned — an empty plan proves nothing"
@@ -162,6 +180,11 @@ export function planOutcome(items, results = {}) {
       (failed ? ` · ${failed} failed` : "") +
       (blocked ? ` · ${blocked} blocked (deferred to the next round)` : "") +
       (notRun ? ` · ${notRun} not run` : "") +
+      (skipped ? ` · ${skipped} skipped (environment, not the change)` : "") +
       (fixFirst.length ? ` — fix first: ${fixFirst.map((f) => `${f.id} (blocks ${f.blocks})`).join(", ")}` : "")
-  return { items: rows, fixFirst, deferred: rows.filter((r) => r.status === "blocked").map((r) => r.id), clean, headline }
+  return {
+    items: rows, fixFirst, deferred: rows.filter((r) => r.status === "blocked").map((r) => r.id), clean, headline,
+    // Present only when something was skipped, so an outcome without a skip keeps its old shape.
+    ...(skipped ? { skipped: rows.filter((r) => r.status === "skipped").map((r) => r.id) } : {}),
+  }
 }

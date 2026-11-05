@@ -264,6 +264,9 @@ export function verdictFor(...args: any[]): any
 export function earlyVerdict(...args: any[]): any
 export function gateCells(...args: any[]): any
 export function testRanVerdict(...args: any[]): any
+/** Remove terminal escape sequences (SGR colours, cursor/erase CSI, OSC). Nullish input is `""`.
+ *  Step output is read through this, so `FORCE_COLOR` cannot decide whether tests "ran". */
+export function stripAnsi(text: unknown): string
 /** Was this red caused by THIS deploy? Three answers, not two.
  *
  *  A re-check runs on the SAME build, so it separates flaky from consistent and
@@ -821,7 +824,7 @@ export function diagnoseSummary(results: readonly { name: string; ok: boolean; c
   failed: { name: string; why: string }[]; clean: boolean; headline: string
 }
 /** Gate-report eligibility, not external deployment proof. Refuses diagnostic, narrowed,
- *  red, wrong-phase and wrong-tree reports. Build/split reports require a requested nonempty
+ *  red, wrong-phase and wrong-tree reports, and any report in which a step is `skipped`. Build/split reports require a requested nonempty
  *  buildInputsHash (both hashes for non-build phases), or a nonempty whole sourceTree binding.
  *  Every requested fingerprint must also be observed in the report. */
 export function countsAsEvidence(report: unknown, want?: { phase?: string; sourceTree?: string; buildInputsHash?: string; testInputsHash?: string }): { ok: true } | { ok: false; reason: string }
@@ -830,6 +833,8 @@ export function countsAsEvidence(report: unknown, want?: { phase?: string; sourc
 export interface InputRules { testInputs?: readonly string[]; buildInputs?: readonly string[] }
 /** Glob match (`**`, `*`, `?`, `!negation`). */
 export function globMatches(file: string, patterns?: readonly string[]): boolean
+/** The same rule as `globMatches`, compiled once for many files. */
+export function compileGlobs(patterns?: readonly string[]): (file: string) => boolean
 /** Fail-safe classification: a file is "test" only if a testInputs glob matches it AND it is not in ALWAYS_BUILD_INPUTS / buildInputs. */
 export function inputClass(file: string, rules?: InputRules): "build" | "test"
 export function splitInputs(files: readonly string[], rules?: InputRules): { build: string[]; test: string[] }
@@ -859,3 +864,99 @@ export function planOutcome(
   clean: boolean
   headline: string
 }
+/** Opt-in: with `{ skipped: true }` a result of `{ status: "skipped" }` is its own status (not a pass,
+ *  not a failure to fix; dependents are `blocked` by it; the round is never `clean`). Without the option
+ *  every result is read as before. `skipped` lists the skipped ids and is present only when non-empty. */
+export function planOutcome(
+  items: readonly PlanItem[],
+  results: Record<string, "pass" | "fail" | "not-run" | { status: string; reason?: string; category?: string }> | undefined,
+  options: { skipped: true },
+): {
+  items: { id: string; severity?: string; status: PlanStatus | OptionalPlanStatus; blockedBy?: string[]; reason?: string; category?: string }[]
+  fixFirst: { id: string; blocks: number }[]
+  deferred: string[]
+  clean: boolean
+  headline: string
+  skipped?: string[]
+}
+/** Statuses a consumer opts into with `planOutcome(..., { skipped: true })`. Separate from `PLAN_STATUSES` on purpose. */
+export const OPTIONAL_PLAN_STATUSES: readonly ["skipped"]
+export type OptionalPlanStatus = "skipped"
+
+/* ── coverage gap: what the commits added that no acceptance item exercises ── */
+
+export type FileClass = "route" | "page" | "component" | "api" | "lib" | "test" | "config" | "docs" | "other" | (string & {})
+export interface ClassRule { class: FileClass; match: readonly string[] }
+export interface ClassifierOptions {
+  /** Tried before the defaults. */
+  rules?: readonly ClassRule[]
+  /** Drop the defaults; only `rules` classify (everything else is "other"). */
+  replace?: boolean
+  /** Last word; return undefined to keep the rule-based class. */
+  classify?: (file: string, dflt: string) => string | undefined
+}
+export const DEFAULT_CLASS_RULES: readonly ClassRule[]
+export const DEFAULT_EXEMPT_CLASSES: readonly string[]
+export const SURFACE_CLASSES: readonly string[]
+export const DEFAULT_BROAD_THRESHOLD: number
+export const DEFAULT_DRAFT_TEMPLATE: string
+export function classifyFile(file: string, options?: ClassifierOptions): FileClass
+/** The route a file serves (Next.js app/ and pages/ routers); null when it is not a route file. */
+export function routeOf(file: string): string | null
+
+export interface Surface { testIds: string[]; ariaLabels: string[]; apiCalls: string[]; httpMethods: string[]; exports: string[] }
+export function extractSurface(text: string, options?: { class?: FileClass }): Surface
+export function surfaceTokens(input: { path: string; class: FileClass; route: string | null; surface: Surface }): string[]
+
+export interface Author { name: string; email: string }
+export function authorIsOwn(author: Author, patterns?: readonly (string | RegExp)[]): boolean
+
+export interface ChangedFile { path: string; oldPath?: string; status: "A" | "M" | "R" | "C" | "D" | "T" | (string & {}); addedText?: string }
+export interface ClaimInput { id?: string; covers?: readonly string[]; selfPaths?: readonly string[]; globs?: readonly string[] }
+/** One entry per glob; `ids` are every claim that declares it, `id` the first. */
+export interface ClaimedBy { id: string; ids: string[]; glob: string; breadth: number }
+export interface Gap {
+  key: string
+  kind: "unclaimed" | "new-surface"
+  path: string
+  oldPath?: string
+  status: string
+  class: FileClass
+  isNew: boolean
+  route: string | null
+  surface: Surface
+  tokens: string[]
+  claimedBy: ClaimedBy[]
+  specificClaim: boolean
+  authors: (Author & { own: boolean })[]
+  foreign: boolean
+  severity: "red" | "warn"
+  /** The file's blob id at head (filled by the ship layer; part of the ack hash). */
+  blob?: string
+  commits?: { sha: string; author: string; subject: string }[]
+}
+export interface GapStats { files: number; exempt: number; covered: number; exercisedByMention: number; exercisedBySpecificClaim: number; gaps: number }
+export function computeGaps(input: {
+  files: readonly ChangedFile[]
+  authorsByFile?: Record<string, readonly Author[]>
+  claims?: readonly (string | ClaimInput)[]
+  ignored?: readonly string[]
+  tracked?: readonly string[]
+  evidence?: readonly { path: string; text: string }[]
+  ownAuthors?: readonly (string | RegExp)[]
+  classifier?: ClassifierOptions
+  exemptClasses?: readonly string[]
+  surfaceClasses?: readonly string[]
+  broadThreshold?: number
+}): { gaps: Gap[]; stats: GapStats }
+
+export interface CoverageAck { gapsHash: string; items: { key: string; blob: string }[]; by: string; note: string; at: string; base: string; head: string }
+export function gapsHash(gaps: readonly Pick<Gap, "kind" | "path" | "severity" | "blob">[]): string
+export function makeAck(input: { gaps: readonly Gap[]; by: string; note?: string; at?: string; base?: string; head?: string }): CoverageAck
+export function ackVerdict(input: { acks?: readonly CoverageAck[]; gaps?: readonly Pick<Gap, "kind" | "path" | "severity" | "blob">[] }):
+  | { status: "none" }
+  | { status: "valid"; ack: CoverageAck }
+  | { status: "stale"; ack: CoverageAck; added: string[]; removed: string[]; changed: string[] }
+
+export interface Draft { id: string; fileName: string; source: string; covers: string[]; after: string[]; selectors: Surface | Record<string, never> }
+export function draftFor(gap: Gap, templates?: string | ({ default?: string } & Record<string, string | undefined>)): Draft

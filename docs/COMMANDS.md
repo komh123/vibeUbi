@@ -39,7 +39,7 @@ vibeubi plan          # what a run would do; touches nothing
 
 ```bash
 vibeubi verify                  # offline layers only; nothing built or swapped
-vibeubi scan --base <url>       # S0–S7 on their own
+vibeubi scan                    # S0 S1 S2 S4 by default; --layer S0,S1,S2,S3,S4 --base <url> adds S3 (S5 = vibeubi roster; S6/S7 not implemented)
 vibeubi diagnose [--only a,b]   # EVERY verify step past every red; lists all failures; never evidence
 vibeubi ship                    # the whole pipeline, automatic rollback
 vibeubi rollback                # previous build back — and proved
@@ -132,6 +132,15 @@ acceptance: {
   and a one-line `headline`. Projects with their own runner use the same
   kernel functions: `testPlan`, `readyToRun`, `planOutcome`.
 
+## Coverage gap from commits
+
+`vibeubi coverage-gap --base <ref> [--head <ref>] [--format md|json] [--fail-on-uncovered [all|foreign]]
+[--authors-not <a,b>] [--drafts-dir DIR] [--tree head|<ref>|worktree]` reads the commits in `base..head`
+and lists the files and new routes/pages/components/APIs that no acceptance item exercises, with a
+`record()` draft for each. Exit 0 nothing blocks, 1 blocking gaps, 2 bad usage/config. A person
+acknowledges a list with `--ack --by <name> --note <why>`; the acknowledgement expires when the list
+or any gapped file changes. Full design and config: [COVERAGE-GAP.md](COVERAGE-GAP.md).
+
 ## Incremental delivery (default for declared delivery projects)
 
 `vibeubi checklist [--since <commit>] [--watch]` refreshes the feature/step list.
@@ -171,6 +180,30 @@ Filesystem path names must be valid UTF-8; undecodable names fail observation.
 File contents and source-link targets are hashed as raw bytes. Scanner baseline
 reports use `unmatched` for absent old IDs; absence does not prove remediation.
 See [the byte contract and migration audit](PR5-FINGERPRINT-AUDIT.md).
+
+### Verifying an output against a row (public API)
+
+A consumer that must check an artifact against a delivery row (for example a
+native binary before promoting it) imports the identity from `vibeubi/delivery`
+instead of re-deriving the hash. A copy of the recipe silently disagrees the day
+the encoding moves, as the `sha256(path \0 mode \0 bytes)` form did when
+`vibeubi-paths-v2` introduced typed, length-framed fields.
+
+```js
+import { outputIdentityOf, fileOutputIdentity, OUTPUT_HASH_VERSION } from 'vibeubi/delivery'
+
+// Observe the filesystem as deliver() does. `outputs` exactly as declared.
+const id = await outputIdentityOf(root, ['dist/daemon'])        // === row.outputHash
+
+// Same value for ONE regular file whose bytes and lstat mode you already hold. No I/O.
+const same = fileOutputIdentity({ path: 'dist/daemon', mode: (await lstat(file)).mode, bytes })
+```
+
+`row.outputHashVersion` (present whenever `outputHash` is) names the encoding the
+row used; compare it with `OUTPUT_HASH_VERSION` before trusting a stored row. Output
+rules apply: the path must exist and resolve inside `root`, and names must be valid
+UTF-8. `path` is the string declared in `outputs`, not an absolute path. The
+encoding is pinned by an independent model in `packages/ship/test/output-identity.test.mjs`.
 
 Output pins hash both a symbolic link and the bytes of its resolved target,
 including linked directories. Targets must exist and resolve inside the project
@@ -259,6 +292,32 @@ Build/split reports without a requested binding are refused. Legacy reports
 without fingerprints and without a requested binding receive only an eligibility
 check, not source validation or proof of a deployment. Kernel helpers:
 `inputClass`, `splitInputs`, `ALWAYS_BUILD_INPUTS`, `globMatches`.
+
+**Failed rows keep their evidence.** A failed step's `reason` is only the last
+1200 characters of its output. The row also carries `logPath`, the absolute path
+of the full `step-<id>.out` under `.vibeubi/delivery/<run>/`, persisted in
+`report.json` and `status.json`, so the evidence can still be found after a
+rollback. An injected `execute` can supply its own path (`error.logPath` on a
+thrown error, or `log` in an `{ ok: false }` result); no path is invented when
+there is none. Output is read with terminal colour codes stripped (`stripAnsi`),
+so an inherited `FORCE_COLOR` cannot change a verdict.
+
+**Skipped (opt-in).** An executor may report a step it could not run because of
+the environment, not the change (an unfixed permission, an unprovisioned site):
+
+```js
+execute: async step => ({ ok: false, status: 'skipped', category: 'environment-blocked', reason: 'git write-tree denied on this site' })
+```
+
+The row becomes `status: "skipped"` with `reason` and optional `category`; it
+writes no receipt, its dependents are `blocked` by it (`blockedBy`), independent
+steps still run, and `outcome.skipped` lists it. A skipped step is neither a pass
+nor a failure to fix, so the delivery is **not** `passed` (no baseline is
+recorded) and `countsAsEvidence` refuses any report in which a step is skipped.
+A reason is required, and `ok: true` together with `status: "skipped"` is a
+failure, not a pass. Nothing changes for a project that never returns it. The
+kernel's `planOutcome(items, results, { skipped: true })` is the same opt-in;
+without the option a `skipped` result is read exactly as before.
 
 `delivery.generated` lists tracked files produced by the release itself (such as
 an append-only release ledger), so these do not look like edits during a run.
