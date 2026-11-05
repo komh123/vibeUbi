@@ -205,6 +205,13 @@ test("markdown report names the gaps, who wrote them, and carries the draft", as
   } finally { await cleanup() }
 })
 
+test("guard refuses coverage-ack (an agent must not make the red light go away)", () => {
+  const r = spawnSync(process.execPath, [BIN, "guard", "--action", "coverage-ack"], { encoding: "utf8" })
+  assert.equal(r.status, 1)
+  const widen = spawnSync(process.execPath, [BIN, "guard", "--action", "add-test"], { encoding: "utf8" })
+  assert.equal(widen.status, 0)
+})
+
 /* ── the CLI ─────────────────────────────────────────────────────────── */
 
 const cli = (dir, args) => spawnSync(process.execPath, [BIN, "coverage-gap", "--root", dir, ...args], { encoding: "utf8" })

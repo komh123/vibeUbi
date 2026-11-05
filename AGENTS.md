@@ -38,7 +38,11 @@ never edit the function that produced it.
 ```bash
 npx vibeubi plan | verify | diagnose | scan | ship | rollback
 npx vibeubi init | adopt | orphans | why <id> | viz
+npx vibeubi coverage-gap --base <ref> [--fail-on-uncovered]   # what the commits added that no acceptance item exercises
 ```
+
+`coverage-gap --ack` (acknowledging that list) is a human action: `vibeubi guard --action coverage-ack` refuses it.
+An agent writes the missing acceptance items from the drafts instead.
 
 ## Rules for reporting
 
