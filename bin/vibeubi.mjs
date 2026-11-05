@@ -113,7 +113,7 @@ const COMMANDS = {
     if (!config?.delivery) throw Error('Declare config.delivery features and steps first')
     const { deliver } = await import('../packages/ship/src/delivery.mjs')
     const result = await deliver({ root: ROOT, config: config.delivery, full: flag('full'), major: val('major', ''), baseline: val('since', undefined),
-      emit: e => { if (e.kind === 'step') say(`${e.id}: ${e.state}`); if (e.kind === 'failure') bad(`${e.id}: ${e.reason}`) } })
+      emit: e => { if (e.kind === 'step') say(`${e.id}: ${e.state}`); if (e.kind === 'failure') bad(`${e.id}: ${e.reason}`); if (e.kind === 'skipped') say(`${e.id}: skipped${e.category ? ` (${e.category})` : ''} — ${e.reason}`) } })
     say(`${result.mode ?? 'planning'} delivery: ${result.status} — ${result.outDir}`)
     if (result.error) bad(result.error)
     process.exitCode = result.status === 'passed' ? 0 : 1

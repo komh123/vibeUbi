@@ -103,8 +103,8 @@ export function countsAsEvidence(report, want = {}) {
     return { ok: false, reason: "a diagnostic run is never deploy evidence — it ran steps past a red on purpose" }
   }
   if (r.narrowed === true) return { ok: false, reason: "a narrowed run (--only) covers some steps, not the gate" }
-  if (hasSkippedStep(r)) return { ok: false, reason: "a step was skipped (environment-blocked); a skipped step proves nothing, so neither does the run" }
   if (r.ok !== true) return { ok: false, reason: "the run did not pass" }
+  if (hasSkippedStep(r)) return { ok: false, reason: "a step was skipped (environment-blocked); a skipped step proves nothing, so neither does the run" }
   if (want.phase && r.phase !== want.phase) return { ok: false, reason: `phase is ${String(r.phase)}, not ${want.phase}` }
   const wholeTree = Object.hasOwn(want, "sourceTree")
   if (wholeTree && !sameFingerprint(r.sourceTree, want.sourceTree)) {
