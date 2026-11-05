@@ -172,6 +172,30 @@ File contents and source-link targets are hashed as raw bytes. Scanner baseline
 reports use `unmatched` for absent old IDs; absence does not prove remediation.
 See [the byte contract and migration audit](PR5-FINGERPRINT-AUDIT.md).
 
+### Verifying an output against a row (public API)
+
+A consumer that must check an artifact against a delivery row (for example a
+native binary before promoting it) imports the identity from `vibeubi/delivery`
+instead of re-deriving the hash. A copy of the recipe silently disagrees the day
+the encoding moves, as the `sha256(path \0 mode \0 bytes)` form did when
+`vibeubi-paths-v2` introduced typed, length-framed fields.
+
+```js
+import { outputIdentityOf, fileOutputIdentity, OUTPUT_HASH_VERSION } from 'vibeubi/delivery'
+
+// Observe the filesystem as deliver() does. `outputs` exactly as declared.
+const id = await outputIdentityOf(root, ['dist/daemon'])        // === row.outputHash
+
+// Same value for ONE regular file whose bytes and lstat mode you already hold. No I/O.
+const same = fileOutputIdentity({ path: 'dist/daemon', mode: (await lstat(file)).mode, bytes })
+```
+
+`row.outputHashVersion` (present whenever `outputHash` is) names the encoding the
+row used; compare it with `OUTPUT_HASH_VERSION` before trusting a stored row. Output
+rules apply: the path must exist and resolve inside `root`, and names must be valid
+UTF-8. `path` is the string declared in `outputs`, not an absolute path. The
+encoding is pinned by an independent model in `packages/ship/test/output-identity.test.mjs`.
+
 Output pins hash both a symbolic link and the bytes of its resolved target,
 including linked directories. Targets must exist and resolve inside the project
 root, including when a parent directory is a link. Dangling links, directory
