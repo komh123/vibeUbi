@@ -284,6 +284,23 @@ without fingerprints and without a requested binding receive only an eligibility
 check, not source validation or proof of a deployment. Kernel helpers:
 `inputClass`, `splitInputs`, `ALWAYS_BUILD_INPUTS`, `globMatches`.
 
+**Skipped (opt-in).** An executor may report a step it could not run because of
+the environment, not the change (an unfixed permission, an unprovisioned site):
+
+```js
+execute: async step => ({ ok: false, status: 'skipped', category: 'environment-blocked', reason: 'git write-tree denied on this site' })
+```
+
+The row becomes `status: "skipped"` with `reason` and optional `category`; it
+writes no receipt, its dependents are `blocked` by it (`blockedBy`), independent
+steps still run, and `outcome.skipped` lists it. A skipped step is neither a pass
+nor a failure to fix, so the delivery is **not** `passed` (no baseline is
+recorded) and `countsAsEvidence` refuses any report in which a step is skipped.
+A reason is required, and `ok: true` together with `status: "skipped"` is a
+failure, not a pass. Nothing changes for a project that never returns it. The
+kernel's `planOutcome(items, results, { skipped: true })` is the same opt-in;
+without the option a `skipped` result is read exactly as before.
+
 `delivery.generated` lists tracked files produced by the release itself (such as
 an append-only release ledger), so these do not look like edits during a run.
 `delivery.context` must carry external compiler/configuration version inputs not

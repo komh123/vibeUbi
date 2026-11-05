@@ -824,7 +824,7 @@ export function diagnoseSummary(results: readonly { name: string; ok: boolean; c
   failed: { name: string; why: string }[]; clean: boolean; headline: string
 }
 /** Gate-report eligibility, not external deployment proof. Refuses diagnostic, narrowed,
- *  red, wrong-phase and wrong-tree reports. Build/split reports require a requested nonempty
+ *  red, wrong-phase and wrong-tree reports, and any report in which a step is `skipped`. Build/split reports require a requested nonempty
  *  buildInputsHash (both hashes for non-build phases), or a nonempty whole sourceTree binding.
  *  Every requested fingerprint must also be observed in the report. */
 export function countsAsEvidence(report: unknown, want?: { phase?: string; sourceTree?: string; buildInputsHash?: string; testInputsHash?: string }): { ok: true } | { ok: false; reason: string }
@@ -862,3 +862,21 @@ export function planOutcome(
   clean: boolean
   headline: string
 }
+/** Opt-in: with `{ skipped: true }` a result of `{ status: "skipped" }` is its own status (not a pass,
+ *  not a failure to fix; dependents are `blocked` by it; the round is never `clean`). Without the option
+ *  every result is read as before. `skipped` lists the skipped ids and is present only when non-empty. */
+export function planOutcome(
+  items: readonly PlanItem[],
+  results: Record<string, "pass" | "fail" | "not-run" | { status: string; reason?: string; category?: string }> | undefined,
+  options: { skipped: true },
+): {
+  items: { id: string; severity?: string; status: PlanStatus | OptionalPlanStatus; blockedBy?: string[]; reason?: string; category?: string }[]
+  fixFirst: { id: string; blocks: number }[]
+  deferred: string[]
+  clean: boolean
+  headline: string
+  skipped?: string[]
+}
+/** Statuses a consumer opts into with `planOutcome(..., { skipped: true })`. Separate from `PLAN_STATUSES` on purpose. */
+export const OPTIONAL_PLAN_STATUSES: readonly ["skipped"]
+export type OptionalPlanStatus = "skipped"

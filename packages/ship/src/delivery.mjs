@@ -9,6 +9,10 @@ import { mkdir, readFile, writeFile, rename, lstat, readdir, readlink, realpath,
 import { join, resolve, relative, sep, isAbsolute } from 'node:path'
 import { testPlan, readyToRun, planOutcome, testRanVerdict, stripAnsi, globMatches, inputClass, splitInputs } from '../../kernel/src/index.mjs'
 import { runStep } from './run.mjs'
+/** An executor's explicit opt-in: this step could not run because of the environment. Never a pass. */
+class StepSkipped extends Error {
+  constructor(reason, category) { super(reason); this.category = category }
+}
 const digest = value => createHash('sha256').update(value).digest('hex')
 const json = value => JSON.stringify(value, (_key, v) => typeof v === 'function' ? v.toString() : v)
 // Globs and path APIs use strings. Refuse undecodable names rather than observe
@@ -332,6 +336,12 @@ export async function deliver({ root, config, full = false, major = '', baseline
           const result = await run(s, { root, outDir, report, signal:controller.signal, timeoutMs: remaining(), emit })
           assertActive()
           if (typeof result?.log === 'string') evidenceLog = result.log
+          if (result?.status === 'skipped') {
+            // Opt-in only: `{ ok: false, status: 'skipped', reason, category? }`. Anything ambiguous is a failure.
+            if (result.ok === true) throw Error(`${id}: a result with ok: true cannot also be skipped; the two contradict`)
+            if (typeof result.reason !== 'string' || !result.reason.trim()) throw Error(`${id}: a skipped step must say why (a non-empty reason)`)
+            throw new StepSkipped(result.reason, typeof result.category === 'string' && result.category ? result.category : undefined)
+          }
           if (result?.ok !== true) throw Object.assign(Error(`${id} produced no affirmative execution evidence`), typeof result?.log === 'string' ? { logPath: result.log } : {})
           await assertSourceUnchanged()
           if (s.outputs?.length) outputHash = await hashPaths(root, s.outputs, { required: true })
@@ -346,13 +356,20 @@ export async function deliver({ root, config, full = false, major = '', baseline
         Object.assign(row, { status: 'pass', execution: reused ? 'reused' : 'ran', ...(reused ? { fromRun: cached.runId } : {}), key, outputHash, ...(outputHash ? { outputHashVersion: OUTPUT_HASH_VERSION } : {}), ...(artifactId ? { artifact: artifactId } : {}), ...(rules.testInputs.length ? { scope: buildScoped ? 'build' : 'all' } : {}) })
         keys[id] = s.phase === 'preflight' ? digest(json(s)) : digest(key + (outputHash ?? '') + (artifactId ?? ''))
       } catch (error) {
-        // A failed row keeps pointing at its full evidence, so it can still be found after a rollback.
         const logPath = [error.logPath, evidenceLog].find(p => typeof p === 'string' && p)
-        Object.assign(row, { status: 'fail', reason: error.message, ...(logPath ? { logPath } : {}) }); emit({ kind: 'failure', id, reason: error.message })
+        if (error instanceof StepSkipped) {
+          // Not a pass and not a fault in the change: no receipt, dependents blocked, never evidence.
+          Object.assign(row, { status: 'skipped', reason: error.message, ...(error.category ? { category: error.category } : {}), ...(logPath ? { logPath } : {}) })
+          emit({ kind: 'skipped', id, reason: error.message, ...(error.category ? { category: error.category } : {}) })
+        } else {
+          // A failed row keeps pointing at its full evidence, so it can still be found after a rollback.
+          Object.assign(row, { status: 'fail', reason: error.message, ...(logPath ? { logPath } : {}) })
+          emit({ kind: 'failure', id, reason: error.message })
+        }
       }
       finally { clearInterval(beat); row.finishedAt = new Date().toISOString(); statuses[id] = row; await save() }
     }
-    const outcome = planOutcome(steps, statuses)
+    const outcome = planOutcome(steps, statuses, { skipped: true })
     report.outcome = outcome
     for (const { id, ...row } of outcome.items) if (!report.steps[id]) report.steps[id] = row
     const passed = steps.length > 0 && steps.every(s => report.steps[s.id].status === 'pass')
