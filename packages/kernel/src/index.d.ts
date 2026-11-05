@@ -264,6 +264,9 @@ export function verdictFor(...args: any[]): any
 export function earlyVerdict(...args: any[]): any
 export function gateCells(...args: any[]): any
 export function testRanVerdict(...args: any[]): any
+/** Remove terminal escape sequences (SGR colours, cursor/erase CSI, OSC). Nullish input is `""`.
+ *  Step output is read through this, so `FORCE_COLOR` cannot decide whether tests "ran". */
+export function stripAnsi(text: unknown): string
 /** Was this red caused by THIS deploy? Three answers, not two.
  *
  *  A re-check runs on the SAME build, so it separates flaky from consistent and

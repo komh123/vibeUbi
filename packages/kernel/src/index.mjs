@@ -9,6 +9,7 @@
 export { verdictFor, earlyVerdict, gateCells } from "./verdict.mjs"
 export { deployProof, proofContract, sameObserved } from "./proof.mjs"
 export { testRanVerdict } from "./test-ran.mjs"
+export { stripAnsi } from "./ansi.mjs"
 export { attributedVerdict, needsAttribution, retrySelector, cellKey } from "./attribution.mjs"
 export { prereqVerdict } from "./prereq.mjs"
 export { reapDecision, runScopedName, newRunId, randomSuffix, cleanupOrder, journeyVerdict, REAP_MAX_AGE_MS, SWEEP_OBJECT_RE } from "./reap.mjs"

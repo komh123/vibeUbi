@@ -7,7 +7,7 @@ import { isUtf8 } from 'node:buffer'
 import { execFileSync } from 'node:child_process'
 import { mkdir, readFile, writeFile, rename, lstat, readdir, readlink, realpath, rm } from 'node:fs/promises'
 import { join, resolve, relative, sep, isAbsolute } from 'node:path'
-import { testPlan, readyToRun, planOutcome, testRanVerdict, globMatches, inputClass, splitInputs } from '../../kernel/src/index.mjs'
+import { testPlan, readyToRun, planOutcome, testRanVerdict, stripAnsi, globMatches, inputClass, splitInputs } from '../../kernel/src/index.mjs'
 import { runStep } from './run.mjs'
 const digest = value => createHash('sha256').update(value).digest('hex')
 const json = value => JSON.stringify(value, (_key, v) => typeof v === 'function' ? v.toString() : v)
@@ -236,7 +236,7 @@ export async function deliver({ root, config, full = false, major = '', baseline
       if (!Array.isArray(s.cmd) || !s.cmd.length) throw Error(`Missing command for ${s.id}`)
       const r = await runStep(s.id, s.cmd[0], s.cmd.slice(1), { cwd: root, outDir, timeoutMs: context.timeoutMs, env: s.env ?? {}, heapMb: s.heapMb, signal:controller.signal })
       if (controller.signal.aborted) throw Error('Delivery interrupted')
-      if (r.code !== 0 || r.timedOut) throw Error(`${s.id}: ${r.timedOut ? 'timed out' : `exit ${r.code}`} — ${r.out.slice(-1200)}`)
+      if (r.code !== 0 || r.timedOut) throw Error(`${s.id}: ${r.timedOut ? 'timed out' : `exit ${r.code}`} — ${stripAnsi(r.out).slice(-1200)}`)
       if (s.expectsTests) { const v = testRanVerdict(s.id, r.out); if (!v.ok) throw Error(v.reason) }
       return { ok: true, log: join(outDir, `step-${s.id}.out`) }
     })
