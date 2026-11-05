@@ -35,13 +35,29 @@
 
 /** Glob match with `**`, `*`, `?` and `!negation`. Moved here verbatim from delivery. */
 export function globMatches(file, patterns = []) {
-  const positive = patterns.filter((p) => !p.startsWith("!"))
+  return compileGlobs(patterns)(file)
+}
+
+const globSource = (pattern) =>
+  pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*\*/g, "\0").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]").replace(/\0\//g, "(?:.*/)?").replace(/\0/g, ".*")
+
+/**
+ * The same rule as `globMatches`, compiled once. Use it when one pattern list is
+ * tested against many files (a repository's whole file list): `globMatches` builds
+ * a RegExp per pattern per call. `globMatches` is defined through this, so the two
+ * cannot drift.
+ *
+ * @param {readonly string[]} [patterns]
+ * @returns {(file: string) => boolean}
+ */
+export function compileGlobs(patterns = []) {
+  const positive = patterns.filter((p) => !p.startsWith("!")).map((p) => new RegExp(`^${globSource(p)}$`))
   const negative = patterns.filter((p) => p.startsWith("!")).map((p) => p.slice(1))
-  if (negative.length && globMatches(file, negative)) return false
-  return positive.some((pattern) => {
-    const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*\*/g, "\0").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]").replace(/\0\//g, "(?:.*/)?").replace(/\0/g, ".*")
-    return new RegExp(`^${escaped}$`).test(file)
-  })
+  const excluded = negative.length ? compileGlobs(negative) : null
+  return (file) => {
+    if (excluded?.(file)) return false
+    return positive.some((re) => re.test(file))
+  }
 }
 
 /**
