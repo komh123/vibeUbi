@@ -171,6 +171,20 @@ test("ack: valid while the list is identical, stale when a gap appears or a gapp
   } finally { await cleanup() }
 })
 
+test("claims may be a (async) function, and delivery.features are claims too", async () => {
+  const { repo, base, cleanup } = await fixture()
+  try {
+    await repo.commit({ "components/agent-next/status-band.tsx": "export function StatusBand() {}\n", "lib/extra/x.ts": "export const x = 1\n" }, THEM, "feat: two files")
+    const config = {
+      coverageGap: { ...CONFIG, claims: async () => [{ id: "late", covers: ["components/**"] }] },
+      delivery: { features: [{ id: "extra", covers: ["lib/extra/**"] }] },
+    }
+    const report = await runCoverageGap({ root: repo.dir, config, base })
+    assert.deepEqual(report.gaps.map((g) => `${g.kind} ${g.path}`), ["new-surface components/agent-next/status-band.tsx"], "lib/extra is claimed by the delivery feature; the component only by a wide glob")
+    assert.equal(report.gaps[0].claimedBy[0].id, "late")
+  } finally { await cleanup() }
+})
+
 test("a bad ref is a usage error, not a pass", async () => {
   const { dir, cleanup } = await fixture()
   try {

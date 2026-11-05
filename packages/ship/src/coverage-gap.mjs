@@ -158,11 +158,15 @@ async function loadTemplates(root, cfg) {
   return Object.keys(out).length ? out : undefined
 }
 
-/** Claims from the project's delivery features (when it has them) plus `coverageGap.claims`. */
-export function claimsOf(config) {
+/**
+ * Claims from `coverageGap.claims` (a list, or a function returning one — sync or async, so a project can build it
+ * from modules that would be circular at import time) plus the project's delivery features.
+ */
+export async function claimsOf(config, { root } = {}) {
   const cfg = config.coverageGap ?? {}
+  const declared = typeof cfg.claims === "function" ? await cfg.claims({ root }) : (cfg.claims ?? [])
   const features = cfg.useDeliveryFeatures === false ? [] : (config.delivery?.features ?? [])
-  return [...(cfg.claims ?? []), ...features.map((f) => ({ id: f.id, covers: f.covers }))]
+  return [...declared, ...features.map((f) => ({ id: f.id, covers: f.covers }))]
 }
 
 /**
@@ -190,7 +194,7 @@ export async function runCoverageGap({ root, config, base, head = "HEAD", author
   const { tracked, evidence } = await readTree(root, tree ?? cfg.tree ?? "head", headSha, evidenceTest)
 
   const computed = computeGaps({
-    files: changed, authorsByFile: authorsMap, claims: claimsOf(config), ignored: cfg.ignored ?? [], tracked, evidence,
+    files: changed, authorsByFile: authorsMap, claims: await claimsOf(config, { root }), ignored: cfg.ignored ?? [], tracked, evidence,
     ownAuthors, classifier: cfg.classifier ?? {}, exemptClasses: cfg.exemptClasses, broadThreshold: cfg.broadThreshold,
   })
   let gaps = authorsNot?.length ? computed.gaps.filter((g) => g.foreign) : computed.gaps
